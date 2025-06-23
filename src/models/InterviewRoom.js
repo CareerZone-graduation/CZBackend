@@ -1,6 +1,4 @@
 import mongoose from 'mongoose';
-import { v4 as uuidv4 } from 'uuid';
-
 
 const interviewRoomSchema = new mongoose.Schema({
   roomName: {
@@ -51,10 +49,6 @@ const interviewRoomSchema = new mongoose.Schema({
     type: String,
     trim: true,
     maxlength: [500, 'Notes cannot exceed 500 characters']
-  },
-  recordingUrl: {
-    type: String,
-    trim: true
   }
 }, {
   timestamps: true

@@ -63,12 +63,18 @@ const jobSchema = new mongoose.Schema({
     required: [true, 'Work type is required']
   },
   minSalary: {
-    type: String,
-    trim: true
+    type: Number,
+    min: [0, 'Minimum salary cannot be negative']
   },
   maxSalary: {
-    type: String,
-    trim: true
+    type: Number,
+    min: [0, 'Maximum salary cannot be negative'],
+    validate: {
+      validator: function(value) {
+        return this.minSalary === undefined || value >= this.minSalary;
+      },
+      message: 'Maximum salary must be greater than or equal to minimum salary'
+    }
   },
   deadline: {
     type: Date,
@@ -126,7 +132,7 @@ const jobSchema = new mongoose.Schema({
 
 // Create indexes for better search and query performance
 jobSchema.index({ title: 'text', description: 'text', 'location.city': 'text' }); // Updated text index to include city
-jobSchema.index({ recruiterProfileId: 1 }); // Corrected from 'company' to 'recruiterProfileId'
+jobSchema.index({ recruiterProfileId: 1 }); 
 jobSchema.index({ type: 1 });
 jobSchema.index({ workType: 1 }); // Added index for workType
 jobSchema.index({ category: 1 });

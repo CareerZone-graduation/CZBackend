@@ -17,6 +17,16 @@ const submittedCV = new mongoose.Schema({
 
 
 const applicationSchema = new mongoose.Schema({
+  jobId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Job',
+    required: [true, 'Job reference is required']
+  },
+  candidateProfileId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'CandidateProfile',
+    required: [true, 'Candidate reference is required']
+  },
   coverLetter: {
     type: String,
     trim: true,
@@ -26,34 +36,54 @@ const applicationSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
-  processed: {
-    type: Boolean,
-    default: false
+  status: {
+    type: String,
+    enum: {
+      values: ['PENDING', 'REVIEWING', 'INTERVIEWED', 'ACCEPTED', 'REJECTED', 'WITHDRAWN'],
+      message: '{VALUE} is not a valid application status'
+    },
+    default: 'PENDING',
+    required: [true, 'Application status is required']
   },
   submittedCV: submittedCV,
-  job: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Job',
-    required: [true, 'Job reference is required']
+  notes: {
+    type: String,
+    trim: true,
+    maxlength: [2000, 'Notes cannot exceed 2000 characters']
   },
-  candidate: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: [true, 'Candidate reference is required']
-  }
+  jobSnapshot: {
+    title: {
+      type: String,
+      required: [true, 'Job title is required'],
+      trim: true,
+      maxlength: [200, 'Job title cannot exceed 200 characters']
+    },
+    company: {
+      type: String,
+      required: [true, 'Company name is required'],
+      trim: true,
+      maxlength: [200, 'Company name cannot exceed 200 characters']
+    },
+    logo: {
+      type: String,
+      required: [true, 'Company logo is required'],
+      trim: true
+    }
+  },
 }, {
   timestamps: true
 });
 
 // Create indexes for better query performance
-applicationSchema.index({ job: 1 });
-applicationSchema.index({ candidate: 1 });
+applicationSchema.index({ jobId: 1 });
+applicationSchema.index({ candidateProfileId: 1 });
 applicationSchema.index({ appliedAt: -1 });
-applicationSchema.index({ processed: 1 });
+applicationSchema.index({ status: 1 }); // Index for status
 
 // Compound indexes for common queries
-applicationSchema.index({ job: 1, candidate: 1 }, { unique: true }); // Prevent duplicate applications
-applicationSchema.index({ job: 1, processed: 1 });
-applicationSchema.index({ candidate: 1, appliedAt: -1 });
+applicationSchema.index({ jobId: 1, candidateProfileId: 1 }, { unique: true }); // Prevent duplicate applications
+applicationSchema.index({ jobId: 1, status: 1 });
+applicationSchema.index({ candidateProfileId: 1, appliedAt: -1 });
+applicationSchema.index({ status: 1, appliedAt: -1 }); // New compound index for status and appliedAt
 
 export default mongoose.model('Application', applicationSchema);

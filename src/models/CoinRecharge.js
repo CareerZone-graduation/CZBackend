@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 
 
 const coinRechargeSchema = new mongoose.Schema({
-  user: {
+  userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: [true, 'User reference is required']
@@ -45,7 +45,7 @@ const coinRechargeSchema = new mongoose.Schema({
 
 
 // Create indexes for better query performance
-coinRechargeSchema.index({ user: 1, createdAt: -1 });
+coinRechargeSchema.index({ userId: 1, createdAt: -1 });
 coinRechargeSchema.index({ transactionCode: 1 }, { unique: true });
 coinRechargeSchema.index({ status: 1 });
 coinRechargeSchema.index({ paymentMethod: 1 });
