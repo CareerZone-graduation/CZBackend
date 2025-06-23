@@ -14,11 +14,37 @@ const jobSchema = new mongoose.Schema({
     trim: true,
     maxlength: [5000, 'Job description cannot exceed 5000 characters']
   },
-  location: {
+  requirements: {
     type: String,
-    required: [true, 'Job location is required'],
+    required: [true, 'Job requirements are required'],
     trim: true,
-    maxlength: [200, 'Location cannot exceed 200 characters']
+    maxlength: [2000, 'Job requirements cannot exceed 2000 characters']
+  },
+  benefits: {
+    type: String,
+    required: [true, 'Job benefits are required'],
+    trim: true,
+    maxlength: [2000, 'Job benefits cannot exceed 2000 characters']
+  },
+  location: {
+    city: {
+      type: String,
+      required: [true, 'City is required'],
+      trim: true,
+      maxlength: [100, 'City cannot exceed 100 characters']
+    },
+    district: {
+      type: String,
+      required: [true, 'District is required'],
+      trim: true,
+      maxlength: [100, 'District cannot exceed 100 characters']
+    },
+    address: {
+      type: String,
+      required: [true, 'Address is required'],
+      trim: true,
+      maxlength: [200, 'Address cannot exceed 200 characters']
+    }
   },
   type: {
     type: String,
@@ -27,6 +53,14 @@ const jobSchema = new mongoose.Schema({
       message: '{VALUE} is not a valid job type'
     },
     required: [true, 'Job type is required']
+  },
+  workType: {
+    type: String,
+    enum: {
+      values: ['ON_SITE', 'REMOTE', 'HYBRID'],
+      message: '{VALUE} is not a valid work type'
+    },
+    required: [true, 'Work type is required']
   },
   minSalary: {
     type: String,
@@ -38,13 +72,7 @@ const jobSchema = new mongoose.Schema({
   },
   deadline: {
     type: Date,
-    required: [true, 'Application deadline is required'],
-    validate: {
-      validator: function(value) {
-        return value > new Date();
-      },
-      message: 'Deadline must be in the future'
-    }
+    required: [true, 'Application deadline is required']
   },
   experience: {
     type: String,
@@ -70,38 +98,48 @@ const jobSchema = new mongoose.Schema({
   },
   area: {
     type: String,
-    trim: true,
-    maxlength: [100, 'Area cannot exceed 100 characters']
+    enum: {
+      values: ['HO_CHI_MINH', 'HA_NOI', 'OTHER'],
+      message: '{VALUE} is not a valid area type'
+    },
   },
-  active: {
-    type: Boolean,
-    default: true
+  status: {
+    type: String,
+    enum: {
+      values: ['ACTIVE', 'INACTIVE', 'EXPIRED'],
+      message: '{VALUE} is not a valid job status'
+    },
+    default: 'ACTIVE'
   },
   approved: {
     type: Boolean,
     default: false
   },
-  company: {
+  recruiterProfileId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Company',
-    required: [true, 'Company reference is required']
-  }
+    ref: 'RecruiterProfile',
+    required: [true, 'Recruiter ID is required']
+  },
 }, {
   timestamps: true
 });
 
 // Create indexes for better search and query performance
-jobSchema.index({ title: 'text', description: 'text', location: 'text' });
-jobSchema.index({ company: 1 });
+jobSchema.index({ title: 'text', description: 'text', 'location.city': 'text' }); // Updated text index to include city
+jobSchema.index({ recruiterProfileId: 1 }); // Corrected from 'company' to 'recruiterProfileId'
 jobSchema.index({ type: 1 });
+jobSchema.index({ workType: 1 }); // Added index for workType
 jobSchema.index({ category: 1 });
 jobSchema.index({ experience: 1 });
-jobSchema.index({ active: 1, approved: 1 });
+jobSchema.index({ 'location.city': 1 }); // Added index for location city
+jobSchema.index({ status: 1 }); // Added index for status
+jobSchema.index({ approved: 1 }); // Added index for approved
 jobSchema.index({ deadline: 1 });
 jobSchema.index({ createdAt: -1 });
 
 // Compound indexes for common queries
-jobSchema.index({ active: 1, approved: 1, deadline: 1 });
-jobSchema.index({ category: 1, type: 1, active: 1 });
+jobSchema.index({ status: 1, approved: 1, deadline: 1 }); // Updated compound index
+jobSchema.index({ category: 1, type: 1, workType: 1, status: 1 }); // Updated compound index
+jobSchema.index({ 'location.city': 1, category: 1, status: 1 }); // New compound index for location and category
 
 export default mongoose.model('Job', jobSchema);

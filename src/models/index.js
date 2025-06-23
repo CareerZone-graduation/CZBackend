@@ -1,6 +1,7 @@
 // Export all models
 export { default as User } from './User.js';
 export { default as Role } from './Role.js';
+export { default as RecruiterProfile } from './RecruiterProfile.js';
 export { default as Company } from './Company.js';
 export { default as Job } from './Job.js';
 export { default as Application } from './Application.js';
