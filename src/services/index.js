@@ -1,0 +1,18 @@
+/**
+ * Services Index
+ * Exports all service modules
+ * @module Services
+ */
+
+export { authService } from './auth.service.js';
+export { jobService } from './job.service.js';
+export { applicationService } from './application.service.js';
+export { userService } from './user.service.js';
+export { companyService } from './company.service.js';
+export { emailService } from './email.service.js';
+export { notificationService } from './notification.service.js';
+export { cloudinaryService } from './cloudinary.service.js';
+export { queueService } from './queue.service.js';
+export { chatService } from './chat.service.js';
+export { interviewService } from './interview.service.js';
+export { adminService } from './admin.service.js';
