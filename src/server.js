@@ -31,7 +31,6 @@ const startServer = async () => {
     httpServer.listen(PORT, () => {
       logger.info(`Server is running on port ${PORT}`);
       logger.info(`Environment: ${config.NODE_ENV}`);
-      logger.info(`Database: ${config.DB_NAME}`);
     });
   } catch (error) {
     logger.error('Failed to start server:', error);

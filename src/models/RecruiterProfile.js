@@ -126,7 +126,6 @@ const recruiterProfileSchema = new mongoose.Schema({
 
 // Index for better query performance
 recruiterProfileSchema.index({ 'company.name': 'text', 'fullname': 'text' });
-recruiterProfileSchema.index({ userId: 1 });
 recruiterProfileSchema.index({ 'company.industry': 1 });
 const RecruiterProfile = mongoose.model('RecruiterProfile', recruiterProfileSchema);
 

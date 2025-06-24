@@ -1,34 +1,46 @@
-import { authService } from '../services/auth.service.js'; // Revert to importing authService object
-import { User } from '../models/User.js';
-import config from '../config/index.js';
-import crypto from 'crypto';
-import logger from '../utils/logger.js';
-
+import { authService } from "../services/auth.service.js"; // Revert to importing authService object
+import { User } from "../models/User.js";
+import config from "../config/index.js";
+import crypto from "crypto";
+import logger from "../utils/logger.js";
 
 export const register = async (req, res, next) => {
   try {
-    console.log('Registering user:', req.body);
+    console.log("Registering user:", req.body);
     const result = await authService.register(req.body);
     res.status(201).json({
       success: true,
-      message: 'User registered successfully',
-      data: result
+      message: "User registered successfully",
+      data: result,
     });
   } catch (error) {
     next(error);
   }
 };
 
-
 export const login = async (req, res, next) => {
   try {
     const { username, password } = req.body;
-    const result = await authService.login(username, password);
-    
+    const { accessToken, refreshToken, ...userData } = await authService.login(username, password);
+
+    res.cookie("accessToken", accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "Lax",
+      maxAge: 999999999,
+    });
+
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "Lax",
+      maxAge: 999999999,
+    });
+
     res.json({
       success: true,
-      message: 'Login successful',
-      data: result
+      message: "Login successful",
+      data: userData,
     });
   } catch (error) {
     next(error);
@@ -45,11 +57,11 @@ export const refreshToken = async (req, res, next) => {
   try {
     const { refreshToken } = req.body;
     const tokens = await authService.refreshToken(refreshToken);
-    
+
     res.json({
       success: true,
-      message: 'Token refreshed successfully',
-      data: tokens
+      message: "Token refreshed successfully",
+      data: tokens,
     });
   } catch (error) {
     next(error);
@@ -66,12 +78,12 @@ export const logout = async (req, res, next) => {
   try {
     const { refreshToken } = req.body;
     const userId = req.user.id;
-    
+
     await authService.logout(userId, refreshToken);
-    
+
     res.json({
       success: true,
-      message: 'Logout successful'
+      message: "Logout successful",
     });
   } catch (error) {
     next(error);
@@ -88,11 +100,11 @@ export const verifyEmail = async (req, res, next) => {
   try {
     const { token } = req.params;
     const result = await authService.verifyEmail(token);
-    
+
     res.json({
       success: true,
-      message: 'Email verified successfully',
-      data: result
+      message: "Email verified successfully",
+      data: result,
     });
   } catch (error) {
     next(error);
@@ -109,10 +121,10 @@ export const requestPasswordReset = async (req, res, next) => {
   try {
     const { email } = req.body;
     const result = await authService.requestPasswordReset(email);
-    
+
     res.json({
       success: true,
-      message: result.message
+      message: result.message,
     });
   } catch (error) {
     next(error);
@@ -130,10 +142,10 @@ export const resetPassword = async (req, res, next) => {
     const { token } = req.params;
     const { newPassword } = req.body;
     const result = await authService.resetPassword(token, newPassword);
-    
+
     res.json({
       success: true,
-      message: result.message
+      message: result.message,
     });
   } catch (error) {
     next(error);
@@ -155,29 +167,29 @@ export const changePassword = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      message: 'Password changed successfully'
+      message: "Password changed successfully",
     });
   } catch (error) {
-    logger.error('Change password error:', error);
-    
-    if (error.message === 'Current password is incorrect') {
+    logger.error("Change password error:", error);
+
+    if (error.message === "Current password is incorrect") {
       return res.status(400).json({
         success: false,
-        message: 'Current password is incorrect'
+        message: "Current password is incorrect",
       });
     }
-    
-    if (error.message === 'User not found') {
+
+    if (error.message === "User not found") {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: "User not found",
       });
     }
 
     res.status(500).json({
       success: false,
-      message: 'Failed to change password',
-      error: error.message
+      message: "Failed to change password",
+      error: error.message,
     });
   }
 };
@@ -196,22 +208,22 @@ export const forgotPassword = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      message: 'Password reset email sent successfully'
+      message: "Password reset email sent successfully",
     });
   } catch (error) {
-    logger.error('Forgot password error:', error);
-    
-    if (error.message === 'User not found') {
+    logger.error("Forgot password error:", error);
+
+    if (error.message === "User not found") {
       return res.status(404).json({
         success: false,
-        message: 'Email address not found'
+        message: "Email address not found",
       });
     }
 
     res.status(500).json({
       success: false,
-      message: 'Failed to send password reset email',
-      error: error.message
+      message: "Failed to send password reset email",
+      error: error.message,
     });
   }
 };
@@ -226,7 +238,7 @@ export const getCurrentUser = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const user = await authService.validateSession(userId);
-    
+
     res.json({
       success: true,
       data: {
@@ -236,9 +248,9 @@ export const getCurrentUser = async (req, res, next) => {
           role: user.role,
           isActive: user.isActive,
           emailVerified: user.emailVerified,
-          lastLogin: user.lastLogin
-        }
-      }
+          lastLogin: user.lastLogin,
+        },
+      },
     });
   } catch (error) {
     next(error);
@@ -256,10 +268,10 @@ export const verifyToken = async (req, res, next) => {
     // If we reach here, the token is valid (middleware already validated)
     res.json({
       success: true,
-      message: 'Token is valid',
+      message: "Token is valid",
       data: {
-        user: req.user
-      }
+        user: req.user,
+      },
     });
   } catch (error) {
     next(error);
@@ -276,11 +288,11 @@ export const googleLogin = async (req, res, next) => {
   try {
     const { idToken, role } = req.body;
     const result = await authService.googleLogin(idToken, role);
-    
+
     res.json({
       success: true,
-      message: 'Google login successful',
-      data: result
+      message: "Google login successful",
+      data: result,
     });
   } catch (error) {
     next(error);
@@ -296,25 +308,25 @@ export const googleLogin = async (req, res, next) => {
 export const resendEmailVerification = async (req, res, next) => {
   try {
     const { email } = req.body;
-    
+
     // Find user and generate new verification token
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: "User not found",
       });
     }
 
     if (user.emailVerified) {
       return res.status(400).json({
         success: false,
-        message: 'Email already verified'
+        message: "Email already verified",
       });
     }
 
     // Generate new verification token
-    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const verificationToken = crypto.randomBytes(32).toString("hex");
     user.emailVerificationToken = verificationToken;
     user.emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
     await user.save();
@@ -322,17 +334,17 @@ export const resendEmailVerification = async (req, res, next) => {
     // Queue verification email
     await queueService.sendEmail({
       to: email,
-      subject: 'Verify Your Email - CareerConnect',
-      template: 'email-verification',
+      subject: "Verify Your Email - CareerConnect",
+      template: "email-verification",
       data: {
-        name: user.firstName || 'User',
-        verificationUrl: `${config.CLIENT_URL}/verify-email?token=${verificationToken}`
-      }
+        name: user.firstName || "User",
+        verificationUrl: `${config.CLIENT_URL}/verify-email?token=${verificationToken}`,
+      },
     });
-    
+
     res.json({
       success: true,
-      message: 'Verification email sent successfully'
+      message: "Verification email sent successfully",
     });
   } catch (error) {
     next(error);
@@ -348,14 +360,14 @@ export const resendEmailVerification = async (req, res, next) => {
 export const checkEmailExists = async (req, res, next) => {
   try {
     const { email } = req.params;
-    
+
     const user = await User.findOne({ email });
-    
+
     res.json({
       success: true,
       data: {
-        exists: !!user
-      }
+        exists: !!user,
+      },
     });
   } catch (error) {
     next(error);
@@ -370,13 +382,13 @@ export const checkEmailExists = async (req, res, next) => {
  */
 export const getUserRoles = async (req, res, next) => {
   try {
-    const roles = ['CANDIDATE', 'RECRUITER', 'ADMIN'];
-    
+    const roles = ["CANDIDATE", "RECRUITER", "ADMIN"];
+
     res.json({
       success: true,
       data: {
-        roles
-      }
+        roles,
+      },
     });
   } catch (error) {
     next(error);

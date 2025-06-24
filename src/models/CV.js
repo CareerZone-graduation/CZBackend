@@ -210,7 +210,7 @@ const referenceSchema = new mongoose.Schema({
 }, { _id: true });
 
 
-const userCVSchema = new mongoose.Schema({
+const CVSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -244,9 +244,9 @@ const userCVSchema = new mongoose.Schema({
 });
 
 // Create indexes for better query performance
-userCVSchema.index({ userId: 1, createdAt: -1 }); // Changed createdDate to createdAt
-userCVSchema.index({ templateId: 1 });
-userCVSchema.index({ 'personalInfo.email': 1 });
-userCVSchema.index({ 'skills.name': 'text', summary: 'text' }); // Text index for search
+CVSchema.index({ userId: 1, createdAt: -1 }); // Changed createdDate to createdAt
+CVSchema.index({ templateId: 1 });
+CVSchema.index({ 'personalInfo.email': 1 });
+CVSchema.index({ 'skills.name': 'text', summary: 'text' }); // Text index for search
 
-export default mongoose.model('UserCV', userCVSchema);
+export default mongoose.model('CV', CVSchema);

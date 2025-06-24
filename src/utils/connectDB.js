@@ -2,16 +2,9 @@ import mongoose from 'mongoose';
 import config from '../config/index.js';
 import logger from './logger.js';
 
-/**
- * Connect to MongoDB database
- * @returns {Promise<void>}
- */
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(config.DB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
+    const conn = await mongoose.connect(config.DB_URI);
 
     logger.info(`MongoDB Connected: ${conn.connection.host}`);
     

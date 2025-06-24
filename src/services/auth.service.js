@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { Role, User } from '../models/index.js';
+import { User } from '../models/index.js';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 
@@ -91,14 +91,14 @@ export const login = async (username, password) => {
     // Find user
     const user = await User.findOne({ username });
     if (!user) {
-      throw new Error('Invalid credentials');
+      throw new Error('User not found');
     }
     console.log('User found:', user);
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password);
     console.log('Is valid password:', isValidPassword);
     if (!isValidPassword) {
-      throw new Error('Invalid credentials');
+      throw new Error('Incorrect password');
     }
 
     // Generate tokens
@@ -106,17 +106,12 @@ export const login = async (username, password) => {
 
     // user.refreshTokens.push(refreshToken);
     return {
-      user: {
         id: user._id,
         email: user.email,
         role: user.role,
-        isActive: user.isActive,
-        emailVerified: user.emailVerified
-            },
-      tokens: {
-        accessToken,
-        refreshToken
-      }
+        active: user.active, 
+        accessToken: accessToken,
+        refreshToken: refreshToken
     };
   } catch (error) {
     logger.error('Login failed:', error);
@@ -124,11 +119,6 @@ export const login = async (username, password) => {
   }
 };
 
-/**
- * Refresh access token
- * @param {string} refreshToken - Refresh token
- * @returns {Promise<Object>} New tokens
- */
 export const refreshToken = async (refreshToken) => {
   try {
     // Verify refresh token

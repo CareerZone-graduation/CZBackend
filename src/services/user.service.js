@@ -4,7 +4,7 @@
  * @module UserService
  */
 
-import { User, UserCV } from '../models/index.js';
+import { User } from '../models/index.js';
 import logger from '../utils/logger.js';
 import bcrypt from 'bcryptjs';
 

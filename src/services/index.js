@@ -1,9 +1,3 @@
-/**
- * Services Index
- * Exports all service modules
- * @module Services
- */
-
 export { authService } from './auth.service.js';
 export { jobService } from './job.service.js';
 export { applicationService } from './application.service.js';

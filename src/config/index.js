@@ -13,8 +13,7 @@ const config = {
   PORT: parseInt(process.env.PORT) || 8080,
 
   // Database
-  DB_URI: process.env.DB_URI || 'mongodb://localhost:27017/careerconnect',
-  DB_NAME: process.env.DB_NAME || 'careerconnect',
+  DB_URI: process.env.DB_URI,
 
   // JWT Configuration
   JWT_SECRET: process.env.JWT_SECRET || 'your-super-secret-jwt-key',
@@ -98,5 +97,4 @@ if (missingEnvVars.length > 0 && config.NODE_ENV === 'production') {
   console.error('Missing required environment variables:', missingEnvVars);
   process.exit(1);
 }
-
 export default config;

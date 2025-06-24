@@ -42,8 +42,6 @@ const userSchema = new mongoose.Schema({
 });
 
 // Index for better query performance
-userSchema.index({ email: 1 });
-userSchema.index({ username: 1 });
 userSchema.index({ role: 1 });
 /**
  * Hash password before saving
@@ -77,3 +75,45 @@ const User = mongoose.model('User', userSchema);
 
 export { User };
 export default User;
+
+
+
+// {
+//   "type": "object",
+//   "properties": {
+//     "username": {
+//       "type": "string"
+//     },
+//     "password": {
+//       "type": "string"
+//     },
+//     "email": {
+//       "type": "string"
+//     },
+//     "role": {
+//       "type": "string",
+//       "enum": [
+//         "candidate",
+//         "recruiter"
+//       ]
+//     },
+//     "active": {
+//       "type": "boolean"
+//     },
+//     "coinBalance": {
+//       "type": "number"
+//     },
+//     "createAt": {
+//       "type": "string"
+//     },
+//     "updateAt": {
+//       "type": "string"
+//     }
+//   },
+//   "required": [
+//     "username",
+//     "password",
+//     "email",
+//     "role"
+//   ]
+// }

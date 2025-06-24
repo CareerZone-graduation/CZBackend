@@ -6,7 +6,7 @@
   "main": "src/server.js",
   "scripts": {
     "start": "nodemon src/server.js",
-    "dev": "nodemon src/server.js",
+    "dev": "nodemon --trace-warnings src/server.js",
     "prod": "node src/server.js"
   },
   "keywords": [
