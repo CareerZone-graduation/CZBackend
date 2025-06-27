@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import logger from '../utils/logger.js';
+import AppError from '../utils/AppError.js';
 
 /**
  * Generic validation middleware factory
@@ -57,29 +58,14 @@ export const validate = (schema, source = 'body') => {
       next();
     } catch (error) {
       if (error instanceof z.ZodError) {
-        const errors = error.errors.map(err => ({
-          field: err.path.join('.'),
-          message: err.message,
-          code: err.code
-        }));
-
-        logger.warn('Validation error:', {
-          source,
-          errors,
-          originalData: source === 'body' ? req.body : 
-                        source === 'query' ? req.query : 
-                        source === 'params' ? req.params : null,
-          url: req.originalUrl,
-          method: req.method,
-          ip: req.ip
-        });
-
-        return res.status(400).json({
-          success: false,
-          message: 'Validation failed',
-          errors
-        });
-      }
+  const validationError = new AppError('Validation failed', 400); // Giữ nguyên "Validation failed" để làm "dấu hiệu"
+  validationError.errors = error.errors.map(err => ({
+    field: err.path.join('.'),
+    message: err.message,
+    code: err.code
+  }));
+  return next(validationError); 
+}
 
       // For non-Zod errors, pass to error handler
       logger.error('Unexpected validation error:', error);

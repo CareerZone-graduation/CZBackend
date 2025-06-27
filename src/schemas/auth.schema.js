@@ -40,17 +40,15 @@ export const registerSchema = z.object({
     .max(100, 'Mật khẩu phải từ 8 đến 100 ký tự')
     // .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/, 'Mật khẩu phải chứa ít nhất một chữ cái thường, một chữ cái in hoa và một số')
     ,
-  email: z.string()
+  email: z.string({
+     required_error: 'Email là bắt buộc'
+  })
     .email('Email phải đúng định dạng')
     .max(100, 'Email không được dài quá 100 ký tự')
     .toLowerCase()
     .trim(),
-  fullname: z.string()
-    .min(2, 'Họ tên phải từ 2 đến 100 ký tự')
-    .max(100, 'Họ tên phải từ 2 đến 100 ký tự')
-    .trim(),
-  roleName: z.enum(['CANDIDATE', 'RECRUITER', 'ADMIN'], { // Renamed userType to roleName
-    errorMap: () => ({ message: 'Loại người dùng phải là CANDIDATE, RECRUITER hoặc ADMIN' })
+  role: z.enum(['candidate', 'recruiter'], { // Renamed userType to roleName
+    errorMap: () => ({ message: 'Loại người dùng phải là candidate, recruiter' })
   })
 }).and(userProfileSchema.partial()); // Extend with partial userProfileSchema for optional fields
 

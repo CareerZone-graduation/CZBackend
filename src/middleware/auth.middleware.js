@@ -20,6 +20,7 @@ export const authenticate = async (req, res, next) => {
     } else if (req.cookies && req.cookies.accessToken) {
       token = req.cookies.accessToken;
     }
+    console.log('Token:', token);
 
     if (!token) {
       return res.status(401).json({
@@ -34,7 +35,6 @@ export const authenticate = async (req, res, next) => {
       
       // Get user from database
       const user = await User.findById(decoded.userId)
-        .populate('role')
         .select('-password');
 
       if (!user) {
@@ -54,7 +54,7 @@ export const authenticate = async (req, res, next) => {
       // Add user to request object
       req.user = user;
       req.userId = user._id.toString(); // Use _id as the unified user ID
-      req.userRole = user.role.roleName;
+      req.role = user.role;
 
       next();
     } catch (jwtError) {
@@ -116,7 +116,7 @@ export const optionalAuthenticate = async (req, res, next) => {
         // Add user to request object if valid
         req.user = user;
         req.userId = user._id.toString(); // Use _id as the unified user ID
-        req.userRole = user.role.roleName;
+        req.role = user.role;
       }
     } catch (jwtError) {
       // Invalid token, but continue without user info
@@ -149,11 +149,11 @@ export const authorize = (allowedRoles = []) => {
       return next(); // No specific roles required
     }
 
-    const userRole = req.userRole;
+    const role = req.role;
     if (!allowedRoles.includes(userRole)) {
       logger.warn('Authorization failed:', {
         userId: req.userId,
-        userRole,
+        role,
         allowedRoles,
         url: req.originalUrl,
         method: req.method
@@ -169,32 +169,15 @@ export const authorize = (allowedRoles = []) => {
   };
 };
 
-/**
- * Convenience middleware for admin-only access
- */
-export const adminOnly = authorize(['ADMIN']);
 
-/**
- * Convenience middleware for recruiter-only access
- */
-export const recruiterOnly = authorize(['RECRUITER']);
+export const adminOnly = authorize(['admin']);
 
-/**
- * Convenience middleware for candidate-only access
- */
-export const candidateOnly = authorize(['CANDIDATE']);
+export const recruiterOnly = authorize(['recruiter']);
 
-/**
- * Convenience middleware for recruiter or admin access
- */
-export const recruiterOrAdmin = authorize(['RECRUITER', 'ADMIN']);
+export const candidateOnly = authorize(['candidate']);
 
-/**
- * Convenience middleware for candidate or recruiter access
- */
-export const candidateOrRecruiter = authorize(['CANDIDATE', 'RECRUITER']);
+export const recruiterOrAdmin = authorize(['recruiter', 'admin']);
 
-/**
- * Convenience middleware for any authenticated user
- */
+export const candidateOrRecruiter = authorize(['candidate', 'recruiter']);
+
 export const authenticated = authorize([]);

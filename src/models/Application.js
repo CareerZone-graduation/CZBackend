@@ -31,7 +31,7 @@ const applicationSchema = new mongoose.Schema({
     type: String,
     trim: true,
     maxlength: [2000, 'Cover letter cannot exceed 2000 characters']
-  },
+  }, 
   appliedAt: {
     type: Date,
     default: Date.now

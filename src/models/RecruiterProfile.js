@@ -7,6 +7,11 @@ const companyInfoSchema = new mongoose.Schema({
     trim: true,
     maxlength: [200, 'Company name cannot exceed 200 characters']
   },
+  about: {
+    type: String,
+    trim: true,
+    maxlength: [2000, 'About cannot exceed 1000 characters']
+  },
   logo: {
     type: String,
     trim: true,

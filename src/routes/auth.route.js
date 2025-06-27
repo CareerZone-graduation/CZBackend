@@ -41,7 +41,7 @@ router.post('/login', validateBody(loginSchema), login);
  * @desc    Logout user
  * @access  Private
  */
-router.post('/logout', authenticate, logout);
+router.post('/logout', logout);
 
 /**
  * @route   POST /api/auth/google

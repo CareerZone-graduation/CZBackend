@@ -21,25 +21,28 @@ export const register = async (req, res, next) => {
 export const login = async (req, res, next) => {
   try {
     const { username, password } = req.body;
-    const { accessToken, refreshToken, ...userData } = await authService.login(username, password);
+    const {refreshToken, ...userData } = await authService.login(
+      username,
+      password
+    );
 
-    res.cookie("accessToken", accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "Lax",
-      maxAge: 999999999,
-    });
+    // res.cookie('accessToken', accessToken, {
+    //   httpOnly: true,
+    //   secure: process.env.NODE_ENV === 'production',
+    //   sameSite: 'Lax',
+    //   maxAge: 999999999,
+    // });
 
-    res.cookie("refreshToken", refreshToken, {
+    res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "Lax",
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'Lax',
       maxAge: 999999999,
     });
 
     res.json({
       success: true,
-      message: "Login successful",
+      message: 'Login successful',
       data: userData,
     });
   } catch (error) {
@@ -76,10 +79,10 @@ export const refreshToken = async (req, res, next) => {
  */
 export const logout = async (req, res, next) => {
   try {
-    const { refreshToken } = req.body;
-    const userId = req.user.id;
-
-    await authService.logout(userId, refreshToken);
+    // const { refreshToken } = req.body;
+// get from cookies
+    const refreshToken = req.cookies.refreshToken;
+    await authService.logout(refreshToken);
 
     res.json({
       success: true,
@@ -167,30 +170,10 @@ export const changePassword = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      message: "Password changed successfully",
+      message: 'Password changed successfully',
     });
   } catch (error) {
-    logger.error("Change password error:", error);
-
-    if (error.message === "Current password is incorrect") {
-      return res.status(400).json({
-        success: false,
-        message: "Current password is incorrect",
-      });
-    }
-
-    if (error.message === "User not found") {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
-
-    res.status(500).json({
-      success: false,
-      message: "Failed to change password",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
@@ -208,23 +191,10 @@ export const forgotPassword = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      message: "Password reset email sent successfully",
+      message: 'Password reset email sent successfully',
     });
   } catch (error) {
-    logger.error("Forgot password error:", error);
-
-    if (error.message === "User not found") {
-      return res.status(404).json({
-        success: false,
-        message: "Email address not found",
-      });
-    }
-
-    res.status(500).json({
-      success: false,
-      message: "Failed to send password reset email",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
@@ -312,21 +282,15 @@ export const resendEmailVerification = async (req, res, next) => {
     // Find user and generate new verification token
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      throw new NotFoundError('User not found');
     }
 
     if (user.emailVerified) {
-      return res.status(400).json({
-        success: false,
-        message: "Email already verified",
-      });
+      throw new BadRequestError('Email already verified');
     }
 
     // Generate new verification token
-    const verificationToken = crypto.randomBytes(32).toString("hex");
+    const verificationToken = crypto.randomBytes(32).toString('hex');
     user.emailVerificationToken = verificationToken;
     user.emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
     await user.save();
@@ -334,17 +298,17 @@ export const resendEmailVerification = async (req, res, next) => {
     // Queue verification email
     await queueService.sendEmail({
       to: email,
-      subject: "Verify Your Email - CareerConnect",
-      template: "email-verification",
+      subject: 'Verify Your Email - CareerConnect',
+      template: 'email-verification',
       data: {
-        name: user.firstName || "User",
+        name: user.firstName || 'User',
         verificationUrl: `${config.CLIENT_URL}/verify-email?token=${verificationToken}`,
       },
     });
 
     res.json({
       success: true,
-      message: "Verification email sent successfully",
+      message: 'Verification email sent successfully',
     });
   } catch (error) {
     next(error);

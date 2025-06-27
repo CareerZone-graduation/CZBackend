@@ -4,6 +4,8 @@ import crypto from 'crypto';
 import { User } from '../models/index.js';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
+import { BadRequestError, NotFoundError, UnauthorizedError } from '../utils/AppError.js';
+import CandidateProfile from '../models/CandidateProfile.js';
 
 /**
  * Generate JWT tokens
@@ -29,32 +31,28 @@ const generateTokens = (userId) => {
 
 export const register = async (userData) => {
   try {
-    const { username, fullname,email, password, roleName, ...profileData } = userData;
+    const { username,email, password, role } = userData;
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      throw new Error('User already exists with this email');
+      throw new BadRequestError('User already exists with this email');
     }
     const existingUsername = await User.findOne({ username });
     if (existingUsername) {
-      throw new Error('Username already exists');
+      throw new BadRequestError('Username already exists');
     }
     // Validate role
-    const validRoles = ['CANDIDATE', 'RECRUITER', 'ADMIN'];
-    if (!validRoles.includes(roleName)) {
-      throw new Error('Invalid role specified');
+    const validRoles = ['candidate', 'recruiter'];
+    if (!validRoles.includes(role)) {
+      throw new BadRequestError('Invalid role specified');
     }
-
-    // Hash password
-    const role= await Role.findOne({ roleName });
     // Create base user
     const user = new User({
       username,
-      fullname,
       email,
       password,
-      role: role._id
+      role
     });
 
     await user.save();
@@ -62,17 +60,12 @@ export const register = async (userData) => {
     const { accessToken, refreshToken } = generateTokens(user._id);
 
     return {
-      user: {
         id: user._id,
         email: user.email,
         role: user.role,
-        isActive: user.isActive,
-        emailVerified: user.emailVerified
-      },
-      tokens: {
+        active: user.active,
         accessToken,
         refreshToken
-      }
     };
   } catch (error) {
     logger.error('Registration failed:', error);
@@ -87,36 +80,31 @@ export const register = async (userData) => {
  * @returns {Promise<Object>} User data and tokens
  */
 export const login = async (username, password) => {
-  try {
-    // Find user
-    const user = await User.findOne({ username });
-    if (!user) {
-      throw new Error('User not found');
-    }
-    console.log('User found:', user);
-    // Verify password
-    const isValidPassword = await bcrypt.compare(password, user.password);
-    console.log('Is valid password:', isValidPassword);
-    if (!isValidPassword) {
-      throw new Error('Incorrect password');
-    }
-
-    // Generate tokens
-    const { accessToken, refreshToken } = generateTokens(user._id);
-
-    // user.refreshTokens.push(refreshToken);
-    return {
-        id: user._id,
-        email: user.email,
-        role: user.role,
-        active: user.active, 
-        accessToken: accessToken,
-        refreshToken: refreshToken
-    };
-  } catch (error) {
-    logger.error('Login failed:', error);
-    throw error;
+  // Find user
+  const t= await CandidateProfile.findOne({ username }).select('+password');
+  const user = await User.findOne({ username }).select('+password');
+  if (!user) {
+    // Generic error message for security
+    throw new NotFoundError('User not found');
   }
+
+  // Verify password
+  const isValidPassword = await bcrypt.compare(password, user.password);
+  if (!isValidPassword) {
+    throw new UnauthorizedError('Incorrect username or password');
+  }
+
+  // Generate tokens
+  const { accessToken, refreshToken } = generateTokens(user._id);
+
+  return {
+    id: user._id,
+    email: user.email,
+    role: user.role,
+    active: user.active,
+    accessToken: accessToken,
+    refreshToken: refreshToken,
+  };
 };
 
 export const refreshToken = async (refreshToken) => {
@@ -127,7 +115,7 @@ export const refreshToken = async (refreshToken) => {
     // Find user and check if refresh token exists
     const user = await User.findById(decoded.userId);
     if (!user || !user.refreshTokens.includes(refreshToken)) {
-      throw new Error('Invalid refresh token');
+      throw new UnauthorizedError('Invalid refresh token');
     }
 
     // Generate new tokens
@@ -148,20 +136,15 @@ export const refreshToken = async (refreshToken) => {
   }
 };
 
-/**
- * Logout user
- * @param {string} userId - User ID
- * @param {string} refreshToken - Refresh token to remove
- * @returns {Promise<void>}
- */
-export const logout = async (userId, refreshToken) => {
+
+export const logout = async (refreshToken) => {
   try {
-    const user = await User.findById(userId);
-    if (user) {
-      user.refreshTokens = user.refreshTokens.filter(token => token !== refreshToken);
-      await user.save();
-    }
-    logger.info(`User logged out: ${userId}`);
+    // blacklist the refresh token
+    // giả lập
+    console.log(`Blacklisting refresh token: ${refreshToken}`);
+    // check if the refresh token ís valid
+    jwt.verify(refreshToken, config.JWT_REFRESH_SECRET);
+
   } catch (error) {
     logger.error('Logout failed:', error);
     throw error;
@@ -181,7 +164,7 @@ export const verifyEmail = async (token) => {
     });
 
     if (!user) {
-      throw new Error('Invalid or expired verification token');
+      throw new BadRequestError('Invalid or expired verification token');
     }
 
     user.emailVerified = true;
@@ -207,7 +190,7 @@ export const requestPasswordReset = async (email) => {
   try {
     const user = await User.findOne({ email });
     if (!user) {
-      throw new Error('User not found');
+      throw new NotFoundError('User not found');
     }
 
     // Generate reset token
@@ -250,7 +233,7 @@ export const resetPassword = async (token, newPassword) => {
     });
 
     if (!user) {
-      throw new Error('Invalid or expired reset token');
+      throw new BadRequestError('Invalid or expired reset token');
     }
 
     // Hash new password
@@ -283,7 +266,7 @@ export const changePassword = async (userId, currentPassword, newPassword) => {
   try {
     const user = await User.findById(userId);
     if (!user) {
-      throw new Error('User not found');
+      throw new NotFoundError('User not found');
     }
 
     // Verify current password
@@ -291,9 +274,8 @@ export const changePassword = async (userId, currentPassword, newPassword) => {
     console.log('Is valid password:');
 
     const isValidPassword = await user.comparePassword(currentPassword);
-    console.log('Is valid password:', isValidPassword);
     if (!isValidPassword) {
-      throw new Error('Current password is incorrect');
+      throw new BadRequestError('Current password is incorrect');
     }
 
     // Hash new password
@@ -320,7 +302,7 @@ export const validateSession = async (userId) => {
   try {
     const user = await User.findById(userId);
     if (!user || !user.isActive) {
-      throw new Error('Invalid session');
+      throw new UnauthorizedError('Invalid session');
     }
 
     return user;
@@ -339,7 +321,7 @@ export const forgotPassword = async (email) => {
   try {
     const user = await User.findOne({ email });
     if (!user) {
-      throw new Error('User not found');
+      throw new NotFoundError('User not found');
     }
 
     // Generate reset token
@@ -412,7 +394,7 @@ export const googleLogin = async (idToken, role = 'CANDIDATE') => {
           });
           break;
         default:
-          throw new Error('Invalid role for Google login');
+          throw new BadRequestError('Invalid role for Google login');
       }
       
       await profile.save();
@@ -457,14 +439,14 @@ const verifyGoogleToken = async (idToken) => {
     const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
     
     if (!response.ok) {
-      throw new Error('Invalid Google token');
+      throw new UnauthorizedError('Invalid Google token');
     }
     
     const payload = await response.json();
     
     // Verify the token is for your application
     if (payload.aud !== config.GOOGLE_CLIENT_ID) {
-      throw new Error('Invalid audience');
+      throw new UnauthorizedError('Invalid audience');
     }
     
     return {
