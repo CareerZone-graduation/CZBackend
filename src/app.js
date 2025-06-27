@@ -11,6 +11,7 @@ import authRoutes from './routes/auth.route.js';
 // import userRoutes from './routes/user.route.js'; // No longer in use
 import jobRoutes from './routes/job.route.js';
 import candidateRoutes from './routes/candidate.route.js';
+import companyRoutes from './routes/company.route.js';
 
 import { errorHandler } from './middleware/error.middleware.js';
 import { notFound } from './middleware/notFound.middleware.js';
@@ -68,6 +69,7 @@ app.use('/api/auth', authRoutes);
 // app.use('/api/users', userRoutes); // No longer in use
 app.use('/api/jobs', jobRoutes);
 app.use('/api/candidate', candidateRoutes);
+app.use('/api/companies', companyRoutes);
 
 // 404 & error
 app.use(notFound);

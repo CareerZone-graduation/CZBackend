@@ -12,7 +12,7 @@ import { z } from 'zod';
  * @property {string} website - Company website URL
  * @property {string} description - Company description (20-2000 chars)
  */
-export const registerCompanySchema = z.object({
+export const createCompanySchema = z.object({
   name: z.string()
     .min(2, 'Tên công ty phải từ 2 đến 200 ký tự')
     .max(200, 'Tên công ty phải từ 2 đến 200 ký tự')
@@ -57,16 +57,4 @@ export const updateCompanySchema = z.object({
     .trim()
     .optional(),
   active: z.boolean().optional()
-});
-
-/**
- * Add member to company request validation schema
- * @typedef {Object} AddMemberRequest
- * @property {string} email - Email of the user to invite
- */
-export const addMemberSchema = z.object({
-  email: z.string()
-    .email('Email phải đúng định dạng')
-    .toLowerCase()
-    .trim()
 });

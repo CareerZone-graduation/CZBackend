@@ -134,5 +134,4 @@ recruiterProfileSchema.index({ 'company.name': 'text', 'fullname': 'text' });
 recruiterProfileSchema.index({ 'company.industry': 1 });
 const RecruiterProfile = mongoose.model('RecruiterProfile', recruiterProfileSchema);
 
-export { RecruiterProfile };
 export default RecruiterProfile;
