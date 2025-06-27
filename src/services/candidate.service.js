@@ -76,7 +76,31 @@ const updateProfile = async (userId, updateData) => {
     }
 };
 
+/**
+ * Updates only the avatar for a candidate profile.
+ * @param {string} userId
+ * @param {string} avatarUrl
+ * @returns {Promise<Object>}
+ */
+const updateAvatar = async (userId, avatarUrl) => {
+    const profile = await CandidateProfile.findOneAndUpdate(
+        { userId: userId },
+        { $set: { avatar: avatarUrl, userId } },
+        { new: true, upsert: true }
+    ).populate('userId', 'fullname email').lean();
+
+    // Flatten the response
+    if (profile && profile.userId) {
+        profile.email = profile.userId.email;
+        profile.fullname = profile.userId.fullname;
+        profile.userId = profile.userId._id;
+    }
+
+    return profile;
+};
+
 export {
     getProfile,
     updateProfile,
+    updateAvatar,
 };

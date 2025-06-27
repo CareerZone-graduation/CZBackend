@@ -31,15 +31,15 @@ winston.addColors(colors);
 // Định dạng của log
 const format = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-  winston.format.splat(), // Rất quan trọng để gom metadata
-  // Thêm format.errors({ stack: true }) để tự động lấy stack trace từ đối tượng Error
+  winston.format.splat(),
   winston.format.errors({ stack: true }),
   winston.format.colorize({ all: true }),
 
-  // ĐÂY LÀ HÀM PRINTF PHIÊN BẢN CUỐI CÙNG
+  // HÀM PRINTF PHIÊN BẢN CẬP NHẬT
   winston.format.printf((info) => {
-    // Tách các thuộc tính quen thuộc ra khỏi đối tượng info
+    // Tách các thuộc tính quen thuộc và cả Symbol(splat)
     const { timestamp, level, message, stack, ...rest } = info;
+    const splat = info[Symbol.for('splat')];
 
     // Bắt đầu xây dựng chuỗi log
     let log = `${timestamp} ${level}: ${message}`;
@@ -49,17 +49,21 @@ const format = winston.format.combine(
       log += `\n${stack}`;
     }
 
-    // Kiểm tra xem có metadata nào còn lại không
-    // Object.keys(rest).length > 0 sẽ đúng nếu có các thuộc tính như url, method, ip...
-    // if (Object.keys(rest).length > 0) {
-    //   log += `\nMetadata: ${JSON.stringify(rest, null, 3)}`;
-    // }
-    // thụt vào trong để dễ đọc hơn
-    // ghi thẳng ko cần stringify
-    for (const [key, value] of Object.entries(rest)) {
-      log += `\n    ${key}: ${value}`;
+    // Ghi các thuộc tính metadata có key-value rõ ràng (từ object)
+    if (Object.keys(rest).length > 0) {
+        for (const [key, value] of Object.entries(rest)) {
+            // Chuyển đối tượng thành chuỗi JSON để dễ đọc
+            const valStr = typeof value === 'object' && value !== null ? JSON.stringify(value, null, 2) : value;
+            log += `\n      ${key}: ${valStr}`;
+        }
     }
-
+    
+    // Ghi các giá trị từ splat (khi truyền biến lẻ)
+    if (splat) {
+        log += ` ${splat.map(item => {
+            return typeof item === 'object' ? JSON.stringify(item) : item;
+        }).join(' ')}`;
+    }
 
     return log;
   })
