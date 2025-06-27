@@ -136,8 +136,8 @@ export const userProfileSchema = z.object({
   // Candidate-specific fields
   avatar: z.string().trim().optional(),
   phone: z.string()
-    .regex(/^[\+]?[1-9][\d]{0,15}$/, 'Số điện thoại không hợp lệ') // Updated regex to match Mongoose schema
-    .optional(),
+  .regex(/^[\+]?[\d]{1,15}$/, 'Số điện thoại không hợp lệ') // Cho phép bắt đầu bằng 0 và tối đa 15 chữ số
+  .optional(),
   bio: z.string()
     .max(1000, 'Mô tả không được dài quá 1000 ký tự')
     .trim()
@@ -166,8 +166,7 @@ export const candidateProfileSchema = z.object({
     .optional(),
   avatar: z.string().trim().optional(),
   phone: z.string()
-    .regex(/^[\+]?[1-9][\d]{0,15}$/, 'Số điện thoại không hợp lệ')
-    .optional(),
+.regex(/^[\+]?[\d]{1,15}$/, 'Số điện thoại không hợp lệ')    .optional(),
   bio: z.string()
     .max(1000, 'Mô tả không được dài quá 1000 ký tự')
     .trim()
@@ -195,7 +194,7 @@ export const updateUserProfileSchema = z.object({
   // Candidate-specific fields
   avatar: z.string().trim().optional(),
   phone: z.string()
-    .regex(/^[\+]?[1-9][\d]{0,15}$/, 'Số điện thoại không hợp lệ') // Updated regex to match Mongoose schema
+    .regex(/^[\+]?[\d]{1,15}$/, 'Số điện thoại không hợp lệ')// Updated regex to match Mongoose schema
     .optional(),
   bio: z.string()
     .max(1000, 'Mô tả không được dài quá 1000 ký tự')
