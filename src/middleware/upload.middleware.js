@@ -22,3 +22,23 @@ const upload = multer({
 });
 
 export const uploadAvatar = upload.single('avatar');
+
+// File filter for CVs (PDF, DOC, DOCX)
+const cvFileFilter = (req, file, cb) => {
+    const allowedMimes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    if (allowedMimes.includes(file.mimetype)) {
+        cb(null, true);
+    } else {
+        cb(new BadRequestError('Chỉ cho phép tải lên file PDF, DOC, hoặc DOCX!'), false);
+    }
+};
+
+const uploadCvFile = multer({
+    storage: storage,
+    fileFilter: cvFileFilter,
+    limits: {
+        fileSize: 5 * 1024 * 1024, // 5 MB
+    },
+});
+
+export const uploadCv = uploadCvFile.single('cv');
