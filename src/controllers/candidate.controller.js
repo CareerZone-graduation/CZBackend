@@ -17,6 +17,64 @@ export const getProfile = async (req, res, next) => {
     }
 };
 
+export const uploadCv = async (req, res, next) => {
+    try {
+        const userId = req.user._id;
+        const cvs = await candidateService.uploadCv(userId, req.file);
+        res.status(201).json({
+            success: true,
+            message: 'Tải lên CV thành công.',
+            data: cvs,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const getCvs = async (req, res, next) => {
+    try {
+        const userId = req.user._id;
+        const cvs = await candidateService.getCvs(userId);
+        res.status(200).json({
+            success: true,
+            message: 'Lấy danh sách CV thành công.',
+            data: cvs,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const setDefaultCv = async (req, res, next) => {
+    try {
+        const userId = req.user._id;
+        const { cvId } = req.params;
+        const cvs = await candidateService.setDefaultCv(userId, cvId);
+        res.status(200).json({
+            success: true,
+            message: 'Đặt CV làm mặc định thành công.',
+            data: cvs,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const deleteCv = async (req, res, next) => {
+    try {
+        const userId = req.user._id;
+        const { cvId } = req.params;
+        const cvs = await candidateService.deleteCv(userId, cvId);
+        res.status(200).json({
+            success: true,
+            message: 'Xóa CV thành công.',
+            data: cvs,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 export const updateProfile = async (req, res, next) => {
     try {
         const userId = req.user._id;

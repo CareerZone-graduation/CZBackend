@@ -94,7 +94,7 @@ const candidateProfileSchema = new mongoose.Schema({
   phone: {
     type: String,
     trim: true,
-    match: [/^[\+]?[1-9][\d]{0,15}$/, 'Please enter a valid phone number']
+    match: [/^[\+]?[\d]{1,15}$/, 'Please enter a valid phone number']
   },
   bio: {
     type: String,
@@ -104,6 +104,13 @@ const candidateProfileSchema = new mongoose.Schema({
   skills: [skillSchema],
   educations: [educationSchema],
   experiences: [experienceSchema],
+  cvs: [{
+    name: { type: String, required: true },
+    path: { type: String, required: true },
+    cloudinaryId: { type: String },
+    isDefault: { type: Boolean, default: false },
+    uploadedAt: { type: Date, default: Date.now }
+  }],
 }, {
   timestamps: true
 });
