@@ -8,7 +8,7 @@ import dotenv from 'dotenv';
 
 import config from './config/index.js';
 import authRoutes from './routes/auth.route.js';
-import userRoutes from './routes/user.route.js';
+// import userRoutes from './routes/user.route.js'; // No longer in use
 import jobRoutes from './routes/job.route.js';
 import candidateRoutes from './routes/candidate.route.js';
 
@@ -65,7 +65,7 @@ app.get('/health', (_, res) =>
 
 // Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
+// app.use('/api/users', userRoutes); // No longer in use
 app.use('/api/jobs', jobRoutes);
 app.use('/api/candidate', candidateRoutes);
 
