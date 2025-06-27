@@ -1,60 +1,54 @@
 import { z } from 'zod';
 
-/**
- * Company related validation schemas
- */
+const industryEnum = z.enum([
+    'Công nghệ thông tin', 'Tài chính', 'Y tế', 'Giáo dục', 'Sản xuất',
+    'Bán lẻ', 'Xây dựng', 'Du lịch', 'Nông nghiệp', 'Truyền thông',
+    'Vận tải', 'Bất động sản', 'Dịch vụ', 'Khởi nghiệp', 'Nhà hàng - Khách sạn',
+    'Bảo hiểm', 'Logistics', 'Năng lượng', 'Viễn thông', 'Dược phẩm',
+    'Hóa chất', 'Ô tô - Xe máy', 'Thực phẩm - Đồ uống', 'Thời trang - Mỹ phẩm',
+    'Thể thao - Giải trí', 'Công nghiệp nặng', 'Công nghiệp điện tử', 'Công nghiệp cơ khí',
+    'Công nghiệp dệt may', "Đa lĩnh vực", 'Khác'
+]);
 
-/**
- * Register company request validation schema
- * @typedef {Object} RegisterCompanyRequest
- * @property {string} name - Company name (2-200 chars)
- * @property {string} address - Company address (5-500 chars)
- * @property {string} website - Company website URL
- * @property {string} description - Company description (20-2000 chars)
- */
-export const createCompanySchema = z.object({
-  name: z.string()
-    .min(2, 'Tên công ty phải từ 2 đến 200 ký tự')
-    .max(200, 'Tên công ty phải từ 2 đến 200 ký tự')
-    .trim(),
-  address: z.string()
-    .min(5, 'Địa chỉ phải từ 5 đến 500 ký tự')
-    .max(500, 'Địa chỉ phải từ 5 đến 500 ký tự')
-    .trim(),
-  website: z.string()
-    .url('Website phải là URL hợp lệ')
-    .max(200, 'Website không được dài quá 200 ký tự')
-    .trim(),
-  description: z.string()
-    .min(20, 'Mô tả phải từ 20 đến 2000 ký tự')
-    .max(2000, 'Mô tả phải từ 20 đến 2000 ký tự')
-    .trim()
-});
+const addressSchema = z.object({
+    street: z.string().max(200, 'Street cannot exceed 200 characters').trim().optional(),
+    city: z.string().max(100, 'City cannot exceed 100 characters').trim().optional(),
+    country: z.string().max(100, 'Country cannot exceed 100 characters').trim().optional(),
+}).optional();
+
+const contactInfoSchema = z.object({
+    email: z.string().email('Please enter a valid email').trim().toLowerCase().optional(),
+    phone: z.string().regex(/^[\+]?[1-9][\d]{0,15}$/, 'Please enter a valid phone number').trim().optional(),
+}).optional();
+
 
 /**
  * Update company request validation schema
- * Same as register but all fields are optional
+ * All fields are optional
  */
 export const updateCompanySchema = z.object({
   name: z.string()
-    .min(2, 'Tên công ty phải từ 2 đến 200 ký tự')
-    .max(200, 'Tên công ty phải từ 2 đến 200 ký tự')
+    .max(200, 'Company name cannot exceed 200 characters')
     .trim()
     .optional(),
-  address: z.string()
-    .min(5, 'Địa chỉ phải từ 5 đến 500 ký tự')
-    .max(500, 'Địa chỉ phải từ 5 đến 500 ký tự')
+  about: z.string()
+    .max(2000, 'About cannot exceed 2000 characters')
+    .trim()
+    .optional(),
+  industry: industryEnum.optional(),
+  taxCode: z.string()
+    .max(50, 'Tax code cannot exceed 50 characters')
+    .trim()
+    .optional(),
+  businessRegistrationUrl: z.string().url().trim().optional(),
+  size: z.string()
+    .max(50, 'Company size cannot exceed 50 characters')
     .trim()
     .optional(),
   website: z.string()
-    .url('Website phải là URL hợp lệ')
-    .max(200, 'Website không được dài quá 200 ký tự')
+    .url('Please enter a valid website URL')
     .trim()
     .optional(),
-  description: z.string()
-    .min(20, 'Mô tả phải từ 20 đến 2000 ký tự')
-    .max(2000, 'Mô tả phải từ 20 đến 2000 ký tự')
-    .trim()
-    .optional(),
-  active: z.boolean().optional()
+  address: addressSchema,
+  contactInfo: contactInfoSchema,
 });
