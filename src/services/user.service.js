@@ -1,148 +1,44 @@
 /**
  * User Service
- * Handles user profile management and related operations
+ * Handles user account management and related operations
  * @module UserService
  */
 
 import { User } from '../models/index.js';
 import logger from '../utils/logger.js';
 import bcrypt from 'bcryptjs';
+import { NotFoundError } from '../utils/AppError.js';
+
 
 /**
- * Get user profile by ID
+ * Get user by ID
  * @param {string} userId - User ID
- * @param {string} requesterId - ID of the user making the request
- * @returns {Promise<Object>} User profile
+ * @returns {Promise<Object>} User's public data
  */
-export const getUserProfile = async (userId, requesterId = null) => {
-  try {
+export const getUserById = async (userId) => {
     const user = await User.findById(userId).select('-password -refreshTokens');
     if (!user) {
-      throw new Error('User not found');
+        throw new NotFoundError('User not found');
     }
-
-    let profile = null;
-    switch (user.role) {
-      case 'CANDIDATE':
-        profile = await User.findOne({ user: userId });
-        break;
-      case 'RECRUITER':
-        profile = await User.findOne({ user: userId }).populate('company');
-        break;
-      case 'ADMIN':
-        profile = await User.findOne({ user: userId });
-        break;
-    }
-
-    return {
-      user,
-      profile
-    };
-  } catch (error) {
-    logger.error('Get user profile failed:', error);
-    throw error;
-  }
+    return user;
 };
+
 
 /**
- * Update user profile
+ * Delete user account
  * @param {string} userId - User ID
- * @param {Object} profileData - Profile data to update
- * @returns {Promise<Object>} Updated profile
+ * @returns {Promise<void>}
  */
-export const updateUserProfile = async (userId, profileData) => {
-  try {
-    const user = await User.findById(userId);
+export const deleteUser = async (userId) => {
+    const user = await User.findByIdAndDelete(userId);
     if (!user) {
-      throw new Error('User not found');
+        throw new NotFoundError('User not found');
     }
-
-    // Update user basic info
-    const { email, phone, bio, profilePicture, ...roleSpecificData } = profileData;
-    
-    if (email) user.email = email;
-    if (phone) user.phone = phone;
-    if (bio) user.bio = bio;
-    if (profilePicture) user.profilePicture = profilePicture;
-
-    await user.save();
-
-    // Update role-specific profile
-    let profile = null;
-    switch (user.role) {
-      case 'CANDIDATE':
-        profile = await User.findOneAndUpdate(
-          { user: userId },
-          roleSpecificData,
-          { new: true, upsert: true }
-        );
-        break;
-      case 'RECRUITER':
-        profile = await User.findOneAndUpdate(
-          { user: userId },
-          roleSpecificData,
-          { new: true, upsert: true }
-        );
-        break;
-      case 'ADMIN':
-        profile = await User.findOneAndUpdate(
-          { user: userId },
-          roleSpecificData,
-          { new: true, upsert: true }
-        );
-        break;
-    }
-
-    logger.info(`User profile updated: ${userId}`);
-
-    return { user, profile };
-  } catch (error) {
-    logger.error('Update user profile failed:', error);
-    throw error;
-  }
+    // In a real app, you might want to also delete related data
+    // e.g., CandidateProfile, RecruiterProfile, etc.
+    logger.info(`User account deleted: ${userId}`);
 };
 
-/**
- * Upload profile picture
- * @param {string} userId - User ID
- * @param {Object} file - File object
- * @returns {Promise<Object>} Upload result
- */
-export const uploadProfilePicture = async (userId, file) => {
-  try {
-    const user = await User.findById(userId);
-    if (!user) {
-      throw new Error('User not found');
-    }
-
-    // Delete old profile picture if exists
-    if (user.profilePicture) {
-      await cloudinaryService.deleteFile(user.profilePicture);
-    }
-
-    // Upload new profile picture
-    const uploadResult = await cloudinaryService.uploadFile(file, {
-      folder: 'profile-pictures',
-      transformation: [
-        { width: 200, height: 200, crop: 'fill' },
-        { quality: 'auto' }
-      ]
-    });
-
-    // Update user profile picture URL
-    user.profilePicture = uploadResult.secure_url;
-    await user.save();
-
-    logger.info(`Profile picture uploaded for user: ${userId}`);
-
-    return {
-      profilePicture: uploadResult.secure_url
-    };
-  } catch (error) {
-    logger.error('Upload profile picture failed:', error);
-    throw error;
-  }
-};
 
 /**
  * Change password
@@ -155,7 +51,7 @@ export const changePassword = async (userId, currentPassword, newPassword) => {
   try {
     const user = await User.findById(userId);
     if (!user) {
-      throw new Error('User not found');
+      throw new NotFoundError('User not found');
     }
 
     // Verify current password
@@ -256,7 +152,7 @@ export const deactivateUser = async (userId) => {
     );
 
     if (!user) {
-      throw new Error('User not found');
+      throw new NotFoundError('User not found');
     }
 
     logger.info(`User deactivated: ${userId}`);
@@ -282,7 +178,7 @@ export const activateUser = async (userId) => {
     );
 
     if (!user) {
-      throw new Error('User not found');
+      throw new NotFoundError('User not found');
     }
 
     logger.info(`User activated: ${userId}`);
@@ -372,9 +268,8 @@ export const searchUsers = async (query, filters = {}) => {
 
 // Export as named export for services index
 export const userService = {
-  getUserProfile,
-  updateUserProfile,
-  uploadProfilePicture,
+  getUserById,
+  deleteUser,
   changePassword,
   getUserList,
   deactivateUser,

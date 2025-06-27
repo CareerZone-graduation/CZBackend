@@ -6,35 +6,11 @@ import { idParamSchema } from '../schemas/common.schema.js';
 
 // Import controllers
 import {
-  getUserProfile,
-  updateUserProfile,
-  uploadAvatar,
   deleteUser,
   getUserById
-} from '../controllers/user.controller.js'; // Removed specific profile controllers
+} from '../controllers/user.controller.js';
 
 const router = express.Router();
-
-/**
- * @route   GET /api/users/profile
- * @desc    Get current user profile
- * @access  Private
- */
-router.get('/profile', authenticate, getUserProfile);
-
-/**
- * @route   PUT /api/users/profile
- * @desc    Update current user profile
- * @access  Private
- */
-router.put('/profile', authenticate, validateBody(updateUserProfileSchema), updateUserProfile); // Use updateUserProfileSchema
-
-/**
- * @route   POST /api/users/avatar
- * @desc    Upload user avatar
- * @access  Private
- */
-router.post('/avatar', authenticate, uploadAvatar);
 
 /**
  * @route   GET /api/users/:id
