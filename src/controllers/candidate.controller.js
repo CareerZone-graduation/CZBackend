@@ -1,4 +1,5 @@
 import * as candidateService from '../services/candidate.service.js';
+import logger from '../utils/logger.js';
 
 export const getProfile = async (req, res, next) => {
     try {
@@ -17,7 +18,8 @@ export const getProfile = async (req, res, next) => {
 
 export const updateProfile = async (req, res, next) => {
     try {
-        const { userId } = req.user;
+        const userId = req.user._id;
+        logger.info('Updating candidate profile', userId);
         const profile = await candidateService.updateProfile(userId, req.body);
         res.status(200).json({
             success: true,

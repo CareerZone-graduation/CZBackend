@@ -59,7 +59,7 @@ const updateProfile = async (userId, updateData) => {
         ).populate('userId', 'fullname email').lean();
         
         // Flatten the response after update
-        if (profile) {
+        if (profile && profile.userId) {
             profile.email = profile.userId.email;
             profile.fullname = profile.userId.fullname;
             profile.userId = profile.userId._id;

@@ -37,7 +37,9 @@ export const getUserProfile = async (req, res, next) => {
  */
 export const updateUserProfile = async (req, res, next) => {
   try {
+    logger.info('Updating user profile', req.body);
     const userId = req.user.id;
+    logger.info(userId);
     const profile = await userService.updateUserProfile(userId, req.body);
     
     res.json({
@@ -70,14 +72,9 @@ export const getCandidateProfile = async (req, res, next) => {
   }
 };
 
-/**
- * Update candidate profile
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- * @param {Function} next - Express next middleware
- */
 export const updateCandidateProfile = async (req, res, next) => {
   try {
+    console.log('Updating candidate profile', req.body);
     const candidateId = req.user.profileId;
     const profile = await userService.updateCandidateProfile(candidateId, req.body);
     
@@ -91,12 +88,7 @@ export const updateCandidateProfile = async (req, res, next) => {
   }
 };
 
-/**
- * Get recruiter profile
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- * @param {Function} next - Express next middleware
- */
+
 export const getRecruiterProfile = async (req, res, next) => {
   try {
     const { userId } = req.params;

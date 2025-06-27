@@ -171,7 +171,7 @@ export const candidateProfileSchema = z.object({
     .max(1000, 'Mô tả không được dài quá 1000 ký tự')
     .trim()
     .optional(),
-  skills: z.array(z.string()).optional(),
+  skills: z.array(skillSchema).optional(),
   educations: z.array(educationSchema).optional(),
   experiences: z.array(experienceSchema).optional(),
   cvs: z.array(cvSchema).optional(),
