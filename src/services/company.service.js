@@ -55,19 +55,18 @@ export const getMyCompany = async (recruiterUserId) => {
  * @returns {Promise<object>} The updated company info.
  */
 export const updateMyCompanyLogo = async (recruiterUserId, file) => {
+  
   if (!file) {
     throw new BadRequestError('Vui lòng tải lên một file ảnh.');
   }
 
   const recruiterProfile = await getRecruiterProfile(recruiterUserId);
   if (!recruiterProfile.company) {
-      throw new BadRequestError('Vui lòng cập nhật thông tin công ty trước khi thêm logo.');
+    throw new BadRequestError('Vui lòng cập nhật thông tin công ty trước khi thêm logo.');
   }
 
-  const uploadResult = await uploadToCloudinary(file.path, {
-    folder: `CareerZone/companies/${recruiterProfile.company._id}`,
-    public_id: 'logo'
-  });
+  const folder = `CareerZone/companies/${recruiterProfile.company._id}`;
+  const uploadResult = await uploadToCloudinary(file.buffer, folder);
 
   recruiterProfile.company.logo = uploadResult.secure_url;
   await recruiterProfile.save();
