@@ -87,12 +87,6 @@ const candidateProfileSchema = new mongoose.Schema({
     ref: 'User', // tên model bạn muốn tham chiếu
     required: true
   },
-  fullname: {
-    type: String,
-    required: [true, 'Full name is required'],
-    trim: true,
-    maxlength: [100, 'Full name cannot exceed 100 characters']
-  },
   avatar: {
     type: String,
     trim: true

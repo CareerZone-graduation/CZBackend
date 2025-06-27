@@ -156,6 +156,29 @@ export const userProfileSchema = z.object({
 });
 
 /**
+ * Candidate profile update validation schema
+ */
+export const candidateProfileSchema = z.object({
+  fullname: z.string()
+    .min(1, 'Họ tên không được để trống')
+    .max(100, 'Họ tên không được dài quá 100 ký tự')
+    .trim()
+    .optional(),
+  avatar: z.string().trim().optional(),
+  phone: z.string()
+    .regex(/^[\+]?[1-9][\d]{0,15}$/, 'Số điện thoại không hợp lệ')
+    .optional(),
+  bio: z.string()
+    .max(1000, 'Mô tả không được dài quá 1000 ký tự')
+    .trim()
+    .optional(),
+  skills: z.array(z.string()).optional(),
+  educations: z.array(educationSchema).optional(),
+  experiences: z.array(experienceSchema).optional(),
+  cvs: z.array(cvSchema).optional(),
+});
+
+/**
  * Update unified User profile schema (all fields optional)
  */
 export const updateUserProfileSchema = z.object({
