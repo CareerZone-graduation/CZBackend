@@ -28,15 +28,12 @@ export const authenticate = async (req, res, next) => {
         message: 'Access denied. No token provided.'
       });
     }
-
     try {
       // Verify token
       const decoded = jwt.verify(token, config.JWT_SECRET);
-      
       // Get user from database
       const user = await User.findById(decoded.userId)
         .select('-password');
-
       if (!user) {
         return res.status(401).json({
           success: false,
@@ -149,8 +146,8 @@ export const authorize = (allowedRoles = []) => {
       return next(); // No specific roles required
     }
 
-    const role = req.role;
-    if (!allowedRoles.includes(userRole)) {
+    const role = req.user.role;
+    if (!allowedRoles.includes(role)) {
       logger.warn('Authorization failed:', {
         userId: req.userId,
         role,

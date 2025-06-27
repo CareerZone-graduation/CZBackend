@@ -20,6 +20,8 @@ const config = {
   JWT_EXPIRE: process.env.JWT_EXPIRE || '7d',
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-key',
   JWT_REFRESH_EXPIRE: process.env.JWT_REFRESH_EXPIRE || '30d',
+  JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN || '30d',
+  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '700d', // 700 days in milliseconds, temporary for testing
 
   // Google OAuth2
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
