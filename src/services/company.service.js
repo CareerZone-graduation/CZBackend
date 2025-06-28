@@ -45,7 +45,14 @@ export const getMyCompany = async (recruiterUserId) => {
   if (!recruiterProfile.company) {
     throw new NotFoundError('Nhà tuyển dụng này chưa cập nhật thông tin công ty.');
   }
-  return recruiterProfile.company;
+  
+  // Chuyển Mongoose document thành plain object
+  const companyObject = recruiterProfile.company.toObject();
+  
+  // Gán thuộc tính mới
+  companyObject.representativeName = recruiterProfile.fullname;
+  
+  return companyObject;
 };
 
 /**

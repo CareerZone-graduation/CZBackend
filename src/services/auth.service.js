@@ -1,11 +1,15 @@
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import crypto from 'crypto';
-import { User } from '../models/index.js';
-import config from '../config/index.js';
-import logger from '../utils/logger.js';
-import { BadRequestError, NotFoundError, UnauthorizedError } from '../utils/AppError.js';
-import CandidateProfile from '../models/CandidateProfile.js';
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import crypto from "crypto";
+import { User } from "../models/index.js";
+import config from "../config/index.js";
+import logger from "../utils/logger.js";
+import {
+  BadRequestError,
+  NotFoundError,
+  UnauthorizedError,
+} from "../utils/AppError.js";
+import CandidateProfile from "../models/CandidateProfile.js";
 
 /**
  * Generate JWT tokens
@@ -13,46 +17,41 @@ import CandidateProfile from '../models/CandidateProfile.js';
  * @returns {Object} Access and refresh tokens
  */
 const generateTokens = (userId) => {
-  const accessToken = jwt.sign(
-    { userId },
-    config.JWT_SECRET,
-    { expiresIn: config.JWT_EXPIRES_IN || '15m' }
-  );
+  const accessToken = jwt.sign({ userId }, config.JWT_SECRET, {
+    expiresIn: config.JWT_EXPIRES_IN || "15m",
+  });
 
-  const refreshToken = jwt.sign(
-    { userId },
-    config.JWT_REFRESH_SECRET,
-    { expiresIn: config.JWT_REFRESH_EXPIRES_IN || '7d' }
-  );
+  const refreshToken = jwt.sign({ userId }, config.JWT_REFRESH_SECRET, {
+    expiresIn: config.JWT_REFRESH_EXPIRES_IN || "7d",
+  });
 
   return { accessToken, refreshToken };
 };
 
-
 export const register = async (userData) => {
   try {
-    const { username,email, password, role } = userData;
+    const { username, email, password, role } = userData;
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      throw new BadRequestError('User already exists with this email');
+      throw new BadRequestError("User already exists with this email");
     }
     const existingUsername = await User.findOne({ username });
     if (existingUsername) {
-      throw new BadRequestError('Username already exists');
+      throw new BadRequestError("Username already exists");
     }
     // Validate role
-    const validRoles = ['candidate', 'recruiter'];
+    const validRoles = ["candidate", "recruiter"];
     if (!validRoles.includes(role)) {
-      throw new BadRequestError('Invalid role specified');
+      throw new BadRequestError("Invalid role specified");
     }
     // Create base user
     const user = new User({
       username,
       email,
       password,
-      role
+      role,
     });
 
     await user.save();
@@ -60,15 +59,15 @@ export const register = async (userData) => {
     const { accessToken, refreshToken } = generateTokens(user._id);
 
     return {
-        id: user._id,
-        email: user.email,
-        role: user.role,
-        active: user.active,
-        accessToken,
-        refreshToken
+      id: user._id,
+      email: user.email,
+      role: user.role,
+      active: user.active,
+      accessToken,
+      refreshToken,
     };
   } catch (error) {
-    logger.error('Registration failed:', error);
+    logger.error("Registration failed:", error);
     throw error;
   }
 };
@@ -81,17 +80,17 @@ export const register = async (userData) => {
  */
 export const login = async (username, password) => {
   // Find user
-  const t= await CandidateProfile.findOne({ username }).select('+password');
-  const user = await User.findOne({ username }).select('+password');
+  const t = await CandidateProfile.findOne({ username }).select("+password");
+  const user = await User.findOne({ username }).select("+password");
   if (!user) {
     // Generic error message for security
-    throw new NotFoundError('User not found');
+    throw new NotFoundError("User not found");
   }
 
   // Verify password
   const isValidPassword = await bcrypt.compare(password, user.password);
   if (!isValidPassword) {
-    throw new UnauthorizedError('Incorrect username or password');
+    throw new UnauthorizedError("Incorrect username or password");
   }
 
   // Generate tokens
@@ -110,32 +109,22 @@ export const login = async (username, password) => {
 export const refreshToken = async (refreshToken) => {
   try {
     // Verify refresh token
+    logger.info(refreshToken);
     const decoded = jwt.verify(refreshToken, config.JWT_REFRESH_SECRET);
-    
+
     // Find user and check if refresh token exists
     const user = await User.findById(decoded.userId);
-    if (!user || !user.refreshTokens.includes(refreshToken)) {
-      throw new UnauthorizedError('Invalid refresh token');
-    }
 
-    // Generate new tokens
-    const { accessToken, refreshToken: newRefreshToken } = generateTokens(user._id);
-
-    // Replace old refresh token with new one
-    user.refreshTokens = user.refreshTokens.filter(token => token !== refreshToken);
-    user.refreshTokens.push(newRefreshToken);
-    await user.save();
-
+    // Generate new access token
+    const { accessToken } = generateTokens(user._id);
     return {
       accessToken,
-      refreshToken: newRefreshToken
     };
   } catch (error) {
-    logger.error('Token refresh failed:', error);
-    throw new Error('Invalid refresh token');
+    logger.error("Token refresh failed:", error);
+    throw new Error("Invalid refresh token");
   }
 };
-
 
 export const logout = async (refreshToken) => {
   try {
@@ -144,9 +133,8 @@ export const logout = async (refreshToken) => {
     console.log(`Blacklisting refresh token: ${refreshToken}`);
     // check if the refresh token ís valid
     jwt.verify(refreshToken, config.JWT_REFRESH_SECRET);
-
   } catch (error) {
-    logger.error('Logout failed:', error);
+    logger.error("Logout failed:", error);
     throw error;
   }
 };
@@ -160,11 +148,11 @@ export const verifyEmail = async (token) => {
   try {
     const user = await User.findOne({
       emailVerificationToken: token,
-      emailVerificationExpires: { $gt: new Date() }
+      emailVerificationExpires: { $gt: new Date() },
     });
 
     if (!user) {
-      throw new BadRequestError('Invalid or expired verification token');
+      throw new BadRequestError("Invalid or expired verification token");
     }
 
     user.emailVerified = true;
@@ -174,9 +162,9 @@ export const verifyEmail = async (token) => {
 
     logger.info(`Email verified for user: ${user.email}`);
 
-    return { message: 'Email verified successfully' };
+    return { message: "Email verified successfully" };
   } catch (error) {
-    logger.error('Email verification failed:', error);
+    logger.error("Email verification failed:", error);
     throw error;
   }
 };
@@ -190,11 +178,11 @@ export const requestPasswordReset = async (email) => {
   try {
     const user = await User.findOne({ email });
     if (!user) {
-      throw new NotFoundError('User not found');
+      throw new NotFoundError("User not found");
     }
 
     // Generate reset token
-    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetToken = crypto.randomBytes(32).toString("hex");
     user.passwordResetToken = resetToken;
     user.passwordResetExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
     await user.save();
@@ -202,19 +190,19 @@ export const requestPasswordReset = async (email) => {
     // Queue password reset email
     await queueService.sendEmail({
       to: email,
-      subject: 'Password Reset - CareerConnect',
-      template: 'password-reset',
+      subject: "Password Reset - CareerConnect",
+      template: "password-reset",
       data: {
-        name: user.firstName || 'User',
-        resetUrl: `${config.CLIENT_URL}/reset-password?token=${resetToken}`
-      }
+        name: user.firstName || "User",
+        resetUrl: `${config.CLIENT_URL}/reset-password?token=${resetToken}`,
+      },
     });
 
     logger.info(`Password reset requested for: ${email}`);
 
-    return { message: 'Password reset email sent' };
+    return { message: "Password reset email sent" };
   } catch (error) {
-    logger.error('Password reset request failed:', error);
+    logger.error("Password reset request failed:", error);
     throw error;
   }
 };
@@ -229,11 +217,11 @@ export const resetPassword = async (token, newPassword) => {
   try {
     const user = await User.findOne({
       passwordResetToken: token,
-      passwordResetExpires: { $gt: new Date() }
+      passwordResetExpires: { $gt: new Date() },
     });
 
     if (!user) {
-      throw new BadRequestError('Invalid or expired reset token');
+      throw new BadRequestError("Invalid or expired reset token");
     }
 
     // Hash new password
@@ -248,9 +236,9 @@ export const resetPassword = async (token, newPassword) => {
 
     logger.info(`Password reset successful for user: ${user.email}`);
 
-    return { message: 'Password reset successful' };
+    return { message: "Password reset successful" };
   } catch (error) {
-    logger.error('Password reset failed:', error);
+    logger.error("Password reset failed:", error);
     throw error;
   }
 };
@@ -266,16 +254,16 @@ export const changePassword = async (userId, currentPassword, newPassword) => {
   try {
     const user = await User.findById(userId);
     if (!user) {
-      throw new NotFoundError('User not found');
+      throw new NotFoundError("User not found");
     }
 
     // Verify current password
     // const isValidPassword = await bcrypt.compare(currentPassword, user.password);
-    console.log('Is valid password:');
+    console.log("Is valid password:");
 
     const isValidPassword = await user.comparePassword(currentPassword);
     if (!isValidPassword) {
-      throw new BadRequestError('Current password is incorrect');
+      throw new BadRequestError("Current password is incorrect");
     }
 
     // Hash new password
@@ -288,7 +276,7 @@ export const changePassword = async (userId, currentPassword, newPassword) => {
 
     logger.info(`Password changed for user: ${user.email}`);
   } catch (error) {
-    logger.error('Password change failed:', error);
+    logger.error("Password change failed:", error);
     throw error;
   }
 };
@@ -302,12 +290,12 @@ export const validateSession = async (userId) => {
   try {
     const user = await User.findById(userId);
     if (!user || !user.isActive) {
-      throw new UnauthorizedError('Invalid session');
+      throw new UnauthorizedError("Invalid session");
     }
 
     return user;
   } catch (error) {
-    logger.error('Session validation failed:', error);
+    logger.error("Session validation failed:", error);
     throw error;
   }
 };
@@ -321,11 +309,11 @@ export const forgotPassword = async (email) => {
   try {
     const user = await User.findOne({ email });
     if (!user) {
-      throw new NotFoundError('User not found');
+      throw new NotFoundError("User not found");
     }
 
     // Generate reset token
-    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetToken = crypto.randomBytes(32).toString("hex");
     user.passwordResetToken = resetToken;
     user.passwordResetExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
     await user.save();
@@ -333,17 +321,17 @@ export const forgotPassword = async (email) => {
     // Queue password reset email
     await queueService.sendEmail({
       to: email,
-      subject: 'Password Reset - CareerConnect',
-      template: 'password-reset',
+      subject: "Password Reset - CareerConnect",
+      template: "password-reset",
       data: {
-        name: user.firstName || 'User',
-        resetUrl: `${config.CLIENT_URL}/reset-password?token=${resetToken}`
-      }
+        name: user.firstName || "User",
+        resetUrl: `${config.CLIENT_URL}/reset-password?token=${resetToken}`,
+      },
     });
 
     logger.info(`Password reset email sent to: ${email}`);
   } catch (error) {
-    logger.error('Forgot password failed:', error);
+    logger.error("Forgot password failed:", error);
     throw error;
   }
 };
@@ -354,14 +342,14 @@ export const forgotPassword = async (email) => {
  * @param {string} role - User role for new registrations
  * @returns {Promise<Object>} User data and tokens
  */
-export const googleLogin = async (idToken, role = 'CANDIDATE') => {
+export const googleLogin = async (idToken, role = "CANDIDATE") => {
   try {
     // Verify Google token
     const googleUser = await verifyGoogleToken(idToken);
-    
+
     // Check if user exists
     let user = await User.findOne({ email: googleUser.email });
-    
+
     if (!user) {
       // Create new user
       user = new User({
@@ -369,41 +357,39 @@ export const googleLogin = async (idToken, role = 'CANDIDATE') => {
         role,
         isActive: true,
         emailVerified: googleUser.email_verified,
-        googleId: googleUser.sub
+        googleId: googleUser.sub,
       });
-      
+
       await user.save();
-      
+
       // Create role-specific profile
       let profile;
       switch (role) {
-        case 'CANDIDATE':
+        case "CANDIDATE":
           profile = new Candidate({
             user: user._id,
-            firstName: googleUser.name.split(' ')[0],
-            lastName: googleUser.name.split(' ').slice(1).join(' '),
-            profilePicture: googleUser.picture
+            firstName: googleUser.name.split(" ")[0],
+            lastName: googleUser.name.split(" ").slice(1).join(" "),
+            profilePicture: googleUser.picture,
           });
           break;
-        case 'RECRUITER':
+        case "RECRUITER":
           profile = new Recruiter({
             user: user._id,
-            firstName: googleUser.name.split(' ')[0],
-            lastName: googleUser.name.split(' ').slice(1).join(' '),
-            profilePicture: googleUser.picture
+            firstName: googleUser.name.split(" ")[0],
+            lastName: googleUser.name.split(" ").slice(1).join(" "),
+            profilePicture: googleUser.picture,
           });
           break;
         default:
-          throw new BadRequestError('Invalid role for Google login');
+          throw new BadRequestError("Invalid role for Google login");
       }
-      
+
       await profile.save();
     }
 
     // Generate tokens
     const { accessToken, refreshToken } = generateTokens(user._id);
-
-
 
     logger.info(`Google login successful: ${user.email}`);
 
@@ -414,15 +400,15 @@ export const googleLogin = async (idToken, role = 'CANDIDATE') => {
         role: user.role,
         isActive: user.isActive,
         emailVerified: user.emailVerified,
-        lastLogin: user.lastLogin
+        lastLogin: user.lastLogin,
       },
       tokens: {
         accessToken,
-        refreshToken
-      }
+        refreshToken,
+      },
     };
   } catch (error) {
-    logger.error('Google login failed:', error);
+    logger.error("Google login failed:", error);
     throw error;
   }
 };
@@ -436,29 +422,31 @@ const verifyGoogleToken = async (idToken) => {
   try {
     // For production, you should use Google's official library
     // This is a simplified implementation
-    const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
-    
+    const response = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`
+    );
+
     if (!response.ok) {
-      throw new UnauthorizedError('Invalid Google token');
+      throw new UnauthorizedError("Invalid Google token");
     }
-    
+
     const payload = await response.json();
-    
+
     // Verify the token is for your application
     if (payload.aud !== config.GOOGLE_CLIENT_ID) {
-      throw new UnauthorizedError('Invalid audience');
+      throw new UnauthorizedError("Invalid audience");
     }
-    
+
     return {
       sub: payload.sub,
       email: payload.email,
       name: payload.name,
       picture: payload.picture,
-      email_verified: payload.email_verified
+      email_verified: payload.email_verified,
     };
   } catch (error) {
-    logger.error('Google token verification error:', error);
-    throw new Error('Invalid Google token');
+    logger.error("Google token verification error:", error);
+    throw new Error("Invalid Google token");
   }
 };
 
@@ -473,5 +461,5 @@ export const authService = {
   changePassword,
   validateSession,
   forgotPassword,
-  googleLogin
+  googleLogin,
 };
