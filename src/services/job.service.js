@@ -22,7 +22,7 @@ const findRecruiterProfileByUserId = async (userId) => {
 export const createJob = async (userId, jobData) => {
   const recruiterProfile = await findRecruiterProfileByUserId(userId);
 
-  if (!recruiterProfile.companyId) {
+  if (!recruiterProfile.company) {
     throw new BadRequestError('Nhà tuyển dụng phải liên kết với một công ty để đăng tin.');
   }
 
