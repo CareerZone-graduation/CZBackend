@@ -98,7 +98,7 @@ const personalInfoSchema = new mongoose.Schema({
   phone: {
     type: String,
     trim: true,
-    match: [/^[\+]?[1-9][\d]{0,15}$/, 'Please enter a valid phone number']
+    match: [/^[\+]?[\d]{1,15}$/, 'Please enter a valid phone number']
   },
   address: {
     type: String,
@@ -205,7 +205,7 @@ const referenceSchema = new mongoose.Schema({
   phone: {
     type: String,
     trim: true,
-    match: [/^[\+]?[1-9][\d]{0,15}$/, 'Please enter a valid phone number']
+    match: [/^[\+]?[\d]{1,15}$/, 'Please enter a valid phone number']
   }
 }, { _id: true });
 

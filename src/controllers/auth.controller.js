@@ -6,12 +6,19 @@ import logger from "../utils/logger.js";
 
 export const register = async (req, res, next) => {
   try {
-    console.log("Registering user:", req.body);
-    const result = await authService.register(req.body);
-    res.status(201).json({
+    const {refreshToken, ...userData } = await authService.register(req.body);
+
+     res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'Lax',
+      maxAge: 999999999,
+    });
+
+      res.status(201).json({
       success: true,
       message: "User registered successfully",
-      data: result,
+      data: userData,
     });
   } catch (error) {
     next(error);

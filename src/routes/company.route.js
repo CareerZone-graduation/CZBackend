@@ -3,10 +3,19 @@ import * as companyController from '../controllers/company.controller.js';
 import { authenticate, recruiterOnly } from '../middleware/auth.middleware.js';
 import { validateBody, validateParams } from '../middleware/validation.middleware.js';
 import { idParamSchema } from '../schemas/common.schema.js';
-import { updateCompanySchema } from '../schemas/company.schema.js';
+import { createCompanySchema, updateCompanySchema } from '../schemas/company.schema.js';
 import { upload } from '../middleware/upload.middleware.js';
 
 const router = Router();
+
+// Recruiter creates a company
+router.post(
+  '/',
+  authenticate,
+  recruiterOnly,
+  upload.single('businessRegistrationFile'), // Field name for the file
+  companyController.createCompany,
+);
 
 
 
@@ -18,7 +27,7 @@ router.patch(
   '/my-company',
   authenticate,
   recruiterOnly,
-  validateBody(updateCompanySchema),
+  upload.single('businessRegistrationFile'), // Field name for the file
   companyController.updateMyCompany
 );
 
@@ -29,6 +38,7 @@ router.post(
   upload.single('logo'),
   companyController.updateMyCompanyLogo
 );
+
 
 // === Public Routes ===
 router.get('/', companyController.getAllCompanies);

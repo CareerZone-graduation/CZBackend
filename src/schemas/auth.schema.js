@@ -40,6 +40,10 @@ export const registerSchema = z.object({
     .max(100, 'Mật khẩu phải từ 8 đến 100 ký tự')
     // .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/, 'Mật khẩu phải chứa ít nhất một chữ cái thường, một chữ cái in hoa và một số')
     ,
+  fullname: z.string()
+    .min(1, 'Họ tên phải từ 2 đến 100 ký tự')
+    .max(100, 'Họ tên phải từ 2 đến 100 ký tự')
+    .trim(),
   email: z.string({
      required_error: 'Email là bắt buộc'
   })

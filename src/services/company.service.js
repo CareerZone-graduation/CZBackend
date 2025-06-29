@@ -3,9 +3,10 @@ import { BadRequestError, NotFoundError } from '../utils/AppError.js';
 import { uploadToCloudinary } from './upload.service.js';
 
 /**
- * Get the company profile for a given recruiter user ID.
+ * Get the recruiter profile document for a given user ID.
  * @param {string} recruiterUserId - The ID of the recruiter user.
  * @returns {Promise<object>} The recruiter profile document.
+ * @throws {NotFoundError} If the profile is not found.
  */
 const getRecruiterProfile = async (recruiterUserId) => {
   const recruiterProfile = await RecruiterProfile.findOne({ userId: recruiterUserId });
@@ -16,20 +17,64 @@ const getRecruiterProfile = async (recruiterUserId) => {
 };
 
 /**
+ * Creates a new company for a recruiter by embedding it in their profile.
+ * Handles optional file upload for business registration.
+ * @param {object} companyData - The data for the new company.
+ * @param {string} recruiterUserId - The ID of the recruiter user creating the company.
+ * @param {object} [file] - Optional uploaded file for business registration.
+ * @returns {Promise<object>} The newly created company sub-document.
+ */
+export const createCompany = async (companyData, recruiterUserId, file) => {
+  const recruiterProfile = await RecruiterProfile.findOne({ userId: recruiterUserId });
+  if (recruiterProfile) {
+  if (recruiterProfile.company && recruiterProfile.company.name) {
+    throw new BadRequestError('Bạn đã đăng ký thông tin công ty rồi.');
+  }
+}
+
+  const existingCompany = await RecruiterProfile.findOne({ 'company.name': companyData.name });
+  if (existingCompany) {
+    throw new BadRequestError(`Tên công ty '${companyData.name}' đã tồn tại.`);
+  }
+
+  const dataToCreate = { ...companyData };
+
+  if (file) {
+    const folder = `CareerZone/business_registrations`;
+    const uploadResult = await uploadToCloudinary(file.buffer, folder);
+    dataToCreate.businessRegistrationUrl = uploadResult.secure_url;
+  }
+
+  recruiterProfile.company = dataToCreate;
+  await recruiterProfile.save();
+
+  return recruiterProfile.company;
+};
+
+/**
  * Update the company info for the logged-in recruiter.
+ * Handles optional file upload for business registration.
  * @param {string} recruiterUserId - The ID of the recruiter user.
  * @param {object} companyData - The data for the company.
+ * @param {object} [file] - Optional uploaded file for business registration.
  * @returns {Promise<object>} The updated company info.
  */
-export const updateMyCompany = async (recruiterUserId, companyData) => {
+export const updateMyCompany = async (recruiterUserId, companyData, file) => {
   const recruiterProfile = await getRecruiterProfile(recruiterUserId);
 
-  // If company does not exist, create it. Otherwise, update it.
   if (!recruiterProfile.company) {
-    recruiterProfile.company = {};
+    throw new BadRequestError('Bạn chưa có công ty. Vui lòng tạo công ty trước.');
+  }
+
+  const dataToUpdate = { ...companyData };
+
+  if (file) {
+    const folder = `CareerZone/business_registrations/${recruiterProfile.company._id}`;
+    const uploadResult = await uploadToCloudinary(file.buffer, folder);
+    dataToUpdate.businessRegistrationUrl = uploadResult.secure_url;
   }
   
-  Object.assign(recruiterProfile.company, companyData);
+  Object.assign(recruiterProfile.company, dataToUpdate);
   await recruiterProfile.save();
 
   return recruiterProfile.company;
@@ -42,14 +87,11 @@ export const updateMyCompany = async (recruiterUserId, companyData) => {
  */
 export const getMyCompany = async (recruiterUserId) => {
   const recruiterProfile = await getRecruiterProfile(recruiterUserId);
-  if (!recruiterProfile.company) {
+  if (!recruiterProfile.company || !recruiterProfile.company.name) {
     throw new NotFoundError('Nhà tuyển dụng này chưa cập nhật thông tin công ty.');
   }
   
-  // Chuyển Mongoose document thành plain object
   const companyObject = recruiterProfile.company.toObject();
-  
-  // Gán thuộc tính mới
   companyObject.representativeName = recruiterProfile.fullname;
   
   return companyObject;
@@ -62,7 +104,6 @@ export const getMyCompany = async (recruiterUserId) => {
  * @returns {Promise<object>} The updated company info.
  */
 export const updateMyCompanyLogo = async (recruiterUserId, file) => {
-  
   if (!file) {
     throw new BadRequestError('Vui lòng tải lên một file ảnh.');
   }
@@ -91,27 +132,23 @@ export const getAllCompanies = async (options = {}) => {
   const limit = parseInt(options.limit, 10) || 10;
   const skip = (page - 1) * limit;
 
-  const pipeline = [
-    { $match: { 'company.name': { $exists: true, $ne: null } } },
-    { $replaceRoot: { newRoot: '$company' } }
-  ];
+  const query = { 'company.name': { $exists: true, $ne: null } };
 
   if (options.search) {
-    pipeline.unshift({ $match: { 'company.name': { $regex: options.search, $options: 'i' } } });
+    query['company.name'] = { $regex: options.search, $options: 'i' };
   }
   if (options.industry) {
-    pipeline.unshift({ $match: { 'company.industry': options.industry } });
+    query['company.industry'] = options.industry;
   }
 
-  const countPipeline = [...pipeline, { $count: 'total' }];
-  const totalResult = await RecruiterProfile.aggregate(countPipeline);
-  const totalCompanies = totalResult.length > 0 ? totalResult[0].total : 0;
+  const totalCompanies = await RecruiterProfile.countDocuments(query);
 
-  pipeline.push({ $sort: { createdAt: -1 } });
-  pipeline.push({ $skip: skip });
-  pipeline.push({ $limit: limit });
+  const profiles = await RecruiterProfile.find(query)
+    .sort({ 'company.createdAt': -1 })
+    .skip(skip)
+    .limit(limit);
 
-  const companies = await RecruiterProfile.aggregate(pipeline);
+  const companies = profiles.map(p => p.company);
 
   return {
     data: companies,

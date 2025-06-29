@@ -18,35 +18,62 @@ const addressSchema = z.object({
 
 const contactInfoSchema = z.object({
     email: z.string().email('Please enter a valid email').trim().toLowerCase().optional(),
-    phone: z.string().regex(/^[\+]?[1-9][\d]{0,15}$/, 'Please enter a valid phone number').trim().optional(),
+    phone: z.string().regex(/^[\+]?[\d]{1,15}$/, 'Please enter a valid phone number').trim().optional(),
 }).optional();
-
-
 /**
  * Update company request validation schema
  * All fields are optional
  */
 export const updateCompanySchema = z.object({
-  name: z.string()
-    .max(200, 'Company name cannot exceed 200 characters')
-    .trim()
-    .optional(),
-  about: z.string()
-    .max(2000, 'About cannot exceed 2000 characters')
-    .trim()
-    .optional(),
+  name: z.string({ required_error: 'Tên công ty là bắt buộc' })
+    .min(2, 'Tên công ty phải có ít nhất 2 ký tự')
+    .max(200, 'Tên công ty không được vượt quá 200 ký tự')
+    .trim(),
+  about: z.string({ required_error: 'Giới thiệu công ty là bắt buộc' })
+    .min(20, 'Giới thiệu công ty phải có ít nhất 20 ký tự')
+    .max(2000, 'Giới thiệu không được vượt quá 2000 ký tự')
+    .trim(),
   industry: industryEnum.optional(),
   taxCode: z.string()
-    .max(50, 'Tax code cannot exceed 50 characters')
+    .max(50, 'Mã số thuế không được vượt quá 50 ký tự')
     .trim()
     .optional(),
-  businessRegistrationUrl: z.string().url().trim().optional(),
   size: z.string()
-    .max(50, 'Company size cannot exceed 50 characters')
+    .max(50, 'Quy mô công ty không được vượt quá 50 ký tự')
     .trim()
     .optional(),
   website: z.string()
-    .url('Please enter a valid website URL')
+    .url('URL trang web không hợp lệ')
+    .trim()
+    .optional(),
+  address: addressSchema,
+  contactInfo: contactInfoSchema,
+});
+
+
+/**
+ * Create company request validation schema
+ */
+export const createCompanySchema = z.object({
+  name: z.string({ required_error: 'Tên công ty là bắt buộc' })
+    .min(2, 'Tên công ty phải có ít nhất 2 ký tự')
+    .max(200, 'Tên công ty không được vượt quá 200 ký tự')
+    .trim(),
+  about: z.string({ required_error: 'Giới thiệu công ty là bắt buộc' })
+    .min(20, 'Giới thiệu công ty phải có ít nhất 20 ký tự')
+    .max(2000, 'Giới thiệu không được vượt quá 2000 ký tự')
+    .trim(),
+  industry: industryEnum.optional(),
+  taxCode: z.string()
+    .max(50, 'Mã số thuế không được vượt quá 50 ký tự')
+    .trim()
+    .optional(),
+  size: z.string()
+    .max(50, 'Quy mô công ty không được vượt quá 50 ký tự')
+    .trim()
+    .optional(),
+  website: z.string()
+    .url('URL trang web không hợp lệ')
     .trim()
     .optional(),
   address: addressSchema,

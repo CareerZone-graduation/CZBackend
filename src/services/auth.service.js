@@ -31,7 +31,7 @@ const generateTokens = (userId) => {
 
 export const register = async (userData) => {
   try {
-    const { username, email, password, role } = userData;
+    const { username, email, fullname, password, role } = userData;
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
@@ -56,6 +56,18 @@ export const register = async (userData) => {
     });
 
     await user.save();
+    // tạo candidate profile hoặc recruiter profile tùy theo role
+    if (role === "candidate") {
+      await CandidateProfile.create({
+        userId: user._id,
+        fullname: fullname,
+      });
+    } else {
+      await RecruiterProfile.create({
+        userId: user._id,
+        fullname: fullname,
+      });
+    }
     // Generate tokens
     const { accessToken, refreshToken } = generateTokens(user._id);
 
