@@ -17,7 +17,8 @@ import {
   verifyToken,
   forgotPassword,
   resetPassword,
-  changePassword
+  changePassword,
+  getMe
 } from '../controllers/auth.controller.js';
 
 const router = express.Router();
@@ -84,5 +85,12 @@ router.post('/reset-password', resetPassword);
  * @access  Private
  */
 router.put('/change-password', authenticate, changePassword);
+
+/**
+ * @route   GET /api/auth/me
+ * @desc    Get current user info
+ * @access  Private
+ */
+router.get('/me', authenticate, getMe);
 
 export default router;

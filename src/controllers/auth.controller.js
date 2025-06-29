@@ -358,3 +358,24 @@ export const getUserRoles = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * Get current user profile
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware
+ */
+export const getMe = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const userProfile = await authService.getMe(userId);
+
+    res.status(200).json({
+      success: true,
+      message: "User profile retrieved successfully.",
+      data: userProfile,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

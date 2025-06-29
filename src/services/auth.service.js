@@ -10,6 +10,7 @@ import {
   UnauthorizedError,
 } from "../utils/AppError.js";
 import CandidateProfile from "../models/CandidateProfile.js";
+import RecruiterProfile from "../models/RecruiterProfile.js";
 
 /**
  * Generate JWT tokens
@@ -450,6 +451,41 @@ const verifyGoogleToken = async (idToken) => {
   }
 };
 
+/**
+ * Get user profile information
+ * @param {string} userId - User ID
+ * @returns {Promise<Object>} User profile data
+ */
+export const getMe = async (userId) => {
+  const user = await User.findById(userId).lean();
+  if (!user) {
+    throw new NotFoundError("User not found");
+  }
+
+  let profile = null;
+  let name = "N/A";
+
+  if (user.role === "candidate") {
+    profile = await CandidateProfile.findOne({ userId: userId }).lean();
+    if (profile) {
+      name = profile.fullname;
+    }
+  } else if (user.role === "recruiter") {
+    profile = await RecruiterProfile.findOne({ userId: userId }).lean();
+     if (profile) {
+      name = profile.fullname;
+    }
+  }
+
+  return {
+    id: user._id,
+    email: user.email,
+    role: user.role,
+    name: name,
+    active: user.active,
+  };
+};
+
 export const authService = {
   register,
   login,
@@ -462,4 +498,5 @@ export const authService = {
   validateSession,
   forgotPassword,
   googleLogin,
+  getMe,
 };
