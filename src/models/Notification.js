@@ -21,6 +21,13 @@ const notificationSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  readAt: {
+    type: Date
+  },
+  metadata: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
+  },
   type: {
     type: String,
     enum: {
