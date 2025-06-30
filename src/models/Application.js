@@ -58,6 +58,42 @@ const applicationSchema = new mongoose.Schema({
     default: 'PENDING',
     required: [true, 'Application status is required']
   },
+  lastStatusUpdateAt: {
+    type: Date,
+    default: Date.now
+  },
+  candidateRating: {
+    type: String,
+    enum: {
+      values: ['NOT_RATED', 'NOT_SUITABLE', 'MAYBE', 'SUITABLE', 'PERFECT_MATCH'],
+      message: '{VALUE} is not a valid candidate rating'
+    },
+    default: 'NOT_RATED'
+  },
+  isReapplied: {
+    type: Boolean,
+    default: false
+  },
+  previousApplicationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Application'
+  },
+  // Thông tin người ứng tuyển (nhập từ form)
+  candidateName: {
+    type: String,
+    trim: true,
+    maxlength: [100, 'Tên không thể vượt quá 100 ký tự']
+  },
+  candidateEmail: {
+    type: String,
+    trim: true,
+    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Email không hợp lệ']
+  },
+  candidatePhone: {
+    type: String,
+    trim: true,
+    match: [/^[\+]?[\d]{1,15}$/, 'Số điện thoại không hợp lệ']
+  },
   submittedCV: submittedCV,
   notes: {
     type: String,
@@ -94,9 +130,12 @@ applicationSchema.index({ appliedAt: -1 });
 applicationSchema.index({ status: 1 }); // Index for status
 
 // Compound indexes for common queries
-applicationSchema.index({ jobId: 1, candidateProfileId: 1 }, { unique: true }); // Prevent duplicate applications
+applicationSchema.index({ jobId: 1, candidateProfileId: 1 }, { unique: true, 
+  partialFilterExpression: { isReapplied: { $ne: true } } }); // Prevent duplicate applications except reapplications
 applicationSchema.index({ jobId: 1, status: 1 });
 applicationSchema.index({ candidateProfileId: 1, appliedAt: -1 });
-applicationSchema.index({ status: 1, appliedAt: -1 }); // New compound index for status and appliedAt
+applicationSchema.index({ status: 1, appliedAt: -1 }); // Compound index for status and appliedAt
+applicationSchema.index({ jobId: 1, candidateRating: 1 }); // Index for candidate rating
+applicationSchema.index({ lastStatusUpdateAt: -1 }); // Index for sorting by status update time
 
 export default mongoose.model('Application', applicationSchema);

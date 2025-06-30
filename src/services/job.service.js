@@ -161,7 +161,7 @@ export const deleteJob = async (jobId, userId) => {
  * @returns {Promise<Document>} Đơn ứng tuyển đã được tạo
  */
 export const applyToJob = async (userId, jobId, applicationData) => {
-  const { cvId, cvTemplateId, coverLetter } = applicationData;
+  const { cvId, cvTemplateId, coverLetter, candidateName, candidateEmail, candidatePhone } = applicationData;
 
   // 1. Tìm hồ sơ ứng viên
   const candidateProfile = await CandidateProfile.findOne({ userId });
@@ -239,6 +239,10 @@ export const applyToJob = async (userId, jobId, applicationData) => {
       jobId,
       candidateProfileId: candidateProfile._id,
       coverLetter,
+      // Thông tin cá nhân từ form
+      candidateName,
+      candidateEmail,
+      candidatePhone,
       submittedCV: {
         name: sourceFileInfo.name,
         path: copiedFile.secure_url, // Đường dẫn đến bản sao
