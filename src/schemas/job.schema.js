@@ -61,3 +61,15 @@ export const jobQuerySchema = z.object({
   status: z.nativeEnum(Object.fromEntries(jobStatusEnum.map(v => [v, v]))).optional(),
   sortBy: z.string().optional(),
 });
+
+export const applyToJobSchema = z.object({
+  cvId: z.string().trim().optional(),
+  cvTemplateId: z.string().trim().optional(),
+  coverLetter: z.string().trim().max(2000, 'Thư xin việc không được vượt quá 2000 ký tự').optional(),
+}).refine(data => {
+  // Điều kiện XOR: một trong hai trường phải tồn tại, nhưng không phải cả hai.
+  return (data.cvId && !data.cvTemplateId) || (!data.cvId && data.cvTemplateId);
+}, {
+  message: 'Bạn phải cung cấp `cvId` (cho CV tải lên) hoặc `cvTemplateId` (cho CV tạo từ mẫu). Không thể cung cấp cả hai hoặc không cung cấp trường nào.',
+  path: ['cvId'], // Báo lỗi ở trường đầu tiên để dễ xử lý
+});
