@@ -1,6 +1,11 @@
+import Application from '../models/Application.js';
+import CandidateProfile from '../models/CandidateProfile.js';
 import Job from '../models/Job.js';
 import RecruiterProfile from '../models/RecruiterProfile.js';
+import CV from '../models/CV.js';
 import { NotFoundError, UnauthorizedError, BadRequestError } from '../utils/AppError.js';
+import { copyFileFromUrlToCloudinary } from './upload.service.js';
+import logger from '../utils/logger.js';
 
 /**
  * Tìm RecruiterProfile từ userId và kiểm tra sự tồn tại
@@ -146,4 +151,120 @@ export const deleteJob = async (jobId, userId) => {
   // Soft-delete bằng cách chuyển status thành 'INACTIVE'
   job.status = 'INACTIVE';
   await job.save();
+};
+
+/**
+ * Ứng viên nộp đơn ứng tuyển vào một tin tuyển dụng
+ * @param {string} userId - ID của User (Candidate)
+ * @param {string} jobId - ID của Job
+ * @param {object} applicationData - Dữ liệu ứng tuyển (cvId hoặc cvTemplateId, coverLetter)
+ * @returns {Promise<Document>} Đơn ứng tuyển đã được tạo
+ */
+export const applyToJob = async (userId, jobId, applicationData) => {
+  const { cvId, cvTemplateId, coverLetter } = applicationData;
+
+  // 1. Tìm hồ sơ ứng viên
+  const candidateProfile = await CandidateProfile.findOne({ userId });
+  if (!candidateProfile) {
+    throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
+  }
+
+  // 2. Tìm tin tuyển dụng
+  const job = await Job.findById(jobId).populate('recruiterProfileId', 'company');
+  if (!job || job.status !== 'ACTIVE') {
+    throw new BadRequestError('Tin tuyển dụng không tồn tại hoặc đã hết hạn.');
+  }
+
+  // 3. Kiểm tra ứng viên đã ứng tuyển công việc này chưa
+  const existingApplication = await Application.findOne({
+    jobId,
+    candidateProfileId: candidateProfile._id,
+  });
+
+  if (existingApplication) {
+    throw new BadRequestError('Bạn đã ứng tuyển vào vị trí này rồi.');
+  }
+
+  let sourceFileInfo;
+  let sourceType;
+
+  // 4. Lấy thông tin CV tùy theo loại được cung cấp
+  try {
+    if (cvId) {
+      // --- Trường hợp 1: Dùng CV đã tải lên ---
+      const selectedCV = candidateProfile.cvs.id(cvId);
+      if (!selectedCV) {
+        throw new BadRequestError('CV tải lên không hợp lệ hoặc không tìm thấy.');
+      }
+      sourceFileInfo = {
+        name: selectedCV.name,
+        path: selectedCV.path,
+        cloudinaryId: selectedCV.cloudinaryId || null,
+      };
+      sourceType = 'UPLOADED';
+    } else if (cvTemplateId) {
+      // --- Trường hợp 2: Dùng CV tạo từ mẫu ---
+      // TODO: CHƯA XỬ LÝ
+      // const cvFromTemplate = await CV.findOne({ _id: cvTemplateId, userId });
+      // if (!cvFromTemplate) {
+      //   throw new BadRequestError('CV tạo từ mẫu không hợp lệ hoặc không tìm thấy.');
+      // }
+      // // Giả sử CV template có một endpoint để render CV thành PDF
+      // sourceFileInfo = {
+      //   name: cvFromTemplate.name || `CV-${cvFromTemplate._id}`,
+      //   path: `/api/cv-templates/${cvTemplateId}/render`, // Endpoint giả định để render CV
+      //   templateData: cvFromTemplate.toObject(),
+      // };
+      // sourceType = 'TEMPLATE';
+    } else {
+      // Trường hợp không cung cấp ID nào (dù đã được validate bởi Zod)
+      throw new BadRequestError('Phải cung cấp một CV để ứng tuyển.');
+    }
+
+    // 5. Tạo bản sao của CV trên Cloudinary
+    logger.info(`Tạo bản sao CV cho đơn ứng tuyển: ${job.title}, ứng viên: ${userId}`);
+    
+    const uniqueSuffix = `${jobId}-${Date.now()}`;
+    const publicId = `application-cv-${userId}-${uniqueSuffix}`;
+    
+    // Tạo bản sao (clone) từ file gốc trên Cloudinary
+    const copiedFile = await copyFileFromUrlToCloudinary(
+      sourceFileInfo.path,
+      'application-cvs', // Thư mục đặc biệt để lưu CV đã nộp đơn
+      publicId
+    );
+
+    // 6. Tạo bản ghi ứng tuyển (Application)
+    const application = await Application.create({
+      jobId,
+      candidateProfileId: candidateProfile._id,
+      coverLetter,
+      submittedCV: {
+        name: sourceFileInfo.name,
+        path: copiedFile.secure_url, // Đường dẫn đến bản sao
+        cloudinaryId: copiedFile.public_id,
+        source: sourceType,
+        // Nếu là CV template, lưu trữ dữ liệu để tham khảo
+        ...(sourceType === 'TEMPLATE' ? { templateSnapshot: sourceFileInfo.templateData } : {})
+      },
+      jobSnapshot: {
+        title: job.title,
+        company: job.recruiterProfileId.company.name,
+        logo: job.recruiterProfileId.company.logo,
+      },
+    });
+
+    return application;
+  } catch (error) {
+    // Ghi log lỗi
+    logger.error(`Lỗi khi nộp đơn: ${error.message}`, { 
+      userId, jobId, cvId, cvTemplateId, error 
+    });
+    
+    // Ném lại lỗi để middleware xử lý
+    if (error instanceof BadRequestError || error instanceof NotFoundError) {
+      throw error;
+    }
+    throw new BadRequestError('Có lỗi xảy ra khi nộp đơn ứng tuyển.');
+  }
 };

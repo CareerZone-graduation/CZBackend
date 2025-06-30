@@ -12,8 +12,21 @@ const submittedCV = new mongoose.Schema({
     type: String,
     required: [true, 'CV path is required'],
     trim: true
+  },
+  cloudinaryId: {
+    type: String,
+    trim: true
+  },
+  source: {
+    type: String,
+    enum: ['UPLOADED', 'TEMPLATE'],
+    required: [true, 'CV source is required']
+  },
+  // Chỉ tồn tại khi source là 'TEMPLATE'
+  templateSnapshot: {
+    type: mongoose.Schema.Types.Mixed
   }
-}, { _id: true });
+}, { _id: false });
 
 
 const applicationSchema = new mongoose.Schema({

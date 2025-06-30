@@ -56,3 +56,17 @@ export const deleteJob = asyncHandler(async (req, res) => {
     message: 'Xóa (soft-delete) công việc thành công.',
   });
 });
+
+export const applyToJob = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  const { id: jobId } = req.params;
+  const applicationData = req.body;
+
+  const application = await jobService.applyToJob(userId, jobId, applicationData);
+
+  res.status(201).json({
+    success: true,
+    message: 'Nộp đơn ứng tuyển thành công.',
+    data: application,
+  });
+});
