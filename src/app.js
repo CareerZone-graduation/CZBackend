@@ -16,6 +16,7 @@ import applicationRoutes from './routes/application.route.js';
 
 import { errorHandler } from './middleware/error.middleware.js';
 import { notFound } from './middleware/notFound.middleware.js';
+import './config/redis.js'; // Initialize Redis connection
 
 dotenv.config();
 

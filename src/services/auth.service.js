@@ -30,7 +30,6 @@ const generateTokens = (userId) => {
 };
 
 export const register = async (userData) => {
-  try {
     const { username, email, fullname, password, role } = userData;
 
     // Check if user already exists
@@ -70,7 +69,7 @@ export const register = async (userData) => {
     }
     // Generate tokens
     const { accessToken, refreshToken } = generateTokens(user._id);
-
+    await sendVerificationEmail(user, fullname);
     return {
       id: user._id,
       email: user.email,
@@ -79,10 +78,6 @@ export const register = async (userData) => {
       accessToken,
       refreshToken,
     };
-  } catch (error) {
-    logger.error("Registration failed:", error);
-    throw error;
-  }
 };
 
 /**
@@ -497,6 +492,27 @@ export const getMe = async (userId) => {
     active: user.active,
   };
 };
+const sendVerificationEmail = async (user, fullname) => {
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    user.emailVerificationToken = crypto
+        .createHash('sha256')
+        .update(verificationToken)
+        .digest('hex');
+    logger.info(`Verification token for ${user.email}: ${verificationToken}`);
+
+    try {
+        const verificationUrl = `${config.CLIENT_URL}/verify-email?token=${verificationToken}`;
+        await emailService.sendEmail({
+            to: user.email,
+            subject: 'Xác thực tài khoản CareerZone',
+            template: 'verify-email',
+            data: { name: fullname, verificationUrl },
+        });
+        logger.info(`Verification email sent to ${user.email}`);
+    } catch (emailError) {
+        logger.error(`Failed to send verification email to ${user.email}`, emailError);
+    }
+};
 
 export const authService = {
   register,
@@ -511,4 +527,5 @@ export const authService = {
   forgotPassword,
   googleLogin,
   getMe,
+  sendVerificationEmail
 };

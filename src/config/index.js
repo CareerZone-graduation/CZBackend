@@ -55,11 +55,11 @@ const config = {
   VNPAY_IPN_URL: process.env.VNPAY_IPN_URL || 'http://localhost:8080/api/vnpay/ipn',
 
   // Email Configuration
-  EMAIL_HOST: process.env.EMAIL_HOST || 'smtp.gmail.com',
-  EMAIL_PORT: parseInt(process.env.EMAIL_PORT) || 587,
-  EMAIL_USER: process.env.EMAIL_USER,
+  EMAIL_HOST: process.env.EMAIL_HOST,
+  EMAIL_PORT: parseInt(process.env.EMAIL_PORT, 10),
+  EMAIL_USERNAME: process.env.EMAIL_USERNAME,
   EMAIL_PASSWORD: process.env.EMAIL_PASSWORD,
-  EMAIL_FROM: process.env.EMAIL_FROM || 'noreply@careerconnect.com',
+  EMAIL_FROM: process.env.EMAIL_FROM || 'noreply@careerzone.com',
 
   // Groq AI Configuration (for chatbot)
   GROQ_API_KEY: process.env.GROQ_API_KEY,
