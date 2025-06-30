@@ -17,10 +17,10 @@ import * as redisService from "./redis.service.js";
 const generateTokens = (user) => {
   const payload = { id: user._id, role: user.role };
   const accessToken = jwt.sign(payload, config.JWT_SECRET, {
-    expiresIn: "15m",
+    expiresIn: config.JWT_ACCESS_EXPIRES_IN,
   });
   const refreshToken = jwt.sign(payload, config.JWT_REFRESH_SECRET, {
-    expiresIn: "7d",
+    expiresIn: config.JWT_REFRESH_EXPIRES_IN,
   });
   return { accessToken, refreshToken };
 };
