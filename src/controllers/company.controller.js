@@ -26,7 +26,7 @@ const parseAndValidate = (jsonString, schema) => {
 // @access  Private/Recruiter
 export const createCompany = asyncHandler(async (req, res) => {
   const validatedData = parseAndValidate(req.body.companyData, createCompanySchema);
-  const company = await companyService.createCompany(validatedData, req.user.id, req.file);
+  const company = await companyService.createCompany(validatedData, req.user._id, req.file);
   res.status(201).json({
     success: true,
     message: 'Đăng ký công ty thành công.',
@@ -38,7 +38,7 @@ export const createCompany = asyncHandler(async (req, res) => {
 // @route   GET /api/v1/companies/my-company
 // @access  Private/Recruiter
 export const getMyCompany = asyncHandler(async (req, res) => {
-  const company = await companyService.getMyCompany(req.user.id);
+  const company = await companyService.getMyCompany(req.user._id);
   res.status(200).json({
     success: true,
     message: 'Lấy thông tin công ty thành công.',
@@ -51,7 +51,7 @@ export const getMyCompany = asyncHandler(async (req, res) => {
 // @access  Private/Recruiter
 export const updateMyCompany = asyncHandler(async (req, res) => {
   const validatedData = parseAndValidate(req.body.companyData, updateCompanySchema);
-  const company = await companyService.updateMyCompany(req.user.id, validatedData, req.file);
+  const company = await companyService.updateMyCompany(req.user._id, validatedData, req.file);
   res.status(200).json({
     success: true,
     message: 'Cập nhật thông tin công ty thành công.',
@@ -63,7 +63,7 @@ export const updateMyCompany = asyncHandler(async (req, res) => {
 // @route   POST /api/v1/companies/my-company/logo
 // @access  Private/Recruiter
 export const updateMyCompanyLogo = asyncHandler(async (req, res) => {
-  const company = await companyService.updateMyCompanyLogo(req.user.id, req.file);
+  const company = await companyService.updateMyCompanyLogo(req.user._id, req.file);
   res.status(200).json({
     success: true,
     message: 'Cập nhật logo công ty thành công.',

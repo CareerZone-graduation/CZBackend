@@ -6,7 +6,7 @@ import * as recruiterService from '../services/recruiter.service.js';
  * @param {import('express').Response} res
  */
 export const getRecruiterProfile = async (req, res) => {
-  const recruiterId = req.user.id;
+  const recruiterId = req.user._id;
   const profile = await recruiterService.getRecruiterProfile(recruiterId);
 
   res.status(200).json({

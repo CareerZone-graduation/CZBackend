@@ -3,6 +3,7 @@ import * as authService from "../services/auth.service.js"; // Revert to importi
 import config from "../config/index.js";
 import crypto from "crypto";
 import logger from "../utils/logger.js";
+import User from '../models/User.js';
 
 export const register = asyncHandler(async (req, res) => {
   const { refreshToken, ...userData } = await authService.register(req.body);
@@ -81,7 +82,7 @@ export const logout = asyncHandler(async (req, res) => {
 
 
 export const verifyEmail = asyncHandler(async (req, res) => {
-  const { token } = req.params;
+  const { token } = req.query; // Use query params for token
   const result = await authService.verifyEmail(token);
 
   res.json({
@@ -127,7 +128,7 @@ export const googleLogin = asyncHandler(async (req, res) => {
 });
 
 export const getCurrentUser = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
+  const userId = req.user._id;
   const user = await authService.validateSession(userId);
 
   res.json({
@@ -194,7 +195,7 @@ export const resendEmailVerification = asyncHandler(async (req, res) => {
 });
 
 export const getMe = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
+  const userId = req.user._id;
   const userProfile = await authService.getMe(userId);
 
   res.status(200).json({

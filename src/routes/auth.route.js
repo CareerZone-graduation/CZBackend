@@ -42,7 +42,7 @@ router.post('/logout', authenticate, authController.logout);
  * @desc    Refresh access token
  * @access  Public
  */
-router.post('/refresh-token', authController.refreshToken);
+router.post('/refresh', authController.refreshToken);
 
 /**
  * @route   POST /api/auth/verify-email

@@ -31,27 +31,33 @@ export const authenticate = async (req, res, next) => {
     try {
       // Verify token
       const decoded = jwt.verify(token, config.JWT_SECRET);
-      // Get user from database
-      const user = await User.findById(decoded.userId)
-        .select('-password');
+      
+      // Verify token contains necessary payload
+      if (!decoded.id || !decoded.role) {
+          return res.status(401).json({ success: false, message: 'Token không hợp lệ.' });
+      }
+
+      // Check if user still exists and is active
+      const user = await User.findById(decoded.id).select('-password');
+      
       if (!user) {
         return res.status(401).json({
           success: false,
-          message: 'Invalid token. User not found.'
+          message: 'Người dùng không tồn tại.'
         });
       }
 
       if (!user.active) {
         return res.status(401).json({
           success: false,
-          message: 'Account is deactivated.'
+          message: 'Tài khoản đã bị vô hiệu hóa.'
         });
       }
 
-      // Add user to request object
-      req.user = user;
-      req.userId = user._id.toString(); // Use _id as the unified user ID
-      req.role = user.role;
+      // Attach user info and role from token to the request object
+      req.user={};
+      req.user._id = decoded.id;
+      req.user.role = decoded.role;
 
       next();
     } catch (jwtError) {
@@ -106,14 +112,13 @@ export const optionalAuthenticate = async (req, res, next) => {
       
       // Get user from database
       const user = await User.findById(decoded.userId)
-        .populate('role')
         .select('-password');
 
       if (user && user.active) {
         // Add user to request object if valid
         req.user = user;
-        req.userId = user._id.toString(); // Use _id as the unified user ID
-        req.role = user.role;
+        req.user._id= decoded.id; // Ensure _id is set for compatibility
+        req.user.role = decoded.role; // Add role from token
       }
     } catch (jwtError) {
       // Invalid token, but continue without user info
@@ -149,7 +154,7 @@ export const authorize = (allowedRoles = []) => {
     const role = req.user.role;
     if (!allowedRoles.includes(role)) {
       logger.warn('Authorization failed:', {
-        userId: req.userId,
+        userId: req.user._id,
         role,
         allowedRoles,
         url: req.originalUrl,
