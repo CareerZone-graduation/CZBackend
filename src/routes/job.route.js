@@ -10,6 +10,9 @@ import {
   updateJob,
   deleteJob,
   applyToJob,
+  saveJob,
+  unsaveJob,
+  getSavedJobs,
 } from '../controllers/job.controller.js';
 
 const router = express.Router();
@@ -61,6 +64,30 @@ router.post(
   validateParams(idParamSchema),
   validateBody(applyToJobSchema),
   applyToJob
+);
+
+router.post(
+  '/:id/save',
+  authenticate,
+  candidateOnly,
+  validateParams(idParamSchema),
+  saveJob
+);
+
+router.delete(
+  '/:id/save',
+  authenticate,
+  candidateOnly,
+  validateParams(idParamSchema),
+  unsaveJob
+);
+
+router.get(
+  '/saved/list',
+  authenticate,
+  candidateOnly,
+  validateQuery(jobQuerySchema),
+  getSavedJobs
 );
 
 export default router;

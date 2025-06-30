@@ -70,3 +70,42 @@ export const applyToJob = asyncHandler(async (req, res) => {
     data: application,
   });
 });
+
+export const saveJob = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  const { id: jobId } = req.params;
+
+  const savedJob = await jobService.saveJob(userId, jobId);
+
+  res.status(201).json({
+    success: true,
+    message: 'Lưu công việc thành công.',
+    data: savedJob,
+  });
+});
+
+export const unsaveJob = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  const { id: jobId } = req.params;
+
+  await jobService.unsaveJob(userId, jobId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Bỏ lưu công việc thành công.',
+  });
+});
+
+export const getSavedJobs = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  const options = req.query;
+
+  const result = await jobService.getSavedJobs(userId, options);
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy danh sách công việc đã lưu thành công.',
+    meta: result.meta,
+    data: result.data,
+  });
+});

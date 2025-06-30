@@ -3,9 +3,22 @@ import CandidateProfile from '../models/CandidateProfile.js';
 import Job from '../models/Job.js';
 import RecruiterProfile from '../models/RecruiterProfile.js';
 import CV from '../models/CV.js';
+import SavedJob from '../models/SavedJob.js';
 import { NotFoundError, UnauthorizedError, BadRequestError } from '../utils/AppError.js';
 import { copyFileFromUrlToCloudinary } from './upload.service.js';
 import logger from '../utils/logger.js';
+import mongoose from 'mongoose';
+
+/**
+ * Tìm CandidateProfile từ userId và kiểm tra sự tồn tại
+ */
+const findCandidateProfileByUserId = async (userId) => {
+  const candidateProfile = await CandidateProfile.findOne({ userId });
+  if (!candidateProfile) {
+    throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
+  }
+  return candidateProfile;
+};
 
 /**
  * Tìm RecruiterProfile từ userId và kiểm tra sự tồn tại
@@ -271,4 +284,165 @@ export const applyToJob = async (userId, jobId, applicationData) => {
     }
     throw new BadRequestError('Có lỗi xảy ra khi nộp đơn ứng tuyển.');
   }
+};
+
+/**
+ * Lưu một tin tuyển dụng vào danh sách công việc đã lưu của ứng viên
+ * @param {string} userId - ID của User (Candidate)
+ * @param {string} jobId - ID của Job
+ * @returns {Promise<Document>} Bản ghi SavedJob đã được tạo
+ */
+export const saveJob = async (userId, jobId) => {
+  // 1. Tìm hồ sơ ứng viên
+  const candidateProfile = await findCandidateProfileByUserId(userId);
+  
+  // 2. Kiểm tra tin tuyển dụng có tồn tại và đang hoạt động không
+  const job = await Job.findById(jobId);
+  if (!job || job.status !== 'ACTIVE') {
+    throw new NotFoundError('Tin tuyển dụng không tồn tại hoặc đã hết hạn.');
+  }
+
+  // 3. Kiểm tra xem đã lưu công việc này chưa
+  const existingSavedJob = await SavedJob.findOne({
+    candidateId: userId,
+    jobId,
+  });
+
+  if (existingSavedJob) {
+    throw new BadRequestError('Bạn đã lưu công việc này rồi.');
+  }
+
+  // 4. Tạo bản ghi lưu công việc
+  const savedJob = await SavedJob.create({
+    candidateId: userId,
+    jobId,
+  });
+
+  return savedJob;
+};
+
+/**
+ * Bỏ lưu một tin tuyển dụng khỏi danh sách công việc đã lưu của ứng viên
+ * @param {string} userId - ID của User (Candidate)
+ * @param {string} jobId - ID của Job
+ */
+export const unsaveJob = async (userId, jobId) => {
+  // 1. Tìm hồ sơ ứng viên để đảm bảo user là candidate
+  await findCandidateProfileByUserId(userId);
+  
+  // 2. Tìm và xóa bản ghi lưu công việc
+  const savedJob = await SavedJob.findOneAndDelete({
+    candidateId: userId,
+    jobId,
+  });
+
+  if (!savedJob) {
+    throw new NotFoundError('Không tìm thấy công việc đã lưu để xóa.');
+  }
+};
+
+/**
+ * Lấy danh sách các tin tuyển dụng đã lưu của một ứng viên
+ * @param {string} userId - ID của User (Candidate)
+ * @param {object} options - Tùy chọn truy vấn (phân trang, lọc)
+ * @returns {Promise<object>} Danh sách tin tuyển dụng đã lưu và thông tin phân trang
+ */
+export const getSavedJobs = async (userId, options) => {
+  const { page = 1, limit = 10, sortBy } = options;
+  
+  // 1. Tìm hồ sơ ứng viên để đảm bảo user là candidate
+  await findCandidateProfileByUserId(userId);
+
+  const sortOptions = {};
+  if (sortBy) {
+    const [field, order] = sortBy.split(':');
+    sortOptions[field] = order === 'desc' ? -1 : 1;
+  } else {
+    sortOptions.createdAt = -1;
+  }
+
+  const skip = (page - 1) * limit;
+
+  // 2. Aggregate để lấy thông tin job và company
+  const pipeline = [
+    // Match các saved job của user
+    { $match: { candidateId: new mongoose.Types.ObjectId(userId) } },
+    
+    // Sort theo thời gian tạo
+    { $sort: sortOptions },
+    
+    // Lookup để lấy thông tin job
+    {
+      $lookup: {
+        from: 'jobs',
+        localField: 'jobId',
+        foreignField: '_id',
+        as: 'job'
+      }
+    },
+    
+    // Unwind job (chuyển từ array thành object)
+    { $unwind: '$job' },
+    
+    // Filter chỉ lấy job đang active
+    { $match: { 'job.status': 'ACTIVE' } },
+    
+    // Lookup để lấy thông tin recruiter và company từ job
+    {
+      $lookup: {
+        from: 'recruiterprofiles',
+        localField: 'job.recruiterProfileId',
+        foreignField: '_id',
+        as: 'recruiter'
+      }
+    },
+    
+    // Unwind recruiter
+    { $unwind: '$recruiter' },
+    
+    // Project để format lại dữ liệu - chỉ lấy các trường cần thiết từ job và company
+    {
+      $project: {
+          _id: 1,
+          jobId: '$job._id',
+          title: '$job.title',
+          minSalary: '$job.minSalary',
+          maxSalary: '$job.maxSalary',
+          deadline: '$job.deadline',
+          area: '$job.area',
+          company: {
+            name: '$recruiter.company.name',
+            logo: '$recruiter.company.logo'
+          }
+      }
+    },
+    
+    // Facet để đếm tổng số và phân trang
+    {
+      $facet: {
+        data: [
+          { $skip: skip },
+          { $limit: parseInt(limit) }
+        ],
+        totalCount: [
+          { $count: 'count' }
+        ]
+      }
+    }
+  ];
+
+  const [result] = await SavedJob.aggregate(pipeline);
+  
+  const savedJobs = result.data || [];
+  const totalSavedJobs = result.totalCount[0]?.count || 0;
+
+  return {
+    data: savedJobs,
+    meta: {
+      currentPage: parseInt(page),
+      totalPages: Math.ceil(totalSavedJobs / limit),
+      totalItems: totalSavedJobs,
+      limit: parseInt(limit),
+    },
+  };
 };
