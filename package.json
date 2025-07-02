@@ -7,7 +7,8 @@
   "scripts": {
     "start": "nodemon src/server.js",
     "dev": "nodemon --trace-warnings src/server.js",
-    "prod": "node src/server.js"
+    "prod": "node src/server.js",
+    "worker": "nodemon workers/notification.worker.js"
   },
   "keywords": [
     "job",
@@ -20,7 +21,7 @@
   "author": "Le Dinh Tri",
   "license": "MIT",
   "dependencies": {
-    "amqplib": "^0.10.3",
+    "amqplib": "^0.10.8",
     "bcryptjs": "^2.4.3",
     "chalk": "^5.4.1",
     "cloudinary": "^1.41.3",

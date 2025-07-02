@@ -6,8 +6,13 @@ import connectDB from './utils/connectDB.js';
 import config from './config/index.js';
 import logger from './utils/logger.js';
 import { initializeSocket } from './socket/index.js';
+import { getChannel } from './queues/rabbitmq.js';
 
 import app from './app.js';
+
+// Import cron jobs to activate them
+import './cron/interviewReminder.cron.js';
+import './cron/jobAlert.cron.js';
 
 dotenv.config();
 
@@ -26,6 +31,7 @@ initializeSocket(io);
 const startServer = async () => {
   try {
     await connectDB();
+    await getChannel(); // Khởi tạo kết nối RabbitMQ
 
     const PORT = config.PORT || 8080;
     httpServer.listen(PORT, () => {

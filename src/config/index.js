@@ -32,6 +32,8 @@ const config = {
   REDIS_PASSWORD: process.env.REDIS_PASSWORD || '',
   REDIS_URL: process.env.REDIS_URL,
 
+  //Kafka Configuration
+  
   // RabbitMQ Configuration
   RABBITMQ_URL: process.env.RABBITMQ_URL,
   RABBITMQ_HOST: process.env.RABBITMQ_HOST ,
