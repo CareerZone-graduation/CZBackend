@@ -4,6 +4,7 @@ import { authenticate } from '../middleware/auth.middleware.js';
 import { recruiterOnly } from '../middleware/auth.middleware.js';
 import { validateParams, validateQuery, validateBody } from '../middleware/validation.middleware.js';
 import * as applicationSchema from '../schemas/application.schema.js';
+import * as interviewSchema from '../schemas/interview.schema.js';
 
 const router = express.Router();
 
@@ -54,6 +55,16 @@ router.patch(
   validateParams(applicationSchema.applicationIdParam),
   validateBody(applicationSchema.updateApplicationNotesBody),
   applicationController.updateApplicationNotes
+);
+
+// Route để nhà tuyển dụng tạo lịch phỏng vấn cho một đơn ứng tuyển
+router.post(
+  '/:applicationId/interviews',
+  authenticate,
+  recruiterOnly,
+  validateParams(applicationSchema.applicationIdParam),
+  validateBody(interviewSchema.scheduleInterviewBody),
+  applicationController.scheduleInterview
 );
 
 export default router;

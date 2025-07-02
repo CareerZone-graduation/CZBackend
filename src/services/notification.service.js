@@ -1,0 +1,120 @@
+// src/services/notification.service.js
+import Notification from '../models/Notification.js';
+import Application from '../models/Application.js';
+import CandidateProfile from '../models/CandidateProfile.js';
+import InterviewRoom from '../models/InterviewRoom.js';
+import { NotFoundError } from '../utils/AppError.js';
+import logger from '../utils/logger.js';
+
+const getStatusMessage = (status, jobTitle) => {
+  switch (status) {
+    case 'REVIEWING':
+      return `Nhà tuyển dụng đang xem xét hồ sơ của bạn cho vị trí ${jobTitle}.`;
+    case 'ACCEPTED':
+      return `Chúc mừng! Hồ sơ ứng tuyển của bạn cho vị trí ${jobTitle} đã được chấp nhận.`;
+    case 'REJECTED':
+      return `Cảm ơn bạn đã ứng tuyển. Rất tiếc, hồ sơ của bạn cho vị trí ${jobTitle} chưa phù hợp.`;
+    case 'INTERVIEWED':
+      return `Bạn có một lịch phỏng vấn cho vị trí ${jobTitle}.`;
+    default:
+      return `Trạng thái hồ sơ ứng tuyển của bạn cho vị trí ${jobTitle} đã được cập nhật.`;
+  }
+};
+
+/**
+ * Xử lý logic cho một thông báo nhận được từ queue.
+ * @param {object} payload - Dữ liệu của message.
+ */
+export const processNotification = async (payload) => {
+  logger.info('Processing notification:', payload);
+
+  switch (payload.type) {
+    case 'APPLICATION_STATUS_UPDATE': {
+      const { applicationId, newStatus } = payload.data;
+
+      const application = await Application.findById(applicationId);
+      if (!application) {
+        throw new NotFoundError(`Application with id ${applicationId} not found.`);
+      }
+
+      const candidateProfile = await CandidateProfile.findById(application.candidateProfileId);
+      if (!candidateProfile) {
+        throw new NotFoundError(`CandidateProfile with id ${application.candidateProfileId} not found.`);
+      }
+
+      const title = `Cập nhật trạng thái ứng tuyển`;
+      const message = getStatusMessage(newStatus, application.jobSnapshot.title);
+
+      await Notification.create({
+        userId: candidateProfile.userId,
+        title,
+        message,
+        type: 'application',
+        entity: {
+          type: 'Application',
+          id: applicationId,
+        },
+        metadata: {
+          jobId: application.jobId,
+          newStatus,
+        },
+      });
+
+      logger.info(`Successfully created notification for application ${applicationId}`);
+      break;
+    }
+    // TODO:
+    // case 'INTERVIEW_REMINDER': {
+    //   const { interviewId } = payload.data;
+    //   logger.info(`Handling interview reminder for interview ID: ${interviewId}`);
+
+    //   const interview = await InterviewRoom.findById(interviewId).populate({
+    //     path: 'applicationId',
+    //     select: 'jobSnapshot.title',
+    //   });
+
+    //   if (!interview) {
+    //     throw new NotFoundError(`Interview with id ${interviewId} not found.`);
+    //   }
+
+    //   const { candidateId, recruiterId, scheduledTime, applicationId } = interview;
+    //   const jobTitle = applicationId?.jobSnapshot?.title || 'công việc đã ứng tuyển';
+    //   const formattedTime = new Date(scheduledTime).toLocaleString('vi-VN', {
+    //     hour: '2-digit',
+    //     minute: '2-digit',
+    //     day: '2-digit',
+    //     month: '2-digit',
+    //     year: 'numeric',
+    //   });
+
+    //   const notifications = [
+    //     {
+    //       userId: candidateId,
+    //       title: 'Nhắc nhở lịch phỏng vấn',
+    //       message: `Bạn có một buổi phỏng vấn cho vị trí "${jobTitle}" vào lúc ${formattedTime}.`,
+    //       type: 'interview',
+    //       entity: { type: 'InterviewRoom', id: interviewId },
+    //       metadata: { applicationId: interview.applicationId },
+    //     },
+    //     {
+    //       userId: recruiterId,
+    //       title: 'Nhắc nhở lịch phỏng vấn',
+    //       message: `Bạn có một buổi phỏng vấn với ứng viên cho vị trí "${jobTitle}" vào lúc ${formattedTime}.`,
+    //       type: 'interview',
+    //       entity: { type: 'InterviewRoom', id: interviewId },
+    //       metadata: { applicationId: interview.applicationId },
+    //     },
+    //   ];
+
+    //   await Notification.insertMany(notifications);
+    //   logger.info(`Successfully created 2 interview reminders for interview ${interviewId}`);
+    //   break;
+    // }
+    // case 'DAILY_JOB_ALERT':
+    //   // Logic xử lý gửi job alert
+    //   logger.info(`Sending daily job alert for user ID: ${payload.userId}`);
+    //   break;
+    default:
+      logger.warn('Unknown notification type:', payload.type);
+  }
+};

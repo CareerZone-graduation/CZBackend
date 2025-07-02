@@ -4,8 +4,11 @@ import Job from '../models/Job.js';
 import User from '../models/User.js';
 import CandidateProfile from '../models/CandidateProfile.js';
 import RecruiterProfile from '../models/RecruiterProfile.js';
+import InterviewRoom from '../models/InterviewRoom.js';
 import { NotFoundError, UnauthorizedError, BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
+import { publishNotification } from './queue.service.js';
+import { ROUTING_KEYS } from '../queues/rabbitmq.js';
 
 /**
  * Lấy danh sách ứng viên đã ứng tuyển vào một công việc cụ thể
@@ -216,8 +219,20 @@ export const updateApplicationStatus = async (applicationId, recruiterId, status
 
   logger.info(`Đơn ứng tuyển ${applicationId} đã được cập nhật trạng thái thành ${status}`);
 
-  // TODO: Gửi thông báo cho ứng viên về thay đổi trạng thái
-  // Tạo thông báo trong DB và có thể gửi email
+  // Gửi thông báo vào queue
+  const candidateProfile = await CandidateProfile.findById(application.candidateProfileId).select('userId');
+  if (candidateProfile) {
+    publishNotification(ROUTING_KEYS.STATUS_UPDATE, {
+      type: 'APPLICATION_STATUS_UPDATE',
+      recipientId: candidateProfile.userId.toString(),
+      data: {
+        applicationId: application._id.toString(),
+        jobTitle: application.jobSnapshot.title,
+        companyName: application.jobSnapshot.company,
+        newStatus: status,
+      }
+    });
+  }
 
   return application;
 };
@@ -308,4 +323,73 @@ export const updateApplicationNotes = async (applicationId, recruiterId, notes) 
   logger.info(`Đơn ứng tuyển ${applicationId} đã được cập nhật ghi chú`);
 
   return application;
+};
+
+/**
+ * Tạo lịch phỏng vấn cho một đơn ứng tuyển.
+ * @param {string} applicationId - ID của đơn ứng tuyển.
+ * @param {string} recruiterId - ID của nhà tuyển dụng (từ req.user).
+ * @param {Date} scheduledTime - Thời gian phỏng vấn dự kiến.
+ * @returns {Object} - Thông tin phòng phỏng vấn đã được tạo.
+ */
+export const scheduleInterview = async (applicationId, recruiterId, scheduledTime) => {
+  // 1. Lấy thông tin cần thiết và kiểm tra quyền
+  const application = await Application.findById(applicationId).populate('jobId');
+  if (!application) {
+    throw new NotFoundError('Không tìm thấy đơn ứng tuyển.');
+  }
+
+  const job = application.jobId;
+  if (!job) {
+    throw new NotFoundError('Công việc liên quan đến đơn ứng tuyển không tồn tại.');
+  }
+
+  const recruiterProfile = await RecruiterProfile.findOne({ userId: recruiterId });
+  if (!recruiterProfile || job.recruiterProfileId.toString() !== recruiterProfile._id.toString()) {
+    throw new UnauthorizedError('Bạn không có quyền tạo phỏng vấn cho đơn ứng tuyển này.');
+  }
+
+  // 2. Kiểm tra xem đã có phỏng vấn cho đơn này chưa
+  const existingInterview = await InterviewRoom.findOne({ applicationId });
+  if (existingInterview) {
+    throw new BadRequestError('Đã có một lịch phỏng vấn được tạo cho đơn ứng tuyển này.');
+  }
+
+  // 3. Lấy thông tin ứng viên
+  const candidateProfile = await CandidateProfile.findById(application.candidateProfileId);
+  if (!candidateProfile) {
+    throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
+  }
+  // 4. Tạo phòng phỏng vấn
+  const roomName = `Phỏng vấn vị trí ${job.title} - Ứng viên: ${application.candidateName}`;
+  const newInterview = await InterviewRoom.create({
+    roomName,
+    recruiterId,
+    candidateId: candidateProfile.userId,
+    applicationId,
+    scheduledTime,
+    status: 'SCHEDULED',
+  });
+
+  // 5. Cập nhật trạng thái đơn ứng tuyển thành 'INTERVIEWED'
+  application.status = 'INTERVIEWED';
+  application.lastStatusUpdateAt = new Date();
+  await application.save();
+
+  // 6. Gửi thông báo (tùy chọn, có thể tách ra event)
+  // Gửi cho ứng viên
+  publishNotification(ROUTING_KEYS.STATUS_UPDATE, {
+    type: 'APPLICATION_STATUS_UPDATE',
+    recipientId: candidateProfile.userId.toString(),
+    data: {
+      applicationId: application._id.toString(),
+      jobTitle: job.title,
+      companyName: job.companyName, // Giả sử có trường này trong model Job
+      newStatus: 'INTERVIEWED',
+    },
+  });
+
+  logger.info(`Đã tạo lịch phỏng vấn ${newInterview._id} cho đơn ứng tuyển ${applicationId}.`);
+
+  return newInterview;
 };

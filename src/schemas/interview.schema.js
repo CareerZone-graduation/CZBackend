@@ -74,6 +74,16 @@ export const updateInterviewStatusSchema = z.object({
 });
 
 /**
+ * Schema for scheduling an interview from an application.
+ */
+export const scheduleInterviewBody = z.object({
+  scheduledTime: z.string()
+    .datetime({ message: 'Scheduled time must be a valid ISO 8601 datetime string.' })
+    .transform((str) => new Date(str))
+    .refine((date) => date > new Date(), { message: 'Scheduled time must be in the future.' }),
+});
+
+/**
  * Interview signaling request validation schema
  * @typedef {Object} SignalRequest
  * @property {string} type - Signal type (offer, answer, ice-candidate)

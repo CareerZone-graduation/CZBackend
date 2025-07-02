@@ -103,3 +103,26 @@ export const updateApplicationNotes = asyncHandler(async (req, res) => {
     data: updatedApplication
   });
 });
+
+/**
+ * @desc      Schedule an interview for an application
+ * @route     POST /api/applications/:applicationId/interviews
+ * @access    Private - Recruiter Only
+ */
+export const scheduleInterview = asyncHandler(async (req, res) => {
+  const { applicationId } = req.params;
+  const { scheduledTime } = req.body;
+  const recruiterId = req.user._id;
+
+  const interview = await applicationService.scheduleInterview(
+    applicationId,
+    recruiterId,
+    scheduledTime
+  );
+
+  res.status(201).json({
+    success: true,
+    message: 'Tạo lịch phỏng vấn thành công.',
+    data: interview,
+  });
+});
