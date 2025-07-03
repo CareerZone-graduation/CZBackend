@@ -7,6 +7,7 @@ const createJobAlertSchema = z.object({
         city: z.enum(LOCATIONS.CITIES),
         district: z.enum(LOCATIONS.DISTRICTS),
     }),
+    frequency: z.enum(['daily', 'weekly']).default('weekly'),
     salaryRange: z.enum(['UNDER_10M', '10M_20M', '20M_30M', 'OVER_30M', 'ALL']),
     type: z.enum(['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERNSHIP', 'TEMPORARY', 'VOLUNTEER', 'FREELANCE', 'ALL']),
     workType: z.enum(['ON_SITE', 'REMOTE', 'HYBRID', 'ALL']),

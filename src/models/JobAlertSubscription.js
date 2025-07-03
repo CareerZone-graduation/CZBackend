@@ -31,6 +31,15 @@ const jobAlertSubscriptionSchema = new mongoose.Schema({
       }
     }
   },
+  frequency: {
+    type: String,
+    required: [true, 'Frequency is required'],
+    enum: {
+        values: ['daily', 'weekly'],
+        message: '{VALUE} is not a valid frequency'
+    },
+    default: 'weekly'
+  },
   salaryRange: {
     type: String,
     required: [true, 'Salary range is required'],
