@@ -1,0 +1,26 @@
+{
+  "cities": [
+    {
+      "name": "Ho Chi Minh City",
+      "districts": [
+        "Quan 1", "Quan 2", "Quan 3", "Quan 4", "Quan 5", "Quan 6", "Quan 7", "Quan 8", "Quan 9", "Quan 10", "Quan 11", "Quan 12",
+        "Binh Tan", "Binh Thanh", "Go Vap", "Phu Nhuan", "Tan Binh", "Tan Phu",
+        "Binh Chanh", "Can Gio", "Cu Chi", "Hoc Mon", "Nha Be", "Thu Duc"
+      ]
+    },
+    {
+      "name": "Ha Noi",
+      "districts": [
+        "Ba Dinh", "Hoan Kiem", "Hai Ba Trung", "Dong Da", "Tay Ho", "Cau Giay", "Thanh Xuan", "Hoang Mai", "Long Bien", "Nam Tu Liem", "Bac Tu Liem",
+        "Ha Dong", "Son Tay", "Ba Vi", "Chuong My", "Dan Phuong", "Dong Anh", "Gia Lam", "Hoai Duc", "Me Linh", "My Duc", "Phu Xuyen", "Phuc Tho",
+        "Quoc Oai", "Soc Son", "Thach That", "Thanh Oai", "Thanh Tri", "Thuong Tin", "Ung Hoa"
+      ]
+    },
+    {
+      "name": "Da Nang",
+      "districts": [
+        "Hai Chau", "Thanh Khe", "Son Tra", "Ngu Hanh Son", "Lien Chieu", "Cam Le", "Hoa Vang", "Hoang Sa"
+      ]
+    }
+  ]
+}

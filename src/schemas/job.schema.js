@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { LOCATIONS } from '../constants/index.js';
 
 const jobTypeEnum = ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERNSHIP', 'TEMPORARY', 'VOLUNTEER', 'FREELANCE'];
 const workTypeEnum = ['ON_SITE', 'REMOTE', 'HYBRID'];
@@ -13,8 +14,8 @@ const jobCategoryEnum = [
 const jobStatusEnum = ['ACTIVE', 'INACTIVE', 'EXPIRED'];
 
 const locationSchema = z.object({
-  city: z.string().trim().min(1, 'Tên thành phố là bắt buộc').max(100),
-  district: z.string().trim().min(1, 'Tên quận/huyện là bắt buộc').max(100),
+  city: z.enum(LOCATIONS.CITIES, { required_error: 'Tên thành phố là bắt buộc' }),
+  district: z.enum(LOCATIONS.DISTRICTS, { required_error: 'Tên quận/huyện là bắt buộc' }),
   address: z.string().trim().min(1, 'Địa chỉ chi tiết là bắt buộc').max(200),
 });
 
@@ -24,13 +25,13 @@ export const createJobSchema = z.object({
   requirements: z.string().trim().min(10, 'Yêu cầu phải có ít nhất 10 ký tự').max(2000),
   benefits: z.string().trim().min(10, 'Quyền lợi phải có ít nhất 10 ký tự').max(2000),
   location: locationSchema,
-  type: z.nativeEnum(Object.fromEntries(jobTypeEnum.map(v => [v, v]))),
-  workType: z.nativeEnum(Object.fromEntries(workTypeEnum.map(v => [v, v]))),
+  type: z.enum(jobTypeEnum),
+  workType: z.enum(workTypeEnum),
   minSalary: z.coerce.number().min(0, 'Mức lương không thể là số âm').optional(),
   maxSalary: z.coerce.number().min(0, 'Mức lương không thể là số âm').optional(),
   deadline: z.coerce.date().refine((date) => date > new Date(), 'Hạn chót phải là một ngày trong tương lai'),
-  experience: z.nativeEnum(Object.fromEntries(experienceEnum.map(v => [v, v]))),
-  category: z.nativeEnum(Object.fromEntries(jobCategoryEnum.map(v => [v, v]))),
+  experience: z.enum(experienceEnum),
+  category: z.enum(jobCategoryEnum),
 }).refine(data => !data.minSalary || !data.maxSalary || data.maxSalary >= data.minSalary, {
   message: 'Lương tối đa phải lớn hơn hoặc bằng lương tối thiểu',
   path: ['maxSalary'],
@@ -42,14 +43,14 @@ export const updateJobSchema = z.object({
   requirements: z.string().trim().min(10, 'Yêu cầu phải có ít nhất 10 ký tự').max(2000).optional(),
   benefits: z.string().trim().min(10, 'Quyền lợi phải có ít nhất 10 ký tự').max(2000).optional(),
   location: locationSchema.optional(),
-  type: z.nativeEnum(Object.fromEntries(jobTypeEnum.map(v => [v, v]))).optional(),
-  workType: z.nativeEnum(Object.fromEntries(workTypeEnum.map(v => [v, v]))).optional(),
+  type: z.enum(jobTypeEnum).optional(),
+  workType: z.enum(workTypeEnum).optional(),
   minSalary: z.coerce.number().min(0, 'Mức lương không thể là số âm').optional(),
   maxSalary: z.coerce.number().min(0, 'Mức lương không thể là số âm').optional(),
   deadline: z.coerce.date().refine((date) => date > new Date(), 'Hạn chót phải là một ngày trong tương lai').optional(),
-  experience: z.nativeEnum(Object.fromEntries(experienceEnum.map(v => [v, v]))).optional(),
-  category: z.nativeEnum(Object.fromEntries(jobCategoryEnum.map(v => [v, v]))).optional(),
-  status: z.nativeEnum(Object.fromEntries(jobStatusEnum.map(v => [v, v]))).optional(),
+  experience: z.enum(experienceEnum).optional(),
+  category: z.enum(jobCategoryEnum).optional(),
+  status: z.enum(jobStatusEnum).optional(),
 }).refine(data => !data.minSalary || !data.maxSalary || data.maxSalary >= data.minSalary, {
     message: 'Lương tối đa phải lớn hơn hoặc bằng lương tối thiểu',
     path: ['maxSalary'],
@@ -58,7 +59,7 @@ export const updateJobSchema = z.object({
 export const jobQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(10),
-  status: z.nativeEnum(Object.fromEntries(jobStatusEnum.map(v => [v, v]))).optional(),
+  status: z.enum(jobStatusEnum).optional(),
   sortBy: z.string().optional(),
 });
 

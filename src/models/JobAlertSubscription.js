@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-
+import { LOCATIONS } from '../constants/index.js';
 
 const jobAlertSubscriptionSchema = new mongoose.Schema({
   candidateId: {
@@ -10,30 +10,38 @@ const jobAlertSubscriptionSchema = new mongoose.Schema({
   keyword: {
     type: String,
     trim: true,
+    required: [true, 'Keyword is required'],
     maxlength: [100, 'Keyword cannot exceed 100 characters']
   },
   location: {
     city: {
       type: String,
-      trim: true,
-      maxlength: [100, 'City cannot exceed 100 characters']
+      required: [true, 'City is required'],
+      enum: {
+          values: LOCATIONS.CITIES,
+          message: '{VALUE} is not a valid city'
+      }
     },
     district: {
       type: String,
-      trim: true,
-      maxlength: [100, 'District cannot exceed 100 characters']
+      required: [true, 'District is required'],
+      enum: {
+          values: LOCATIONS.DISTRICTS,
+          message: '{VALUE} is not a valid district'
+      }
     }
   },
-  minSalary: {
+  salaryRange: {
     type: String,
-    trim: true
-  },
-  maxSalary: {
-    type: String,
-    trim: true
+    required: [true, 'Salary range is required'],
+    enum: {
+        values: ['UNDER_10M', '10M_20M', '20M_30M', 'OVER_30M', 'ALL'],
+        message: '{VALUE} is not a valid salary range'
+    }
   },
   type: {
     type: String,
+    required: [true, 'Job type is required'],
     enum: {
       values: ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERNSHIP', 'TEMPORARY', 'VOLUNTEER', 'FREELANCE', 'ALL'],
       message: '{VALUE} is not a valid job type'
@@ -41,6 +49,7 @@ const jobAlertSubscriptionSchema = new mongoose.Schema({
   },
   workType: {
     type: String,
+    required: [true, 'Work type is required'],
     enum: {
       values: ['ON_SITE', 'REMOTE', 'HYBRID', 'ALL'],
       message: '{VALUE} is not a valid work type'
@@ -48,6 +57,7 @@ const jobAlertSubscriptionSchema = new mongoose.Schema({
   },
   experience: {
     type: String,
+    required: [true, 'Experience level is required'],
     enum: {
       values: ['ENTRY_LEVEL', 'MID_LEVEL', 'SENIOR_LEVEL', 'EXECUTIVE', 'NO_EXPERIENCE', 'INTERN', 'FRESHER', 'ALL'],
       message: '{VALUE} is not a valid experience level'
@@ -55,6 +65,7 @@ const jobAlertSubscriptionSchema = new mongoose.Schema({
   },
   category: {
     type: String,
+    required: [true, 'Category is required'],
     enum: {
       values: [
         'IT', 'SOFTWARE_DEVELOPMENT', 'DATA_SCIENCE', 'MACHINE_LEARNING', 'WEB_DEVELOPMENT',
@@ -82,18 +93,7 @@ const jobAlertSubscriptionSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Create indexes for better query performance
-jobAlertSubscriptionSchema.index({ candidateId: 1 });
-jobAlertSubscriptionSchema.index({ keyword: 'text' });
-jobAlertSubscriptionSchema.index({ active: 1 });
-jobAlertSubscriptionSchema.index({ 'location.city': 1 });
-jobAlertSubscriptionSchema.index({ type: 1 });
-jobAlertSubscriptionSchema.index({ workType: 1 });
-jobAlertSubscriptionSchema.index({ experience: 1 });
-jobAlertSubscriptionSchema.index({ category: 1 });
-
-// Compound indexes for finding matching subscriptions
-jobAlertSubscriptionSchema.index({ active: 1, keyword: 'text', 'location.city': 1, type: 1, workType: 1, experience: 1, category: 1 });
+// Indexes
 jobAlertSubscriptionSchema.index({ candidateId: 1, active: 1 });
 
 export default mongoose.model('JobAlertSubscription', jobAlertSubscriptionSchema);

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { LOCATIONS } from '../constants/index.js';
 
 
 const jobSchema = new mongoose.Schema({
@@ -30,14 +31,18 @@ const jobSchema = new mongoose.Schema({
     city: {
       type: String,
       required: [true, 'City is required'],
-      trim: true,
-      maxlength: [100, 'City cannot exceed 100 characters']
+      enum: {
+          values: LOCATIONS.CITIES,
+          message: '{VALUE} is not a valid city'
+      }
     },
     district: {
       type: String,
       required: [true, 'District is required'],
-      trim: true,
-      maxlength: [100, 'District cannot exceed 100 characters']
+      enum: {
+          values: LOCATIONS.DISTRICTS,
+          message: '{VALUE} is not a valid district'
+      }
     },
     address: {
       type: String,
