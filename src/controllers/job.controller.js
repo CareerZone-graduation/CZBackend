@@ -27,7 +27,8 @@ export const getMyJobs = asyncHandler(async (req, res) => {
 
 export const getJobById = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const job = await jobService.getJobById(id);
+    const userId = req.user ? req.user._id : null;
+    const job = await jobService.getJobById(id, userId);
     res.status(200).json({
       success: true,
       message: 'Lấy thông tin công việc thành công.',

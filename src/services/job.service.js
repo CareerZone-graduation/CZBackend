@@ -4,6 +4,7 @@ import Job from '../models/Job.js';
 import RecruiterProfile from '../models/RecruiterProfile.js';
 import CV from '../models/CV.js';
 import SavedJob from '../models/SavedJob.js';
+import { sendUserInteraction } from './kafka.service.js';
 import { NotFoundError, UnauthorizedError, BadRequestError } from '../utils/AppError.js';
 import { copyFileFromUrlToCloudinary } from './upload.service.js';
 import logger from '../utils/logger.js';
@@ -101,21 +102,36 @@ export const getJobsByRecruiter = async (userId, options) => {
 /**
  * Lấy chi tiết một tin tuyển dụng bằng ID
  * @param {string} jobId - ID của tin tuyển dụng
+ * @param {string|null} userId - ID của người dùng (nếu có)
  * @returns {Promise<Document>} Chi tiết tin tuyển dụng
  */
-export const getJobById = async (jobId) => {
+export const getJobById = async (jobId, userId = null) => {
     const job = await Job.findById(jobId).populate({
         path: 'recruiterProfileId',
         select: 'company.name company.logo'
     }).lean();
+
+    if (!job) {
+        throw new NotFoundError('Không tìm thấy tin tuyển dụng.');
+    }
+    
+    // Gửi sự kiện xem việc làm nếu có userId
+    if (userId) {
+      sendUserInteraction({
+        eventType: 'VIEW_JOB',
+        userId,
+        jobId,
+        timestamp: new Date().toISOString(),
+        details: { weight: 1 }
+      });
+    }
+
     // rename the recruiterProfileId to recruiter
     if (job) {
         job.company = job.recruiterProfileId.company;
         delete job.recruiterProfileId;
     }
-    if (!job) {
-        throw new NotFoundError('Không tìm thấy tin tuyển dụng.');
-    }
+    
     return job;
 };
 
@@ -218,17 +234,7 @@ export const applyToJob = async (userId, jobId, applicationData) => {
     } else if (cvTemplateId) {
       // --- Trường hợp 2: Dùng CV tạo từ mẫu ---
       // TODO: CHƯA XỬ LÝ
-      // const cvFromTemplate = await CV.findOne({ _id: cvTemplateId, userId });
-      // if (!cvFromTemplate) {
-      //   throw new BadRequestError('CV tạo từ mẫu không hợp lệ hoặc không tìm thấy.');
-      // }
-      // // Giả sử CV template có một endpoint để render CV thành PDF
-      // sourceFileInfo = {
-      //   name: cvFromTemplate.name || `CV-${cvFromTemplate._id}`,
-      //   path: `/api/cv-templates/${cvTemplateId}/render`, // Endpoint giả định để render CV
-      //   templateData: cvFromTemplate.toObject(),
-      // };
-      // sourceType = 'TEMPLATE';
+      throw new BadRequestError('Chức năng nộp CV từ mẫu chưa được hỗ trợ.');
     } else {
       // Trường hợp không cung cấp ID nào (dù đã được validate bởi Zod)
       throw new BadRequestError('Phải cung cấp một CV để ứng tuyển.');
@@ -240,15 +246,14 @@ export const applyToJob = async (userId, jobId, applicationData) => {
     const uniqueSuffix = `${jobId}-${Date.now()}`;
     const publicId = `application-cv-${userId}-${uniqueSuffix}`;
     
-    // Tạo bản sao (clone) từ file gốc trên Cloudinary
     const copiedFile = await copyFileFromUrlToCloudinary(
       sourceFileInfo.path,
-      'application-cvs', // Thư mục đặc biệt để lưu CV đã nộp đơn
+      'application-cvs',
       publicId
     );
 
     // 6. Tạo bản ghi ứng tuyển (Application)
-    const application = await Application.create({
+     const application = await Application.create({
       jobId,
       candidateProfileId: candidateProfile._id,
       coverLetter,
@@ -271,14 +276,21 @@ export const applyToJob = async (userId, jobId, applicationData) => {
       },
     });
 
+    // Gửi sự kiện APPLY_JOB
+    sendUserInteraction({
+        eventType: 'APPLY_JOB',
+        userId,
+        jobId,
+        timestamp: new Date().toISOString(),
+        details: { weight: 5 }
+    });
+
     return application;
   } catch (error) {
-    // Ghi log lỗi
     logger.error(`Lỗi khi nộp đơn: ${error.message}`, { 
       userId, jobId, cvId, cvTemplateId, error 
     });
     
-    // Ném lại lỗi để middleware xử lý
     if (error instanceof BadRequestError || error instanceof NotFoundError) {
       throw error;
     }
@@ -316,6 +328,15 @@ export const saveJob = async (userId, jobId) => {
   const savedJob = await SavedJob.create({
     candidateId: userId,
     jobId,
+  });
+
+  // Gửi sự kiện SAVE_JOB
+  sendUserInteraction({
+      eventType: 'SAVE_JOB',
+      userId,
+      jobId,
+      timestamp: new Date().toISOString(),
+      details: { weight: 3 }
   });
 
   return savedJob;

@@ -33,6 +33,8 @@ const config = {
   REDIS_URL: process.env.REDIS_URL,
 
   //Kafka Configuration
+  KAFKA_CLIENT_ID: process.env.KAFKA_CLIENT_ID || 'careerzone-be',
+  KAFKA_BROKERS: process.env.KAFKA_BROKERS || 'localhost:9092', // Comma-separated list of brokers
   
   // RabbitMQ Configuration
   RABBITMQ_URL: process.env.RABBITMQ_URL,

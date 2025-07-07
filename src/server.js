@@ -7,6 +7,7 @@ import config from './config/index.js';
 import logger from './utils/logger.js';
 import { initializeSocket } from './socket/index.js';
 import { getChannel } from './queues/rabbitmq.js';
+import { connectProducer } from './services/kafka.service.js';
 
 import app from './app.js';
 
@@ -32,6 +33,7 @@ const startServer = async () => {
   try {
     await connectDB();
     await getChannel(); // Khởi tạo kết nối RabbitMQ
+    await connectProducer();
 
     const PORT = config.PORT || 8080;
     httpServer.listen(PORT, () => {

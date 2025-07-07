@@ -1,4 +1,4 @@
-import locationsData from './locations.json' assert { type: 'json' };
+import locationsData from './locations.json' with { type: 'json' };
 
 const allCities = locationsData.cities.map(city => city.name);
 const allDistricts = locationsData.cities.flatMap(city => city.districts);
