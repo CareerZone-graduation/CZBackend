@@ -4,6 +4,7 @@ import logger from '../utils/logger.js';
 const producer = kafka.producer();
 const userInteractionsTopic = 'user-interactions';
 const jobEventsTopic = 'job-events';
+const userEventsTopic = 'user-events';
 
 let producerConnected = false;
 
@@ -60,6 +61,25 @@ export const sendJobEvent = async (event) => {
     logger.info(`Sent job event to Kafka: ${event.eventType}`, { jobId: event.payload.jobId });
   } catch (error) {
     logger.error('Error sending job event to Kafka:', { error, event });
+  }
+};
+
+export const sendUserEvent = async (event) => {
+  if (!producerConnected) {
+    logger.warn('Kafka Producer not connected. Skipping message send.');
+    return;
+  }
+
+  try {
+    await producer.send({
+      topic: userEventsTopic,
+      messages: [
+        { value: JSON.stringify(event) },
+      ],
+    });
+    logger.info(`Sent user event to Kafka: ${event.eventType}`, { userId: event.payload.userId });
+  } catch (error) {
+    logger.error('Error sending user event to Kafka:', { error, event });
   }
 };
 

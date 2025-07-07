@@ -13,6 +13,7 @@ import CandidateProfile from "../models/CandidateProfile.js";
 import RecruiterProfile from "../models/RecruiterProfile.js";
 import * as emailService from "./email.service.js";
 import * as redisService from "./redis.service.js";
+import { sendUserEvent } from "./kafka.service.js";
 
 const generateTokens = (user) => {
   const payload = { id: user._id, role: user.role };
@@ -64,6 +65,7 @@ export const register = async (userData) => {
     await CandidateProfile.create({ userId: user._id, fullname });
   } else {
     await RecruiterProfile.create({ userId: user._id, fullname });
+    // Optional: Send a RECRUITER_REGISTERED event if needed in the future
   }
 
   await sendVerificationEmail(user, fullname);
@@ -130,9 +132,33 @@ export const verifyEmail = async (token) => {
     throw new NotFoundError("Người dùng không tồn tại.");
   }
 
-  user.isEmailVerified = true;
-  await user.save({ validateBeforeSave: false });
-  await redisService.del(redisKey);
+  // Chỉ xử lý nếu email chưa được xác thực
+  if (!user.isEmailVerified) {
+    user.isEmailVerified = true;
+    await user.save({ validateBeforeSave: false });
+    await redisService.del(redisKey);
+
+    // Nếu là candidate, gửi sự kiện sau khi xác thực thành công
+    if (user.role === 'candidate') {
+      const candidateProfile = await CandidateProfile.findOne({ userId: user._id });
+      if (candidateProfile) {
+        sendUserEvent({
+          eventType: 'CANDIDATE_REGISTERED',
+          timestamp: new Date().toISOString(),
+          payload: {
+            userId: user._id.toString(),
+            email: user.email,
+            fullName: candidateProfile.fullname,
+            role: user.role,
+          }
+        });
+      }
+    }
+  } else {
+    // Nếu email đã được xác thực rồi, xóa token và báo lỗi
+    await redisService.del(redisKey);
+    throw new BadRequestError("Email này đã được xác thực từ trước.");
+  }
 };
 
 export const resendVerificationEmail = async (email) => {
