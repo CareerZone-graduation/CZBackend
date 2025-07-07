@@ -4,7 +4,7 @@ import Job from '../models/Job.js';
 import RecruiterProfile from '../models/RecruiterProfile.js';
 import CV from '../models/CV.js';
 import SavedJob from '../models/SavedJob.js';
-import { sendUserInteraction } from './kafka.service.js';
+import { sendUserInteraction, sendJobEvent } from './kafka.service.js';
 import { NotFoundError, UnauthorizedError, BadRequestError } from '../utils/AppError.js';
 import { copyFileFromUrlToCloudinary } from './upload.service.js';
 import logger from '../utils/logger.js';
@@ -48,6 +48,25 @@ export const createJob = async (userId, jobData) => {
   const newJob = await Job.create({
     ...jobData,
     recruiterProfileId: recruiterProfile._id,
+  });
+
+  // Gửi sự kiện JOB_CREATED đến Kafka
+  // Không cần await để tránh block response trả về cho client
+  sendJobEvent({
+    eventType: 'JOB_CREATED',
+    timestamp: new Date().toISOString(),
+    payload: {
+      jobId: newJob._id.toString(),
+      title: newJob.title,
+      description: newJob.description,
+      skills: newJob.skills,
+      category: newJob.category,
+      area: newJob.area,
+      minSalary: newJob.minSalary,
+      maxSalary: newJob.maxSalary,
+      companyName: recruiterProfile.company.name,
+      companyLogo: recruiterProfile.company.logo,
+    }
   });
 
   return newJob;
