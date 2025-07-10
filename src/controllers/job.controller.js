@@ -63,12 +63,11 @@ export const applyToJob = asyncHandler(async (req, res) => {
   const { id: jobId } = req.params;
   const applicationData = req.body;
 
-  const application = await jobService.applyToJob(userId, jobId, applicationData);
+  await jobService.applyToJob(userId, jobId, applicationData);
 
   res.status(201).json({
     success: true,
-    message: 'Nộp đơn ứng tuyển thành công.',
-    data: application,
+    message: 'Nộp đơn ứng tuyển thành công.'
   });
 });
 
@@ -76,12 +75,11 @@ export const saveJob = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const { id: jobId } = req.params;
 
-  const savedJob = await jobService.saveJob(userId, jobId);
+  await jobService.saveJob(userId, jobId);
 
   res.status(201).json({
     success: true,
     message: 'Lưu công việc thành công.',
-    data: savedJob,
   });
 });
 

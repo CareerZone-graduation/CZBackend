@@ -9,6 +9,7 @@ import { NotFoundError, UnauthorizedError, BadRequestError } from '../utils/AppE
 import { copyFileFromUrlToCloudinary } from './upload.service.js';
 import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
+import { ca } from 'zod/v4/locales';
 
 /**
  * Tìm CandidateProfile từ userId và kiểm tra sự tồn tại
@@ -52,20 +53,31 @@ export const createJob = async (userId, jobData) => {
 
   // Gửi sự kiện JOB_CREATED đến Kafka
   // Không cần await để tránh block response trả về cho client
+  //gửi all thông tin cần thiết để tạo sự kiện JOB_CREATED
   sendJobEvent({
     eventType: 'JOB_CREATED',
     timestamp: new Date().toISOString(),
     payload: {
       jobId: newJob._id.toString(),
-      title: newJob.title,
       description: newJob.description,
+      requirements: newJob.requirements,
+      benefits: newJob.benefits,
+      title: newJob.title,
       skills: newJob.skills,
       category: newJob.category,
       area: newJob.area,
       minSalary: newJob.minSalary,
       maxSalary: newJob.maxSalary,
       companyName: recruiterProfile.company.name,
-      companyLogo: recruiterProfile.company.logo,
+      location: {
+        city: newJob.location.city,
+        district: newJob.location.district,
+        address: newJob.location.address
+      },
+      type: newJob.type,
+      workType: newJob.workType,
+      experience: newJob.experience,
+      deadline: newJob.deadline,
     }
   });
 
@@ -240,7 +252,8 @@ export const applyToJob = async (userId, jobId, applicationData) => {
   try {
     if (cvId) {
       // --- Trường hợp 1: Dùng CV đã tải lên ---
-      const selectedCV = candidateProfile.cvs.id(cvId);
+      // Kiểm tra xem CV có tồn tại trong hồ sơ ứng viên không
+      const selectedCV = candidateProfile.cvs?.find(cv => cv._id.toString() === cvId);
       if (!selectedCV) {
         throw new BadRequestError('CV tải lên không hợp lệ hoặc không tìm thấy.');
       }
@@ -303,8 +316,6 @@ export const applyToJob = async (userId, jobId, applicationData) => {
         timestamp: new Date().toISOString(),
         details: { weight: 5 }
     });
-
-    return application;
   } catch (error) {
     logger.error(`Lỗi khi nộp đơn: ${error.message}`, { 
       userId, jobId, cvId, cvTemplateId, error 
@@ -357,8 +368,6 @@ export const saveJob = async (userId, jobId) => {
       timestamp: new Date().toISOString(),
       details: { weight: 3 }
   });
-
-  return savedJob;
 };
 
 /**

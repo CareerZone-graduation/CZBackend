@@ -125,6 +125,10 @@ export const uploadCv = async (userId, file) => {
     }
 
     // If this is the first CV, set it as default
+    // kiểm tra có null hay undefined không
+    if (!profile.cvs) {
+        profile.cvs = [];
+    }
     const isDefault = profile.cvs.length === 0;
 
     const newCv = {

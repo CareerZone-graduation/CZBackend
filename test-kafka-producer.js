@@ -1,4 +1,5 @@
-import { connectProducer, sendUserInteraction } from './src/services/kafka.service.js';
+import { de } from 'zod/v4/locales';
+import { connectProducer, sendUserInteraction,sendJobEvent } from './src/services/kafka.service.js';
 import mongoose from 'mongoose';
 
 /**
@@ -35,7 +36,59 @@ const runTest = async () => {
     timestamp: new Date().toISOString(),
     details: { weight: 1 }
   };
+// sendJobEvent({
+//     eventType: 'JOB_CREATED',
+//     timestamp: new Date().toISOString(),
+//     payload: {
+//       jobId: newJob._id.toString(),
+//       description: newJob.description,
+//       requirements: newJob.requirements,
+//       benefits: newJob.benefits,
+//       title: newJob.title,
+//       skills: newJob.skills,
+//       category: newJob.category,
+//       area: newJob.area,
+//       minSalary: newJob.minSalary,
+//       maxSalary: newJob.maxSalary,
+//       companyName: recruiterProfile.company.name,
+//       location: {
+//         city: newJob.location.city,
+//         district: newJob.location.district,
+//         address: newJob.location.address
+//       },
+//       type: newJob.type,
+//       workType: newJob.workType,
+//       experience: newJob.experience,
+//       deadline: newJob.deadline,
+//     }
+//   });
 
+  const createJobEvent = {
+    eventType: 'JOB_CREATED',
+    timestamp: new Date().toISOString(),
+    payload: {
+      jobId: "686f90e0a027a310fec93b36",
+      description: 'Mô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫu',
+      requirements: 'Yêu cầu công việc mẫu',
+      benefits: 'Lợi ích công việc mẫu',
+      title: 'Lập trình javascript',
+      skills: ['JavaScript', 'Node.js'],
+      category: 'IT',
+      area: 'HO_CHI_MINH',
+      minSalary: 10000000,
+      maxSalary: 20000000,
+      companyName: 'Công ty mẫu',
+      location: {
+        city: 'Hồ Chí Minh',
+        district: 'Quận 1',
+        address: '123 Đường ABC'
+      },
+      type: 'FULL_TIME',
+      workType: 'ON_SITE',
+      experience: '1-2 Năm',
+      deadline: '2023-12-31'
+    }
+  };
   const saveEvent = {
     eventType: 'SAVE_JOB',
     userId: mockUserId1,
@@ -65,7 +118,8 @@ const runTest = async () => {
   // Gửi các sự kiện
   // Dùng Promise.all để gửi song song và đợi tất cả hoàn thành
   await Promise.all([
-    sendUserInteraction(viewEvent),
+    // sendUserInteraction(viewEvent),
+    sendJobEvent(createJobEvent),
     // sendUserInteraction(saveEvent),
     // sendUserInteraction(applyEvent),
     // sendUserInteraction(anotherViewEvent)
