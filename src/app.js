@@ -14,6 +14,7 @@ import candidateRoutes from './routes/candidate.route.js';
 import companyRoutes from './routes/company.route.js';
 import applicationRoutes from './routes/application.route.js';
 import jobAlertRoutes from './routes/jobAlert.route.js';
+import notificationRoutes from './routes/notification.route.js';
 
 import { errorHandler } from './middleware/error.middleware.js';
 import { notFound } from './middleware/notFound.middleware.js';
@@ -75,6 +76,7 @@ app.use('/api/candidate', candidateRoutes);
 app.use('/api/companies', companyRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/job-alerts', jobAlertRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // 404 & error
 app.use(notFound);

@@ -1,10 +1,85 @@
-// src/services/notification.service.js
 import Notification from '../models/Notification.js';
 import Application from '../models/Application.js';
 import CandidateProfile from '../models/CandidateProfile.js';
 import InterviewRoom from '../models/InterviewRoom.js';
 import { NotFoundError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
+
+// =================================================================
+// Chức năng CRUD Thông báo (Phần tôi vừa thêm)
+// =================================================================
+
+/**
+ * Get notifications for a user with pagination
+ * @param {string} userId - The ID of the user
+ * @param {object} options - Pagination options (page, limit)
+ * @returns {Promise<object>} - A promise that resolves to an object containing notifications and pagination metadata
+ */
+export const getNotifications = async (userId, options = {}) => {
+  const page = parseInt(options.page, 10) || 1;
+  const limit = parseInt(options.limit, 10) || 10;
+  const skip = (page - 1) * limit;
+
+  const query = { userId };
+
+  const notifications = await Notification.find(query)
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .lean();
+
+  const totalItems = await Notification.countDocuments(query);
+  const totalPages = Math.ceil(totalItems / limit);
+
+  return {
+    data: notifications,
+    meta: {
+      currentPage: page,
+      totalPages,
+      totalItems,
+      limit,
+    },
+  };
+};
+
+/**
+ * Mark a specific notification as read
+ * @param {string} userId - The ID of the user
+ * @param {string} notificationId - The ID of the notification
+ * @returns {Promise<Notification>} - A promise that resolves to the updated notification
+ */
+export const markNotificationAsRead = async (userId, notificationId) => {
+  const notification = await Notification.findOneAndUpdate(
+    { _id: notificationId,  userId },
+    { isRead: true },
+    { new: true }
+  ).lean();
+
+  if (!notification) {
+    throw new NotFoundError('Không tìm thấy thông báo hoặc bạn không có quyền truy cập.');
+  }
+
+  return notification;
+};
+
+/**
+ * Mark all unread notifications as read for a user
+ * @param {string} userId - The ID of the user
+ * @returns {Promise<object>} - A promise that resolves to the result of the update operation
+ */
+export const markAllNotificationsAsRead = async (userId) => {
+  const result = await Notification.updateMany(
+    {  userId, isRead: false },
+    { isRead: true }
+  );
+
+  return result;
+};
+
+
+// =================================================================
+// Logic xử lý thông báo từ Worker/Queue (Phần đã có sẵn)
+// =================================================================
 
 const getStatusMessage = (status, jobTitle) => {
   switch (status) {
