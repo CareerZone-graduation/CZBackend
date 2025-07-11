@@ -10,4 +10,3 @@ export { default as Notification } from './Notification.js';
 export { default as InterviewRoom } from './InterviewRoom.js';
 export { default as CoinRecharge } from './CoinRecharge.js';
 export { default as CV } from './CV.js';
-export { default as CvTemplate } from './CvTemplate.js';

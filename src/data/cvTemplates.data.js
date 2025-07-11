@@ -1,25 +1,27 @@
-// src/data/cvTemplates.data.js
+// Đây là nơi bạn định nghĩa tất cả các template một cách tĩnh.
+// Frontend sẽ gọi API để lấy danh sách này.
 
-// Đây là nơi bạn định nghĩa tất cả các template.
-// Mỗi object là một template hoàn chỉnh.
 export const templates = [
   // TEMPLATE 1: Phong cách cổ điển, một cột
   {
-    _id: 'classic-professional', // ID chuỗi, dễ nhớ để lưu vào CV.templateId
+    _id: 'classic-professional',
     name: 'Classic Professional',
-    previewUrl: 'https://example.com/previews/classic.png', // URL ảnh xem trước
+    previewUrl: 'https://i.imgur.com/2OFa2B1.png', // URL ảnh xem trước
+    layoutType: 'single-column', // Giúp frontend biết cách dàn layout chính
     theme: {
       primary: '#2d3748', // Màu chủ đạo cho tiêu đề
-      secondary: '#718096', // Màu phụ cho thông tin ít quan trọng hơn
+      secondary: '#718096', // Màu phụ
+      background: '#FFFFFF',
       font: "'Georgia', serif",
     },
     sections: [
-      { key: 'personalInfo', order: 1, style: { textAlign: 'center', marginBottom: '2rem' } },
-      { key: 'summary', order: 2, style: { marginBottom: '1.5rem', borderTop: '1px solid #ccc', paddingTop: '1.5rem' } },
-      { key: 'experiences', order: 3, style: { marginBottom: '1.5rem' } },
-      { key: 'educations', order: 4, style: { marginBottom: '1.5rem' } },
-      { key: 'skills', order: 5, style: { marginBottom: '1.5rem' } },
-      { key: 'projects', order: 6, style: { marginBottom: '1.5rem' } },
+      { key: 'personalInfo', order: 1, layout: { column: 1 }, style: { textAlign: 'center', marginBottom: '2rem' } },
+      { key: 'summary', order: 2, layout: { column: 1 }, style: { marginBottom: '1.5rem', borderTop: '1px solid #e2e8f0', paddingTop: '1.5rem' } },
+      { key: 'experiences', order: 3, layout: { column: 1 }, style: { marginBottom: '1.5rem' } },
+      { key: 'educations', order: 4, layout: { column: 1 }, style: { marginBottom: '1.5rem' } },
+      { key: 'projects', order: 5, layout: { column: 1 }, style: { marginBottom: '1.5rem' } },
+      { key: 'skills', order: 6, layout: { column: 1 }, style: { marginBottom: '1.5rem' } },
+      { key: 'certificates', order: 7, layout: { column: 1 }, style: { marginBottom: '1.5rem' } },
     ],
   },
 
@@ -27,112 +29,71 @@ export const templates = [
   {
     _id: 'modern-sidebar-blue',
     name: 'Modern Sidebar (Blue)',
-    previewUrl: 'https://example.com/previews/modern-blue.png',
-    isPublic: true,
+    previewUrl: 'https://i.imgur.com/3Yw4NYA.png',
+    layoutType: 'two-column-sidebar', // Layout 2 cột
     theme: {
-      primary: '#2B6CB0', // Xanh dương
+      primary: '#2B6CB0',
       secondary: '#4A5568',
+      background: '#FFFFFF',
       font: "'Roboto', sans-serif",
     },
-    // Frontend sẽ dùng layout để chia cột, ví dụ dùng CSS Grid/Flexbox
-    // Cột 1 chiếm 35%, Cột 2 chiếm 65%
     sections: [
-      // --- CỘT TRÁI ---
-      { 
-        key: 'personalInfo', 
-        order: 1, 
-        layout: { column: 1 },
-        style: { background: '#EDF2F7', padding: '1.5rem', color: '#2d3748' }
-      },
-      { 
-        key: 'skills', 
-        order: 2, 
-        layout: { column: 1 },
-        style: { padding: '1.5rem' } 
-      },
-      { 
-        key: 'references', 
-        order: 3, 
-        layout: { column: 1 },
-        style: { padding: '1.5rem' } 
-      },
-      // --- CỘT PHẢI ---
-      { 
-        key: 'summary', 
-        order: 1, 
-        layout: { column: 2 },
-        style: { padding: '1.5rem 1.5rem 0 1.5rem' }
-      },
-      { 
-        key: 'experiences', 
-        order: 2,
-        layout: { column: 2 },
-        style: { padding: '1.5rem' }
-      },
-      { 
-        key: 'educations', 
-        order: 3,
-        layout: { column: 2 },
-        style: { padding: '1.5rem' }
-      },
-      { 
-        key: 'projects', 
-        order: 4,
-        layout: { column: 2 },
-        style: { padding: '1.5rem' }
-      },
+      // --- CỘT TRÁI (Sidebar) ---
+      { key: 'personalInfo', order: 1, layout: { column: 1 }, style: { background: '#EDF2F7', padding: '1.5rem', color: '#2d3748', borderRadius: '8px 8px 0 0' } },
+      { key: 'skills', order: 2, layout: { column: 1 }, style: { padding: '1.5rem' } },
+      { key: 'certificates', order: 3, layout: { column: 1 }, style: { padding: '1.5rem' } },
+      
+      // --- CỘT PHẢI (Nội dung chính) ---
+      { key: 'summary', order: 1, layout: { column: 2 }, style: { padding: '1.5rem 1.5rem 0 1.5rem' } },
+      { key: 'experiences', order: 2, layout: { column: 2 }, style: { padding: '1.5rem' } },
+      { key: 'educations', order: 3, layout: { column: 2 }, style: { padding: '1.5rem' } },
+      { key: 'projects', order: 4, layout: { column: 2 }, style: { padding: '1.5rem' } },
     ],
   },
 
-  // TEMPLATE 3: Phong cách minimal
+  // TEMPLATE 3: Phong cách tối giản
   {
     _id: 'minimal-clean',
     name: 'Minimal Clean',
-    previewUrl: 'https://example.com/previews/minimal.png',
-    isPublic: true,
+    previewUrl: 'https://i.imgur.com/V3o2z2p.png',
+    layoutType: 'single-column',
     theme: {
       primary: '#1a202c',
       secondary: '#a0aec0',
+      background: '#FFFFFF',
       font: "'Inter', sans-serif",
     },
     sections: [
-      { key: 'personalInfo', order: 1, style: { marginBottom: '3rem', borderBottom: '2px solid #e2e8f0', paddingBottom: '1rem' } },
-      { key: 'summary', order: 2, style: { marginBottom: '2rem' } },
-      { key: 'experiences', order: 3, style: { marginBottom: '2rem' } },
-      { key: 'educations', order: 4, style: { marginBottom: '2rem' } },
-      { key: 'skills', order: 5, style: { marginBottom: '2rem' } },
-      { key: 'projects', order: 6, style: { marginBottom: '2rem' } },
+      { key: 'personalInfo', order: 1, layout: { column: 1 }, style: { marginBottom: '3rem', borderBottom: '2px solid #e2e8f0', paddingBottom: '1rem' } },
+      { key: 'summary', order: 2, layout: { column: 1 }, style: { marginBottom: '2rem' } },
+      { key: 'experiences', order: 3, layout: { column: 1 }, style: { marginBottom: '2rem' } },
+      { key: 'educations', order: 4, layout: { column: 1 }, style: { marginBottom: '2rem' } },
+      { key: 'projects', order: 5, layout: { column: 1 }, style: { marginBottom: '2rem' } },
+      { key: 'skills', order: 6, layout: { column: 1 }, style: { marginBottom: '2rem' } },
+      { key: 'certificates', order: 7, layout: { column: 1 }, style: { marginBottom: '2rem' } },
     ],
   },
-
-  // TEMPLATE 4: Creative template
+  
+  // TEMPLATE 4: Phong cách sáng tạo
   {
     _id: 'creative-orange',
     name: 'Creative Orange',
-    previewUrl: 'https://example.com/previews/creative.png',
-    isPublic: true,
+    previewUrl: 'https://i.imgur.com/rT3Tqwu.png',
+    layoutType: 'single-column',
     theme: {
-      primary: '#ea580c',
+      primary: '#dd6b20',
       secondary: '#64748b',
+      background: '#FFFFFF',
       font: "'Poppins', sans-serif",
     },
     sections: [
-      { 
-        key: 'personalInfo', 
-        order: 1, 
-        style: { 
-          background: 'linear-gradient(135deg, #ea580c 0%, #fb923c 100%)', 
-          color: 'white', 
-          padding: '2rem', 
-          borderRadius: '8px',
-          marginBottom: '2rem' 
-        } 
-      },
-      { key: 'summary', order: 2, style: { marginBottom: '2rem', padding: '1rem', backgroundColor: '#fff7ed', borderRadius: '8px' } },
-      { key: 'experiences', order: 3, style: { marginBottom: '2rem' } },
-      { key: 'educations', order: 4, style: { marginBottom: '2rem' } },
-      { key: 'skills', order: 5, style: { marginBottom: '2rem' } },
-      { key: 'projects', order: 6, style: { marginBottom: '2rem' } },
+      { key: 'personalInfo', order: 1, layout: { column: 1 }, style: { background: 'linear-gradient(135deg, #f6ad55 0%, #dd6b20 100%)', color: 'white', padding: '2rem', borderRadius: '8px', marginBottom: '2rem' } },
+      { key: 'summary', order: 2, layout: { column: 1 }, style: { marginBottom: '2rem', padding: '1rem', backgroundColor: '#fffaf0', borderRadius: '8px' } },
+      { key: 'experiences', order: 3, layout: { column: 1 }, style: { marginBottom: '2rem' } },
+      { key: 'educations', order: 4, layout: { column: 1 }, style: { marginBottom: '2rem' } },
+      { key: 'projects', order: 5, layout: { column: 1 }, style: { marginBottom: '2rem' } },
+      { key: 'skills', order: 6, layout: { column: 1 }, style: { marginBottom: '2rem' } },
+      { key: 'certificates', order: 7, layout: { column: 1 }, style: { marginBottom: '2rem' } },
     ],
   },
 ];
