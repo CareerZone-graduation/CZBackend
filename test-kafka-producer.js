@@ -68,7 +68,7 @@ const runTest = async () => {
     timestamp: new Date().toISOString(),
     payload: {
       jobId: "686f90e0a027a310fec93b36",
-      description: 'Mô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫuMô tả công việc mẫu',
+      description: 'Mô tảiệc mẫuMô tả công việc mẫu',
       requirements: 'Yêu cầu công việc mẫu',
       benefits: 'Lợi ích công việc mẫu',
       title: 'Lập trình javascript',

@@ -1,7 +1,10 @@
 import kafka from '../config/kafka.js';
 import logger from '../utils/logger.js';
 
-const producer = kafka.producer();
+const producer = kafka.producer({
+  // allowAutoTopicCreation: true,
+  // maxRequestSize: 10485760 // 10MB
+});
 const userInteractionsTopic = 'user-interactions';
 const jobEventsTopic = 'job-events';
 const userEventsTopic = 'user-events';
