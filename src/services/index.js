@@ -10,3 +10,5 @@ export { queueService } from './queue.service.js';
 export { chatService } from './chat.service.js';
 export { interviewService } from './interview.service.js';
 export { adminService } from './admin.service.js';
+export * as templateService from './template.service.js';
+export * as cvService from './cv.service.js';
