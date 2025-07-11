@@ -1,0 +1,10 @@
+import { Router } from 'express';
+import * as aiController from '../controllers/ai.controller.js';
+import asyncHandler from 'express-async-handler';
+import { authenticate } from '../middleware/auth.middleware.js';
+
+const router = Router();
+
+router.post('/chat', authenticate, asyncHandler(aiController.chatWithBot));
+
+export default router;

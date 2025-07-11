@@ -17,6 +17,7 @@ import jobAlertRoutes from './routes/jobAlert.route.js';
 import notificationRoutes from './routes/notification.route.js';
 import templateRoutes from './routes/template.route.js';
 import cvRoutes from './routes/cv.route.js';
+import aiRoutes from './routes/ai.route.js';
 
 import { errorHandler } from './middleware/error.middleware.js';
 import { notFound } from './middleware/notFound.middleware.js';
@@ -56,7 +57,15 @@ app.use(
 );
 
 // Khác
-app.use(compression());
+const shouldCompress = (req, res) => {
+  if (req.noCompression) {
+    // don't compress responses with this request header
+    return false;
+  }
+  // fallback to standard filter function
+  return compression.filter(req, res);
+};
+app.use(compression({ filter: shouldCompress }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
@@ -81,6 +90,7 @@ app.use('/api/job-alerts', jobAlertRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/templates', templateRoutes);
 app.use('/api/cvs', cvRoutes);
+app.use('/api/ai', aiRoutes);
 
 // 404 & error
 app.use(notFound);
