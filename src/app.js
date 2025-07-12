@@ -18,6 +18,7 @@ import notificationRoutes from './routes/notification.route.js';
 import templateRoutes from './routes/template.route.js';
 import cvRoutes from './routes/cv.route.js';
 import aiRoutes from './routes/ai.route.js';
+import paymentRoutes from './routes/payment.route.js';
 
 import { errorHandler } from './middleware/error.middleware.js';
 import { notFound } from './middleware/notFound.middleware.js';
@@ -91,6 +92,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/templates', templateRoutes);
 app.use('/api/cvs', cvRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // 404 & error
 app.use(notFound);

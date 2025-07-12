@@ -71,6 +71,15 @@ const config = {
 
   // Client Configuration
   CLIENT_URL: process.env.CLIENT_URL || 'http://localhost:3000',
+
+  // ZaloPay Configuration
+  zalopay: {
+    app_id: process.env.ZALOPAY_APP_ID ,
+    key1: process.env.ZALOPAY_KEY1 ,
+    key2: process.env.ZALOPAY_KEY2 ,
+    create_order_url: process.env.ZALOPAY_CREATE_ORDER_URL || 'https://sb-openapi.zalopay.vn/v2/create',
+    redirect_url: process.env.ZALOPAY_REDIRECT_URL || `${process.env.CLIENT_URL}/payment/result`,
+  },
   
   // File Upload Configuration
   MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE) || 10 * 1024 * 1024, // 10MB

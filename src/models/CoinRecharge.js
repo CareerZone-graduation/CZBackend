@@ -1,6 +1,5 @@
 import mongoose from 'mongoose';
 
-
 const coinRechargeSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -20,7 +19,7 @@ const coinRechargeSchema = new mongoose.Schema({
   paymentMethod: {
     type: String,
     enum: {
-      values: ['VNPAY', 'MOMO', 'BANK_CARD', 'PAYPAL'],
+      values: ['VNPAY', 'MOMO', 'BANK_CARD', 'PAYPAL', 'ZALOPAY'], // Added ZALOPAY
       message: '{VALUE} is not a valid payment method'
     },
     required: [true, 'Payment method is required']
@@ -38,15 +37,24 @@ const coinRechargeSchema = new mongoose.Schema({
       message: '{VALUE} is not a valid transaction status'
     },
     default: 'PENDING'
+  },
+  // Adding fields to store gateway-specific info without altering original structure much
+  gatewayResponse: {
+      type: String,
+      default: null,
+  },
+  gatewayTransactionToken: {
+      type: String,
+      default: null,
   }
 }, {
   timestamps: true
 });
 
-
 // Create indexes for better query performance
 coinRechargeSchema.index({ userId: 1, createdAt: -1 });
 coinRechargeSchema.index({ status: 1 });
 coinRechargeSchema.index({ paymentMethod: 1 });
+
 
 export default mongoose.model('CoinRecharge', coinRechargeSchema);

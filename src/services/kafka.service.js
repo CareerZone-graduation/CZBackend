@@ -1,7 +1,9 @@
+import { Partitioners } from 'kafkajs';
 import kafka from '../config/kafka.js';
 import logger from '../utils/logger.js';
 
 const producer = kafka.producer({
+    // createPartitioner: Partitioners.LegacyPartitioner,
   // allowAutoTopicCreation: true,
   // maxRequestSize: 10485760 // 10MB
 });
