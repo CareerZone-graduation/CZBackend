@@ -58,6 +58,19 @@ export const deleteJob = asyncHandler(async (req, res) => {
   });
 });
 
+export const getApplicantCount = asyncHandler(async (req, res) => {
+  const { id: jobId } = req.params;
+  const userId = req.user._id;
+
+  const result = await jobService.getApplicantCount(jobId, userId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy số lượng ứng viên thành công. 10 xu đã được trừ từ tài khoản của bạn.',
+    data: result,
+  });
+});
+
 export const applyToJob = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const { id: jobId } = req.params;

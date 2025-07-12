@@ -9,6 +9,7 @@ import {
   getJobById,
   updateJob,
   deleteJob,
+  getApplicantCount,
   applyToJob,
   saveJob,
   unsaveJob,
@@ -55,6 +56,14 @@ router.delete(
   recruiterOnly,
   validateParams(idParamSchema),
   deleteJob
+);
+
+router.post(
+  '/:id/applicant-count',
+  authenticate,
+  candidateOnly,
+  validateParams(idParamSchema),
+  getApplicantCount
 );
 
 router.post(

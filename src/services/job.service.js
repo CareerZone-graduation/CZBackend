@@ -4,6 +4,7 @@ import Job from '../models/Job.js';
 import RecruiterProfile from '../models/RecruiterProfile.js';
 import CV from '../models/CV.js';
 import SavedJob from '../models/SavedJob.js';
+import User from '../models/User.js';
 import { sendUserInteraction, sendJobEvent } from './kafka.service.js';
 import { NotFoundError, UnauthorizedError, BadRequestError } from '../utils/AppError.js';
 import { copyFileFromUrlToCloudinary } from './upload.service.js';
@@ -211,6 +212,40 @@ export const deleteJob = async (jobId, userId) => {
   // Soft-delete bằng cách chuyển status thành 'INACTIVE'
   job.status = 'INACTIVE';
   await job.save();
+};
+
+/**
+ * Ứng viên xem số lượng người đã ứng tuyển vào một tin tuyển dụng (tốn phí)
+ * @param {string} jobId - ID của tin tuyển dụng
+ * @param {string} userId - ID của ứng viên
+ * @returns {Promise<{applicantCount: number}>} Số lượng ứng viên
+ */
+export const getApplicantCount = async (jobId, userId) => {
+    // 1. Kiểm tra ứng viên và tin tuyển dụng có tồn tại không
+    const job = await Job.findById(jobId);
+    if (!job || job.status !== 'ACTIVE') {
+      throw new NotFoundError('Tin tuyển dụng không tồn tại hoặc đã hết hạn.');
+    }
+
+    // 2. Kiểm tra và trừ xu của ứng viên
+    const candidateUser = await User.findById(userId);
+    if (!candidateUser) {
+      throw new NotFoundError('Không tìm thấy tài khoản người dùng.');
+    }
+
+    const VIEW_APPLICANT_COST = 10;
+    if (candidateUser.coinBalance < VIEW_APPLICANT_COST) {
+      throw new BadRequestError(`Bạn không đủ xu. Cần ${VIEW_APPLICANT_COST} xu để xem.`);
+    }
+
+    // Trừ xu
+    candidateUser.coinBalance -= VIEW_APPLICANT_COST;
+    await candidateUser.save();
+
+    // 3. Đếm số lượng ứng viên đã nộp đơn
+    const applicantCount = await Application.countDocuments({ jobId });
+
+    return { applicantCount };
 };
 
 /**
