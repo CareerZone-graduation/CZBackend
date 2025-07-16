@@ -1,18 +1,18 @@
 import { Router } from 'express';
 import * as notificationController from '../controllers/notification.controller.js';
-import { authenticate } from '../middleware/auth.middleware.js';
-import { validateParams } from '../middleware/validation.middleware.js';
-import { idParamSchema } from '../schemas/common.schema.js';
+import * as authMiddleware from '../middleware/auth.middleware.js';
+import * as validationMiddleware from '../middleware/validation.middleware.js';
+import * as commonSchema from '../schemas/common.schema.js';
 
 const router = Router();
 
-router.use(authenticate);
+router.use(authMiddleware.authenticate);
 
 router.get('/', notificationController.getNotifications);
 
 router.patch(
   '/:id/read',
-  validateParams(idParamSchema),
+  validationMiddleware.validateParams(commonSchema.idParamSchema),
   notificationController.markNotificationAsRead
 );
 

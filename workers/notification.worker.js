@@ -36,8 +36,8 @@ async function startWorker() {
   };
 
   // Lắng nghe cả 2 queue với cùng một handler
-  channel.consume(QUEUES.IMMEDIATE, messageHandler, { noAck: false });
-  channel.consume(QUEUES.DIGEST, messageHandler, { noAck: false });
+  channel.consume(rabbitmq.QUEUES.IMMEDIATE, messageHandler, { noAck: false });
+  channel.consume(rabbitmq.QUEUES.DIGEST, messageHandler, { noAck: false });
 }
 
 startWorker();

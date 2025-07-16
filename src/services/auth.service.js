@@ -9,11 +9,10 @@ import {
   NotFoundError,
   UnauthorizedError,
 } from "../utils/AppError.js";
-import CandidateProfile from "../models/CandidateProfile.js";
-import RecruiterProfile from "../models/RecruiterProfile.js";
+import { CandidateProfile, RecruiterProfile } from "../models/index.js";
 import * as emailService from "./email.service.js";
 import * as redisService from "./redis.service.js";
-import { sendUserEvent } from "./kafka.service.js";
+import * as kafkaService from "./kafka.service.js";
 
 const generateTokens = (user) => {
   const payload = { id: user._id, role: user.role };
@@ -142,7 +141,7 @@ export const verifyEmail = async (token) => {
     if (user.role === 'candidate') {
       const candidateProfile = await CandidateProfile.findOne({ userId: user._id });
       if (candidateProfile) {
-        sendUserEvent({
+        kafkaService.sendUserEvent({
           eventType: 'CANDIDATE_REGISTERED',
           timestamp: new Date().toISOString(),
           payload: {

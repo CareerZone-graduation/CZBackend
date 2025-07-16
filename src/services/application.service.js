@@ -1,14 +1,16 @@
 import mongoose from 'mongoose';
-import Application from '../models/Application.js';
-import Job from '../models/Job.js';
-import User from '../models/User.js';
-import CandidateProfile from '../models/CandidateProfile.js';
-import RecruiterProfile from '../models/RecruiterProfile.js';
-import InterviewRoom from '../models/InterviewRoom.js';
+import {
+  Application,
+  Job,
+  User,
+  CandidateProfile,
+  RecruiterProfile,
+  InterviewRoom,
+} from '../models/index.js';
 import { NotFoundError, UnauthorizedError, BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
-import { publishNotification } from './queue.service.js';
-import { ROUTING_KEYS } from '../queues/rabbitmq.js';
+import * as queueService from './queue.service.js';
+import * as rabbitmq from '../queues/rabbitmq.js';
 
 /**
  * Lấy danh sách ứng viên đã ứng tuyển vào một công việc cụ thể
@@ -222,7 +224,7 @@ export const updateApplicationStatus = async (applicationId, recruiterId, status
   // Gửi thông báo vào queue
   const candidateProfile = await CandidateProfile.findById(application.candidateProfileId).select('userId');
   if (candidateProfile) {
-    publishNotification(ROUTING_KEYS.STATUS_UPDATE, {
+    queueService.publishNotification(rabbitmq.ROUTING_KEYS.STATUS_UPDATE, {
       type: 'APPLICATION_STATUS_UPDATE',
       recipientId: candidateProfile.userId.toString(),
       data: {
@@ -378,7 +380,7 @@ export const scheduleInterview = async (applicationId, recruiterId, scheduledTim
 
   // 6. Gửi thông báo (tùy chọn, có thể tách ra event)
   // Gửi cho ứng viên
-  publishNotification(ROUTING_KEYS.STATUS_UPDATE, {
+  queueService.publishNotification(rabbitmq.ROUTING_KEYS.STATUS_UPDATE, {
     type: 'APPLICATION_STATUS_UPDATE',
     recipientId: candidateProfile.userId.toString(),
     data: {

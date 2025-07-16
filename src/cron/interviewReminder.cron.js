@@ -2,8 +2,8 @@
 import cron from 'node-cron';
 import logger from '../utils/logger.js';
 import InterviewRoom from '../models/InterviewRoom.js';
-import { publishNotification } from '../services/queue.service.js';
-import { ROUTING_KEYS } from '../queues/rabbitmq.js';
+import * as queueService from '../services/queue.service.js';
+import * as rabbitmq from '../queues/rabbitmq.js';
 
 // Chạy mỗi 5 phút để kiểm tra
 cron.schedule('*/999 * * * *', async () => {
@@ -26,7 +26,7 @@ cron.schedule('*/999 * * * *', async () => {
     logger.info(`Found ${interviewsToRemind.length} interviews to remind.`);
 
     for (const interview of interviewsToRemind) {
-      await publishNotification(ROUTING_KEYS.INTERVIEW_REMINDER, {
+      await queueService.publishNotification(rabbitmq.ROUTING_KEYS.INTERVIEW_REMINDER, {
         type: 'INTERVIEW_REMINDER',
         recipientId: interview.candidateId.toString(),
         data: {

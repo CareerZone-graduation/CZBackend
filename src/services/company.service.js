@@ -1,6 +1,6 @@
-import RecruiterProfile from '../models/RecruiterProfile.js';
+import { RecruiterProfile } from '../models/index.js';
 import { BadRequestError, NotFoundError } from '../utils/AppError.js';
-import { uploadToCloudinary } from './upload.service.js';
+import * as uploadService from './upload.service.js';
 
 /**
  * Get the recruiter profile document for a given user ID.
@@ -41,7 +41,7 @@ export const createCompany = async (companyData, recruiterUserId, file) => {
 
   if (file) {
     const folder = `CareerZone/business_registrations`;
-    const uploadResult = await uploadToCloudinary(file.buffer, folder);
+    const uploadResult = await uploadService.uploadToCloudinary(file.buffer, folder);
     dataToCreate.businessRegistrationUrl = uploadResult.secure_url;
   }
 
@@ -70,7 +70,7 @@ export const updateMyCompany = async (recruiterUserId, companyData, file) => {
 
   if (file) {
     const folder = `CareerZone/business_registrations/${recruiterProfile.company._id}`;
-    const uploadResult = await uploadToCloudinary(file.buffer, folder);
+    const uploadResult = await uploadService.uploadToCloudinary(file.buffer, folder);
     dataToUpdate.businessRegistrationUrl = uploadResult.secure_url;
   }
   
@@ -114,7 +114,7 @@ export const updateMyCompanyLogo = async (recruiterUserId, file) => {
   }
 
   const folder = `CareerZone/companies/${recruiterProfile.company._id}`;
-  const uploadResult = await uploadToCloudinary(file.buffer, folder);
+  const uploadResult = await uploadService.uploadToCloudinary(file.buffer, folder);
 
   recruiterProfile.company.logo = uploadResult.secure_url;
   await recruiterProfile.save();

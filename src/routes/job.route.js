@@ -1,102 +1,91 @@
 import express from 'express';
-import { validateBody, validateQuery, validateParams } from '../middleware/validation.middleware.js';
-import { authenticate, optionalAuthenticate, recruiterOnly, candidateOnly } from '../middleware/auth.middleware.js';
-import { createJobSchema, updateJobSchema, jobQuerySchema, applyToJobSchema } from '../schemas/job.schema.js';
-import { idParamSchema } from '../schemas/common.schema.js';
-import {
-  createJob,
-  getMyJobs,
-  getJobById,
-  updateJob,
-  deleteJob,
-  getApplicantCount,
-  applyToJob,
-  saveJob,
-  unsaveJob,
-  getSavedJobs,
-} from '../controllers/job.controller.js';
+import * as validationMiddleware from '../middleware/validation.middleware.js';
+import * as authMiddleware from '../middleware/auth.middleware.js';
+import * as jobSchema from '../schemas/job.schema.js';
+import * as commonSchema from '../schemas/common.schema.js';
+import * as jobController from '../controllers/job.controller.js';
 
 const router = express.Router();
 
 router.post(
   '/',
-  authenticate,
-  recruiterOnly,
-  validateBody(createJobSchema),
-  createJob
+  authMiddleware.authenticate,
+  authMiddleware.recruiterOnly,
+  validationMiddleware.validateBody(jobSchema.createJobSchema),
+  jobController.createJob
 );
 
 router.get(
   '/my-jobs',
-  authenticate,
-  recruiterOnly,
-  validateQuery(jobQuerySchema),
-  getMyJobs
+  authMiddleware.authenticate,
+  authMiddleware.recruiterOnly,
+  validationMiddleware.validateQuery(jobSchema.jobQuerySchema),
+  jobController.getMyJobs
 );
 
 router.get(
   '/:id',
-  optionalAuthenticate,
-  validateParams(idParamSchema),
-  getJobById
+  authMiddleware.optionalAuthenticate,
+  validationMiddleware.validateParams(commonSchema.idParamSchema),
+  jobController.getJobById
 );
 
 router.put(
   '/:id',
-  authenticate,
-  recruiterOnly,
-  validateParams(idParamSchema),
-  validateBody(updateJobSchema),
-  updateJob
+  authMiddleware.authenticate,
+  authMiddleware.recruiterOnly,
+  validationMiddleware.validateParams(commonSchema.idParamSchema),
+  validationMiddleware.validateBody(jobSchema.updateJobSchema),
+  jobController.updateJob
 );
 
 router.delete(
   '/:id',
-  authenticate,
-  recruiterOnly,
-  validateParams(idParamSchema),
-  deleteJob
+  authMiddleware.authenticate,
+  authMiddleware.recruiterOnly,
+  validationMiddleware.validateParams(commonSchema.idParamSchema),
+  jobController.deleteJob
 );
 
 router.post(
   '/:id/applicant-count',
-  authenticate,
-  candidateOnly,
-  validateParams(idParamSchema),
-  getApplicantCount
+  authMiddleware.authenticate,
+  authMiddleware.candidateOnly,
+  validationMiddleware.validateParams(commonSchema.idParamSchema),
+  jobController.getApplicantCount
 );
 
 router.post(
   '/:id/apply',
-  authenticate,
-  candidateOnly,
-  validateParams(idParamSchema),
-  validateBody(applyToJobSchema),
-  applyToJob
+  authMiddleware.authenticate,
+  authMiddleware.candidateOnly,
+  validationMiddleware.validateParams(commonSchema.idParamSchema),
+  validationMiddleware.validateBody(jobSchema.applyToJobSchema),
+  jobController.applyToJob
 );
 
 router.post(
   '/:id/save',
-  authenticate,
-  candidateOnly,
-  validateParams(idParamSchema),
-  saveJob
+  authMiddleware.authenticate,
+  authMiddleware.candidateOnly,
+  validationMiddleware.validateParams(commonSchema.idParamSchema),
+  jobController.saveJob
 );
 
 router.delete(
   '/:id/save',
-  authenticate,
-  candidateOnly,
-  validateParams(idParamSchema),
-  unsaveJob
+  authMiddleware.authenticate,
+  authMiddleware.candidateOnly,
+  validationMiddleware.validateParams(commonSchema.idParamSchema),
+  jobController.unsaveJob
 );
 
 router.get(
   '/saved/list',
-  authenticate,
-  candidateOnly,
-  validateQuery(jobQuerySchema),
-  getSavedJobs
+  authMiddleware.authenticate,
+  authMiddleware.candidateOnly,
+  validationMiddleware.validateQuery(jobSchema.jobQuerySchema),
+  jobController.getSavedJobs
 );
 
 export default router;

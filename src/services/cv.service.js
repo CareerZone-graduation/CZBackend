@@ -1,7 +1,7 @@
 // src/services/cv.service.js
 import CV from '../models/CV.js';
 import { NotFoundError, UnauthorizedError, ValidationError } from '../utils/AppError.js';
-import { validateTemplateId } from './template.service.js';
+import * as templateService from './template.service.js';
 
 /**
  * Tạo CV mới
@@ -11,7 +11,7 @@ import { validateTemplateId } from './template.service.js';
  */
 export const createCv = async (userId, cvData) => {
     // Kiểm tra templateId có hợp lệ không
-    if (!validateTemplateId(cvData.templateId)) {
+    if (!templateService.validateTemplateId(cvData.templateId)) {
         throw new ValidationError('Mẫu CV không hợp lệ hoặc không tồn tại.');
     }
     
@@ -47,7 +47,7 @@ export const getCvById = async (cvId, userId) => {
  * @returns {Promise<Object>} CV đã cập nhật
  */
 export const updateCv = async (cvId, userId, updateData) => {
-    if (updateData.templateId && !validateTemplateId(updateData.templateId)) {
+    if (updateData.templateId && !templateService.validateTemplateId(updateData.templateId)) {
         throw new ValidationError('Mẫu CV không hợp lệ.');
     }
 
@@ -85,7 +85,7 @@ export const getAllCvsByUser = async (userId) => {
  * @returns {Promise<Object>} CV được tạo
  */
 export const createCvFromTemplate = async (userId, templateId, cvName) => {
-    if (!validateTemplateId(templateId)) {
+    if (!templateService.validateTemplateId(templateId)) {
         throw new ValidationError('Mẫu CV không hợp lệ.');
     }
 

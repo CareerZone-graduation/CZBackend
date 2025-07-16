@@ -1,21 +1,21 @@
 // src/routes/chat.route.js
 import express from 'express';
 import * as chatController from '../controllers/chat.controller.js';
-import { authenticate } from '../middleware/auth.middleware.js';
-import { validateParams, validateQuery, validateBody } from '../middleware/validation.middleware.js';
-import { idParamSchema, paginationSchema } from '../schemas/common.schema.js';
-import { markAsReadSchema, createConversationSchema, sendMessageSchema } from '../schemas/chat.schema.js';
+import * as authMiddleware from '../middleware/auth.middleware.js';
+import * as validationMiddleware from '../middleware/validation.middleware.js';
+import * as commonSchema from '../schemas/common.schema.js';
+import * as chatSchema from '../schemas/chat.schema.js';
 import { z } from 'zod';
 
 const router = express.Router();
 
 // Tất cả các route chat đều yêu cầu xác thực
-router.use(authenticate);
+router.use(authMiddleware.authenticate);
 
 // Tạo cuộc trò chuyện mới với người dùng khác
 router.post(
   '/conversations',
-  validateBody(createConversationSchema),
+  validationMiddleware.validateBody(chatSchema.createConversationSchema),
   chatController.createNewConversation
 );
 
@@ -28,22 +28,22 @@ router.get(
 // Lấy thông tin chi tiết của một cuộc trò chuyện
 router.get(
   '/conversations/:conversationId',
-  validateParams(z.object({ conversationId: idParamSchema.shape.id })),
+  validationMiddleware.validateParams(z.object({ conversationId: commonSchema.idParamSchema.shape.id })),
   chatController.getConversationDetails
 );
 
 // Lấy lịch sử tin nhắn trong một cuộc trò chuyện cụ thể
 router.get(
   '/conversations/:conversationId/messages',
-  validateParams(z.object({ conversationId: idParamSchema.shape.id })),
-  validateQuery(paginationSchema),
+  validationMiddleware.validateParams(z.object({ conversationId: commonSchema.idParamSchema.shape.id })),
+  validationMiddleware.validateQuery(commonSchema.paginationSchema),
   chatController.getMessagesInConversation
 );
 
 // Đánh dấu tin nhắn là đã đọc
 router.patch(
   '/messages/read',
-  validateBody(markAsReadSchema),
+  validationMiddleware.validateBody(chatSchema.markAsReadSchema),
   chatController.markMessagesAsRead
 );
 
@@ -51,7 +51,7 @@ router.patch(
 // Đánh dấu cuộc trò chuyện đã đọc
 router.put(
   '/conversations/:conversationId/read',
-  validateParams(z.object({ conversationId: idParamSchema.shape.id })),
+  validationMiddleware.validateParams(z.object({ conversationId: commonSchema.idParamSchema.shape.id })),
   chatController.markConversationAsRead
 );
 

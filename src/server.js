@@ -1,13 +1,13 @@
-import { createServer } from 'http';
-import { Server } from 'socket.io';
+import * as http from 'http';
+import * as socketio from 'socket.io';
 import dotenv from 'dotenv';
 
 import connectDB from './utils/connectDB.js';
 import config from './config/index.js';
 import logger from './utils/logger.js';
-import { initializeSocket } from './socket/index.js';
-import { getChannel } from './queues/rabbitmq.js';
-import { connectProducer } from './services/kafka.service.js';
+import * as socket from './socket/index.js';
+import * as rabbitmq from './queues/rabbitmq.js';
+import * as kafkaService from './services/kafka.service.js';
 
 import app from './app.js';
 
@@ -18,22 +18,22 @@ import './cron/jobAlert.cron.js';
 dotenv.config();
 
 // Tạo HTTP server và Socket.IO
-const httpServer = createServer(app);
-const io = new Server(httpServer, {
+const httpServer = http.createServer(app);
+const io = new socketio.Server(httpServer, {
   cors: {
     origin: "*" || config.CLIENT_URL || 'http://localhost:3000',
     methods: ['GET', 'POST','PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
     credentials: true,
   },
 });
-initializeSocket(io);
+socket.initializeSocket(io);
 
 // Khởi động
 const startServer = async () => {
   try {
     await connectDB();
-    await getChannel(); // Khởi tạo kết nối RabbitMQ
-    await connectProducer();
+    await rabbitmq.getChannel(); // Khởi tạo kết nối RabbitMQ
+    await kafkaService.connectProducer();
 
     const PORT = config.PORT || 8080;
     httpServer.listen(PORT, () => {

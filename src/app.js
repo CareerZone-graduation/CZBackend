@@ -1,3 +1,4 @@
+// 📦 Core Dependencies
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -6,9 +7,12 @@ import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 
+// ⚙️ Configuration
 import config from './config/index.js';
+import './config/redis.js'; // Initialize Redis connection
+
+// 🚦 Routes
 import authRoutes from './routes/auth.route.js';
-// import userRoutes from './routes/user.route.js'; // No longer in use
 import jobRoutes from './routes/job.route.js';
 import candidateRoutes from './routes/candidate.route.js';
 import companyRoutes from './routes/company.route.js';
@@ -21,9 +25,9 @@ import aiRoutes from './routes/ai.route.js';
 import paymentRoutes from './routes/payment.route.js';
 import chatRoutes from './routes/chat.route.js';
 
-import { errorHandler } from './middleware/error.middleware.js';
-import { notFound } from './middleware/notFound.middleware.js';
-import './config/redis.js'; // Initialize Redis connection
+// 🚧 Middlewares
+import * as errorMiddleware from './middleware/error.middleware.js';
+import * as notFoundMiddleware from './middleware/notFound.middleware.js';
 
 dotenv.config();
 
@@ -97,7 +101,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/chat', chatRoutes);
 
 // 404 & error
-app.use(notFound);
-app.use(errorHandler);
+app.use(notFoundMiddleware.notFound);
+app.use(errorMiddleware.errorHandler);
 
 export default app;

@@ -1,7 +1,7 @@
 // src/routes/template.route.js
 import express from 'express';
 import * as templateController from '../controllers/template.controller.js';
-import { authenticate } from '../middleware/auth.middleware.js';
+import * as authMiddleware from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 

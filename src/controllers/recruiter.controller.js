@@ -1,3 +1,4 @@
+import asyncHandler from 'express-async-handler';
 import * as recruiterService from '../services/recruiter.service.js';
 
 /**
@@ -5,7 +6,7 @@ import * as recruiterService from '../services/recruiter.service.js';
  * @param {import('express').Request} req
  * @param {import('express').Response} res
  */
-export const getRecruiterProfile = async (req, res) => {
+export const getRecruiterProfile = asyncHandler(async (req, res) => {
   const recruiterId = req.user._id;
   const profile = await recruiterService.getRecruiterProfile(recruiterId);
 
@@ -14,4 +15,4 @@ export const getRecruiterProfile = async (req, res) => {
     message: 'Lấy thông tin hồ sơ nhà tuyển dụng thành công.',
     data: profile,
   });
-};
+});
