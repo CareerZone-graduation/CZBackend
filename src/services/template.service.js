@@ -1,5 +1,5 @@
 // src/services/template.service.js
-import { templates } from '../data/cvTemplates.data.js';
+import * as cvTemplatesData from '../data/cvTemplates.data.js';
 import { NotFoundError } from '../utils/AppError.js';
 
 /**
@@ -9,7 +9,7 @@ import { NotFoundError } from '../utils/AppError.js';
  */
 export const getAllTemplates = async () => {
     // Chỉ trả về các thông tin cơ bản để hiển thị danh sách
-    return templates.map(t => ({
+    return cvTemplatesData.templates.map(t => ({
         _id: t._id,
         name: t.name,
         previewUrl: t.previewUrl,
@@ -26,7 +26,7 @@ export const getAllTemplates = async () => {
  * @returns {Promise<Object>} Chi tiết template.
  */
 export const getTemplateById = async (templateId) => {
-    const template = templates.find(t => t._id === templateId);
+    const template = cvTemplatesData.templates.find(t => t._id === templateId);
 
     if (!template) {
         throw new NotFoundError('Không tìm thấy mẫu CV này.');
@@ -40,5 +40,5 @@ export const getTemplateById = async (templateId) => {
  * @returns {boolean} True nếu template tồn tại
  */
 export const validateTemplateId = (templateId) => {
-    return templates.some(t => t._id === templateId);
+    return cvTemplatesData.templates.some(t => t._id === templateId);
 };

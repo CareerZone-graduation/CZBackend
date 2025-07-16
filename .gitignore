@@ -38,3 +38,5 @@ t.js
 digest.txt
 .clinerules/instruction1.md
 congcu/convertstringtoid.js
+test-kafka-producer.js
+test-websocket-chat.html

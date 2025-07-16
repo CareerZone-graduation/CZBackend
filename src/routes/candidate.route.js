@@ -1,41 +1,41 @@
 import express from 'express';
 import * as candidateController from '../controllers/candidate.controller.js';
-import { authenticate, candidateOnly } from '../middleware/auth.middleware.js';
-import { validateBody, validateParams } from '../middleware/validation.middleware.js';
-import { uploadAvatar, uploadCv } from '../middleware/upload.middleware.js';
+import * as authMiddleware from '../middleware/auth.middleware.js';
+import * as validationMiddleware from '../middleware/validation.middleware.js';
+import * as uploadMiddleware from '../middleware/upload.middleware.js';
 import { z } from 'zod';
-import { candidateProfileSchema, cvSchema } from '../schemas/user.schema.js';
-import { idParamSchema } from '../schemas/common.schema.js';
+import * as userSchema from '../schemas/user.schema.js';
+import * as commonSchema from '../schemas/common.schema.js';
 
 const router = express.Router();
 
-router.use(authenticate, candidateOnly);
+router.use(authMiddleware.authenticate, authMiddleware.candidateOnly);
 
 router
     .route('/profile')
     .get(candidateController.getProfile)
     .patch(
-        validateBody(candidateProfileSchema),
+        validationMiddleware.validateBody(userSchema.candidateProfileSchema),
         candidateController.updateProfile
     );
 
 router
     .route('/avatar')
     .patch(
-        uploadAvatar,
+        uploadMiddleware.uploadAvatar,
         candidateController.updateAvatar
     );
 
 // CV Management Routes
 router.route('/cvs')
-    .post(uploadCv, candidateController.uploadCv)
+    .post(uploadMiddleware.uploadCv, candidateController.uploadCv)
     .get(candidateController.getCvs);
 
 router.route('/cvs/:cvId/set-default')
-    .patch(validateParams(z.object({ cvId: idParamSchema.shape.id })), candidateController.setDefaultCv);
+    .patch(validationMiddleware.validateParams(z.object({ cvId: commonSchema.idParamSchema.shape.id })), candidateController.setDefaultCv);
 
 router.route('/cvs/:cvId')
-    .delete(validateParams(z.object({ cvId: idParamSchema.shape.id })), candidateController.deleteCv);
+    .delete(validationMiddleware.validateParams(z.object({ cvId: commonSchema.idParamSchema.shape.id })), candidateController.deleteCv);
 
 
 export default router;

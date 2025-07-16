@@ -1,16 +1,17 @@
-import Application from '../models/Application.js';
-import CandidateProfile from '../models/CandidateProfile.js';
-import Job from '../models/Job.js';
-import RecruiterProfile from '../models/RecruiterProfile.js';
-import CV from '../models/CV.js';
-import SavedJob from '../models/SavedJob.js';
-import User from '../models/User.js';
-import { sendUserInteraction, sendJobEvent } from './kafka.service.js';
-import { NotFoundError, UnauthorizedError, BadRequestError } from '../utils/AppError.js';
-import { copyFileFromUrlToCloudinary } from './upload.service.js';
-import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
-import { ca } from 'zod/v4/locales';
+import {
+  Application,
+  CandidateProfile,
+  Job,
+  RecruiterProfile,
+  CV,
+  SavedJob,
+  User,
+} from '../models/index.js';
+import * as kafkaService from './kafka.service.js';
+import { NotFoundError, UnauthorizedError, BadRequestError } from '../utils/AppError.js';
+import * as uploadService from './upload.service.js';
+import logger from '../utils/logger.js';
 
 /**
  * Tìm CandidateProfile từ userId và kiểm tra sự tồn tại
@@ -55,7 +56,7 @@ export const createJob = async (userId, jobData) => {
   // Gửi sự kiện JOB_CREATED đến Kafka
   // Không cần await để tránh block response trả về cho client
   //gửi all thông tin cần thiết để tạo sự kiện JOB_CREATED
-  sendJobEvent({
+  kafkaService.sendJobEvent({
     eventType: 'JOB_CREATED',
     timestamp: new Date().toISOString(),
     payload: {
@@ -149,7 +150,7 @@ export const getJobById = async (jobId, userId = null) => {
     
     // Gửi sự kiện xem việc làm nếu có userId
     if (userId) {
-      sendUserInteraction({
+      kafkaService.sendUserInteraction({
         eventType: 'VIEW_JOB',
         userId,
         jobId,
@@ -313,7 +314,7 @@ export const applyToJob = async (userId, jobId, applicationData) => {
     const uniqueSuffix = `${jobId}-${Date.now()}`;
     const publicId = `application-cv-${userId}-${uniqueSuffix}`;
     
-    const copiedFile = await copyFileFromUrlToCloudinary(
+    const copiedFile = await uploadService.copyFileFromUrlToCloudinary(
       sourceFileInfo.path,
       'application-cvs',
       publicId
@@ -344,7 +345,7 @@ export const applyToJob = async (userId, jobId, applicationData) => {
     });
 
     // Gửi sự kiện APPLY_JOB
-    sendUserInteraction({
+    kafkaService.sendUserInteraction({
         eventType: 'APPLY_JOB',
         userId,
         jobId,
@@ -396,7 +397,7 @@ export const saveJob = async (userId, jobId) => {
   });
 
   // Gửi sự kiện SAVE_JOB
-  sendUserInteraction({
+  kafkaService.sendUserInteraction({
       eventType: 'SAVE_JOB',
       userId,
       jobId,

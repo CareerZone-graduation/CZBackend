@@ -1,6 +1,6 @@
 import asyncHandler from 'express-async-handler';
 import * as companyService from '../services/company.service.js';
-import { createCompanySchema, updateCompanySchema } from '../schemas/company.schema.js';
+import * as companySchema from '../schemas/company.schema.js';
 import { BadRequestError } from '../utils/AppError.js';
 
 // Helper to parse and validate data from a JSON string field
@@ -25,7 +25,7 @@ const parseAndValidate = (jsonString, schema) => {
 // @route   POST /api/v1/companies
 // @access  Private/Recruiter
 export const createCompany = asyncHandler(async (req, res) => {
-  const validatedData = parseAndValidate(req.body.companyData, createCompanySchema);
+  const validatedData = parseAndValidate(req.body.companyData, companySchema.createCompanySchema);
   const company = await companyService.createCompany(validatedData, req.user._id, req.file);
   res.status(201).json({
     success: true,
@@ -50,7 +50,7 @@ export const getMyCompany = asyncHandler(async (req, res) => {
 // @route   PATCH /api/v1/companies/my-company
 // @access  Private/Recruiter
 export const updateMyCompany = asyncHandler(async (req, res) => {
-  const validatedData = parseAndValidate(req.body.companyData, updateCompanySchema);
+  const validatedData = parseAndValidate(req.body.companyData, companySchema.updateCompanySchema);
   const company = await companyService.updateMyCompany(req.user._id, validatedData, req.file);
   res.status(200).json({
     success: true,

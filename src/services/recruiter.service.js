@@ -1,4 +1,4 @@
-import RecruiterProfile from '../models/RecruiterProfile.js';
+import { RecruiterProfile } from '../models/index.js';
 import { NotFoundError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
 

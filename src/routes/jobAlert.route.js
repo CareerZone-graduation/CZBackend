@@ -1,20 +1,20 @@
 import { Router } from 'express';
 import * as jobAlertController from '../controllers/jobAlert.controller.js';
-import { authenticate, candidateOnly } from '../middleware/auth.middleware.js';
-import { validateBody, validateParams } from '../middleware/validation.middleware.js';
-import { createJobAlertSchema, updateJobAlertSchema } from '../schemas/jobAlert.schema.js';
-import { idParamSchema } from '../schemas/common.schema.js';
+import * as authMiddleware from '../middleware/auth.middleware.js';
+import * as validationMiddleware from '../middleware/validation.middleware.js';
+import * as jobAlertSchema from '../schemas/jobAlert.schema.js';
+import * as commonSchema from '../schemas/common.schema.js';
 
 const router = Router();
 
-router.use(authenticate, candidateOnly);
+router.use(authMiddleware.authenticate, authMiddleware.candidateOnly);
 
 router.route('/')
-    .post(validateBody(createJobAlertSchema), jobAlertController.createJobAlert)
+    .post(validationMiddleware.validateBody(jobAlertSchema.createJobAlertSchema), jobAlertController.createJobAlert)
     .get(jobAlertController.getMyJobAlerts);
 
 router.route('/:id')
-    .put(validateParams(idParamSchema), validateBody(updateJobAlertSchema), jobAlertController.updateJobAlert)
-    .delete(validateParams(idParamSchema), jobAlertController.deleteJobAlert);
+    .put(validationMiddleware.validateParams(commonSchema.idParamSchema), validationMiddleware.validateBody(jobAlertSchema.updateJobAlertSchema), jobAlertController.updateJobAlert)
+    .delete(validationMiddleware.validateParams(commonSchema.idParamSchema), jobAlertController.deleteJobAlert);
 
 export default router;

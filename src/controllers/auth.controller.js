@@ -3,7 +3,9 @@ import * as authService from "../services/auth.service.js"; // Revert to importi
 import config from "../config/index.js";
 import crypto from "crypto";
 import logger from "../utils/logger.js";
-import User from '../models/User.js';
+import { User } from '../models/index.js';
+import { NotFoundError, BadRequestError } from '../utils/AppError.js';
+import * as queueService from '../services/queue.service.js';
 
 export const register = asyncHandler(async (req, res) => {
   const { refreshToken, ...userData } = await authService.register(req.body);
@@ -200,9 +202,9 @@ export const resendEmailVerification = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getMe = asyncHandler(async (req, res) => {
-  // req.user đã được set bởi authenticate middleware
-  const user = await User.findById(req.user._id).select('-password');
-  
+  // req.user is set by the authenticate middleware
+  const user = await authService.getMe(req.user._id);
+
   if (!user) {
     return res.status(404).json({
       success: false,

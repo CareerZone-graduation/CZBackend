@@ -1,6 +1,6 @@
 import asyncHandler from 'express-async-handler';
 import * as candidateService from '../services/candidate.service.js';
-import { uploadToCloudinary } from '../services/upload.service.js';
+import * as uploadService from '../services/upload.service.js';
 import { BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
 
@@ -75,7 +75,7 @@ export const updateAvatar = asyncHandler(async (req, res) => {
     }
 
     logger.info(`Uploading avatar for user: ${userId}`);
-    const result = await uploadToCloudinary(req.file.buffer, 'avatars');
+    const result = await uploadService.uploadToCloudinary(req.file.buffer, 'avatars');
     
     const updatedProfile = await candidateService.updateAvatar(userId, result.secure_url);
 

@@ -1,8 +1,7 @@
-import CandidateProfile from '../models/CandidateProfile.js';
-import User from '../models/User.js';
+import { CandidateProfile, User } from '../models/index.js';
 import { NotFoundError, BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
-import { uploadToCloudinary } from './upload.service.js';
+import * as uploadService from './upload.service.js';
 import mongoose from 'mongoose';
 
 /**
@@ -116,7 +115,7 @@ export const uploadCv = async (userId, file) => {
         throw new BadRequestError('Vui lòng cung cấp file CV.');
     }
 
-    const uploadResult = await uploadToCloudinary(file.buffer, 'cvs');
+    const uploadResult = await uploadService.uploadToCloudinary(file.buffer, 'cvs');
 
     let profile = await CandidateProfile.findOne({ userId });
     if (!profile) {

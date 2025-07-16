@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import * as recruiterController from '../controllers/recruiter.controller.js';
-import { authenticate, recruiterOnly } from '../middleware/auth.middleware.js';
-import asyncHandler from '../utils/asyncHandler.js';
+import * as authMiddleware from '../middleware/auth.middleware.js';
 
 const router = Router();
 
@@ -12,9 +11,9 @@ const router = Router();
  */
 router.get(
   '/profile',
-  authenticate,
-  recruiterOnly,
-  asyncHandler(recruiterController.getRecruiterProfile)
+  authMiddleware.authenticate,
+  authMiddleware.recruiterOnly,
+  recruiterController.getRecruiterProfile
 );
 
 export default router;
