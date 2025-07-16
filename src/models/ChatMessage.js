@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 const chatMessageSchema = new mongoose.Schema({
   conversationId: {
     type: mongoose.Schema.Types.ObjectId,
+    ref: 'Conversation', // Tham chiếu đến Conversation model
     required: [true, 'Conversation ID is required']
   },
   senderId: {

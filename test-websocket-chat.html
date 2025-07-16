@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Chat Tester</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        #chat-box { border: 1px solid #ccc; padding: 10px; height: 300px; overflow-y: scroll; margin-bottom: 10px; }
+        .message { margin-bottom: 5px; padding: 5px; border-radius: 5px; }
+        .my-message { background-color: #dcf8c6; text-align: right; }
+        .other-message { background-color: #f1f0f0; }
+        .sender-name { font-weight: bold; font-size: 0.8em; }
+        .error { color: red; }
+        .info { color: green; }
+        input, button { padding: 8px; }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Chat Tester</h1>
+    <div>
+        <label for="token">Your JWT Token:</label>
+        <input type="text" id="token" placeholder="Enter your JWT token" size="80">
+    </div>
+    <div>
+        <label for="conversationId">Conversation ID:</label>
+        <input type="text" id="conversationId" placeholder="Enter conversation ID to join">
+        <button id="connect-btn">Connect & Join</button>
+    </div>
+    <hr>
+    <div id="chat-box"></div>
+    <div>
+        <input type="text" id="message-input" placeholder="Type a message..." size="60" disabled>
+        <button id="send-btn" disabled>Send</button>
+    </div>
+    <div id="status"></div>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script>
+        const tokenInput = document.getElementById('token');
+        const conversationIdInput = document.getElementById('conversationId');
+        const connectBtn = document.getElementById('connect-btn');
+        const chatBox = document.getElementById('chat-box');
+        const messageInput = document.getElementById('message-input');
+        const sendBtn = document.getElementById('send-btn');
+        const statusDiv = document.getElementById('status');
+
+        let socket;
+
+        // Lấy token và conversationId từ localStorage nếu có
+        tokenInput.value = localStorage.getItem('chat_token') || '';
+        conversationIdInput.value = localStorage.getItem('chat_conversationId') || '';
+
+        function log(message, type = 'info') {
+            const p = document.createElement('p');
+            p.textContent = message;
+            p.className = type;
+            statusDiv.appendChild(p);
+        }
+
+        function displayMessage(msg) {
+            const div = document.createElement('div');
+            div.classList.add('message');
+            
+            const sender = document.createElement('div');
+            sender.className = 'sender-name';
+            sender.textContent = msg.senderId.name;
+
+            const content = document.createElement('div');
+            content.textContent = msg.content;
+
+            div.appendChild(sender);
+            div.appendChild(content);
+
+            // Giả sử chúng ta biết ID của mình để phân biệt tin nhắn
+            // Cần một cách để lấy userId từ token, ở đây ta sẽ hardcode hoặc để trống
+            // Trong ứng dụng thực tế, bạn sẽ gọi API /users/me để lấy thông tin user
+            // if (msg.senderId._id === YOUR_USER_ID) {
+            //     div.classList.add('my-message');
+            // } else {
+            //     div.classList.add('other-message');
+            // }
+            div.classList.add('other-message'); // Mặc định là tin nhắn của người khác
+
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        connectBtn.addEventListener('click', () => {
+            if (socket && socket.connected) {
+                socket.disconnect();
+            }
+
+            const token = tokenInput.value.trim();
+            const conversationId = conversationIdInput.value.trim();
+
+            if (!token || !conversationId) {
+                log('Token and Conversation ID are required.', 'error');
+                return;
+            }
+
+            // Lưu vào localStorage để dùng lại
+            localStorage.setItem('chat_token', token);
+            localStorage.setItem('chat_conversationId', conversationId);
+
+            log('Connecting to server...');
+            socket = io('http://localhost:5000', {
+                auth: { token }
+            });
+
+            socket.on('connect', () => {
+                log(`Connected with socket ID: ${socket.id}`, 'info');
+                messageInput.disabled = false;
+                sendBtn.disabled = false;
+
+                // Join conversation room
+                socket.emit('conversation:join', { conversationId });
+                log(`Joining conversation: ${conversationId}`, 'info');
+            });
+
+            socket.on('disconnect', () => {
+                log('Disconnected from server.', 'error');
+                messageInput.disabled = true;
+                sendBtn.disabled = true;
+            });
+
+            socket.on('connect_error', (err) => {
+                log(`Connection Error: ${err.message}`, 'error');
+            });
+
+            // Listen for new messages
+            socket.on('message:new', (msg) => {
+                log(`New message received: ${msg.content}`);
+                displayMessage(msg);
+            });
+        });
+
+        sendBtn.addEventListener('click', () => {
+            const content = messageInput.value.trim();
+            const conversationId = conversationIdInput.value.trim();
+
+            if (content && socket && socket.connected) {
+                const messageData = {
+                    conversationId,
+                    content,
+                    type: 'text'
+                };
+
+                socket.emit('message:send', messageData, (response) => {
+                    if (response.success) {
+                        log('Message sent successfully!', 'info');
+                        // Tin nhắn sẽ được nhận lại qua sự kiện 'message:new'
+                        // nên không cần hiển thị ở đây để tránh trùng lặp.
+                    } else {
+                        log(`Failed to send message: ${response.message}`, 'error');
+                    }
+                });
+                messageInput.value = '';
+            }
+        });
+    </script>
+</body>
+</html>
