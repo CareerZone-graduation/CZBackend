@@ -51,9 +51,9 @@ app.use(
 // CORS
 app.use(
     cors({
-        origin: config.CLIENT_URL || 'http://localhost:3000',
+        origin: "*" || config.CLIENT_URL || 'http://localhost:3000',
         credentials: true,
-        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+        methods: ['GET', 'POST','PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
         allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     }),
 );

@@ -21,8 +21,8 @@ dotenv.config();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: config.CLIENT_URL || 'http://localhost:3000',
-    methods: ['GET', 'POST'],
+    origin: "*" || config.CLIENT_URL || 'http://localhost:3000',
+    methods: ['GET', 'POST','PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
     credentials: true,
   },
 });
