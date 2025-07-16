@@ -7,16 +7,24 @@ import { z } from 'zod';
 /**
  * Send message request validation schema
  * @typedef {Object} SendMessageRequest
- * @property {string} recipientId - ID of the message recipient
- * @property {string} content - Message content (max 1000 chars)
+ * @property {string} conversationId - ID of the conversation
+ * @property {string} content - Message content
+ * @property {string} type - Message type (text, image, file)
+ * @property {Object} metadata - Optional metadata for files
  */
 export const sendMessageSchema = z.object({
-  recipientId: z.string()
-    .min(1, 'Recipient ID is required'),
+  conversationId: z.string()
+    .regex(/^[0-9a-fA-F]{24}$/, 'ID cuộc trò chuyện không hợp lệ'),
   content: z.string()
-    .min(1, 'Message content cannot be empty')
-    .max(1000, 'Message content cannot exceed 1000 characters')
-    .trim()
+    .min(1, 'Nội dung tin nhắn không được để trống')
+    .max(1000, 'Nội dung tin nhắn không được vượt quá 1000 ký tự')
+    .trim(),
+  type: z.enum(['text', 'image', 'file']).default('text'),
+  metadata: z.object({
+    fileName: z.string().optional(),
+    fileSize: z.number().optional(),
+    mimeType: z.string().optional()
+  }).optional()
 });
 
 /**
@@ -25,8 +33,8 @@ export const sendMessageSchema = z.object({
  * @property {Array<string>} messageIds - Array of message IDs to mark as read
  */
 export const markAsReadSchema = z.object({
-  messageIds: z.array(z.string())
-    .min(1, 'At least one message ID is required')
+  messageIds: z.array(z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID tin nhắn không hợp lệ'))
+    .min(1, 'Cần cung cấp ít nhất một ID tin nhắn để đánh dấu đã đọc')
 });
 
 /**
@@ -49,4 +57,14 @@ export const chatbotMessageSchema = z.object({
     .min(1, 'Message cannot be blank')
     .max(500, 'Message cannot exceed 500 characters')
     .trim()
+});
+
+/**
+ * Create conversation request validation schema
+ * @typedef {Object} CreateConversationRequest
+ * @property {string} otherUserId - ID of the other user to start conversation with
+ */
+export const createConversationSchema = z.object({
+  otherUserId: z.string()
+    .regex(/^[0-9a-fA-F]{24}$/, 'ID người dùng không hợp lệ')
 });

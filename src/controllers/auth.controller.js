@@ -194,13 +194,25 @@ export const resendEmailVerification = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * @desc    Get current user info
+ * @route   GET /api/auth/me
+ * @access  Private
+ */
 export const getMe = asyncHandler(async (req, res) => {
-  const userId = req.user._id;
-  const userProfile = await authService.getMe(userId);
+  // req.user đã được set bởi authenticate middleware
+  const user = await User.findById(req.user._id).select('-password');
+  
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      message: 'Người dùng không tồn tại'
+    });
+  }
 
-  res.status(200).json({
+  res.json({
     success: true,
-    message: "User profile retrieved successfully.",
-    data: userProfile,
+    message: 'Lấy thông tin người dùng thành công',
+    data: user
   });
 });
