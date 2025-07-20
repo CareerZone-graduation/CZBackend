@@ -82,6 +82,12 @@ const experienceSchema = new mongoose.Schema({
 
 
 const candidateProfileSchema = new mongoose.Schema({
+  fullname: {
+    type: String,
+    required: [true, 'Full name is required'],
+    trim: true,
+    maxlength: [200, 'Full name cannot exceed 200 characters']
+  },
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User', // tên model bạn muốn tham chiếu

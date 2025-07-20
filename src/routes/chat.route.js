@@ -1,5 +1,6 @@
 // src/routes/chat.route.js
 import express from 'express';
+import passport from 'passport';
 import * as chatController from '../controllers/chat.controller.js';
 import * as authMiddleware from '../middleware/auth.middleware.js';
 import * as validationMiddleware from '../middleware/validation.middleware.js';
@@ -10,7 +11,7 @@ import { z } from 'zod';
 const router = express.Router();
 
 // Tất cả các route chat đều yêu cầu xác thực
-router.use(authMiddleware.authenticate);
+router.use(passport.authenticate('jwt', { session: false }));
 
 // Tạo cuộc trò chuyện mới với người dùng khác
 router.post(

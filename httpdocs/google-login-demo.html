@@ -1,0 +1,63 @@
+<html>
+<body>
+
+    <h1>Login with Google (GIS Library)</h1>
+
+    <div id="g_id_signin" class="g_id_signin"></div>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+    <script>
+        // Khởi tạo Google Identity Services
+        function initializeGoogleSignIn() {
+            google.accounts.id.initialize({
+                client_id: "952720183712-fiqpqldbvcm0goorgu3okv85chlgrp59.apps.googleusercontent.com",
+                callback: handleCredentialResponse
+            });
+            
+            // Render nút đăng nhập
+            google.accounts.id.renderButton(
+                document.getElementById("g_id_signin"),
+                { type: "standard" } // Có thể tùy chỉnh kiểu nút ở đây
+            );
+            
+            // Tùy chọn: Hiển thị One Tap prompt
+            // google.accounts.id.prompt();
+        }
+
+        // ✅ HÀM QUAN TRỌNG NHẤT
+        // Google sẽ tự động gọi hàm này sau khi đăng nhập thành công
+        function handleCredentialResponse(response) {
+            console.log("Encoded JWT ID token: " + response.credential);
+            
+            // Bước tiếp theo: Gửi "response.credential" này về backend
+            fetch('http://localhost:5000/api/auth/google-login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ token: response.credential })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    console.log("Backend login success!", data);
+                    // Lưu accessToken của bạn và chuyển trang
+                    localStorage.setItem('app_accessToken', data.data.accessToken);
+                    // window.location.href = '/dashboard';
+                } else {
+                    console.error("Backend login failed:", data);
+                }
+            })
+            .catch(error => {
+                console.error("Error sending token to backend:", error);
+            });
+        }
+
+        // Đảm bảo thư viện đã tải xong trước khi khởi tạo
+        window.onload = function() {
+            // Chờ một chút để đảm bảo thư viện đã sẵn sàng
+            setTimeout(initializeGoogleSignIn, 100);
+        };
+    </script>
+</body>
+</html>

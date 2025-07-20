@@ -1,75 +1,39 @@
 import express from 'express';
+import passport from 'passport';
 import * as validationMiddleware from '../middleware/validation.middleware.js';
 import * as authMiddleware from '../middleware/auth.middleware.js';
 import * as authSchema from '../schemas/auth.schema.js';
-
-// Import controllers
 import * as authController from '../controllers/auth.controller.js';
 
 const router = express.Router();
 
-/**
- * @route   POST /api/auth/register
- * @desc    Register a new user
- * @access  Public
- */
+// Đăng ký vẫn như cũ
 router.post('/register', validationMiddleware.validateBody(authSchema.registerSchema), authController.register);
 
-/**
- * @route   POST /api/auth/login
- * @desc    Login user
- * @access  Public
- */
-router.post('/login', validationMiddleware.validateBody(authSchema.loginSchema), authController.login);
+// Đăng nhập bằng username/password
+router.post(
+    '/login',
+    validationMiddleware.validateBody(authSchema.loginSchema),
+    authMiddleware.handleLocalAuth,
+    authController.login
+);
 
-/**
- * @route   POST /api/auth/logout
- * @desc    Logout user
- * @access  Private
- */
-router.post('/logout', authMiddleware.authenticate, authController.logout);
+// Google Sign-In (Client-side flow)
+router.post('/google-login', authController.googleLogin);
 
-/**
- * @route   POST /api/auth/refresh-token
- * @desc    Refresh access token
- * @access  Public
- */
+
+// Lấy thông tin người dùng hiện tại (bảo vệ bằng JWT)
+router.get('/me', passport.authenticate('jwt', { session: false }), authController.getMe);
+
+// Các route khác cũng được bảo vệ bằng 'jwt'
+router.post('/logout', passport.authenticate('jwt', { session: false }), authController.logout);
+router.patch('/change-password', passport.authenticate('jwt', { session: false }), validationMiddleware.validateBody(authSchema.changePasswordSchema), authController.changePassword);
+
+// Các route không thay đổi
 router.post('/refresh', authController.refreshToken);
-
-/**
- * @route   POST /api/auth/verify-email
- * @desc    Verify user's email address
- * @access  Public
- */
 router.post('/verify-email', validationMiddleware.validateQuery(authSchema.verifyEmailSchema), authController.verifyEmail);
-
-/**
- * @route   PATCH /api/auth/reset-password/:token
- * @desc    Reset password with token
- * @access  Public
- */
 router.patch('/reset-password/:token', validationMiddleware.validateBody(authSchema.resetPasswordSchema), authController.resetPassword);
-
-/**
- * @route   PATCH /api/auth/change-password
- * @desc    Change password (authenticated user)
- * @access  Private
- */
-router.patch('/change-password', authMiddleware.authenticate, validationMiddleware.validateBody(authSchema.changePasswordSchema), authController.changePassword);
-
-/**
- * @route   GET /api/auth/me
- * @desc    Get current user info
- * @access  Private
- */
-router.get('/me', authMiddleware.authenticate, authController.getMe);
-
-/**
- * @route   POST /api/auth/google
- * @desc    Google OAuth login
- * @access  Public
- */
-router.post('/google', validationMiddleware.validateBody(authSchema.googleLoginSchema), authController.googleLogin);
+router.post('/resend-verification-email', authController.resendEmailVerification);
 
 
 export default router;

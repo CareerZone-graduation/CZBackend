@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import passport from 'passport';
 import * as jobAlertController from '../controllers/jobAlert.controller.js';
 import * as authMiddleware from '../middleware/auth.middleware.js';
 import * as validationMiddleware from '../middleware/validation.middleware.js';
@@ -7,7 +8,7 @@ import * as commonSchema from '../schemas/common.schema.js';
 
 const router = Router();
 
-router.use(authMiddleware.authenticate, authMiddleware.candidateOnly);
+router.use(passport.authenticate('jwt', { session: false }), authMiddleware.candidateOnly);
 
 router.route('/')
     .post(validationMiddleware.validateBody(jobAlertSchema.createJobAlertSchema), jobAlertController.createJobAlert)

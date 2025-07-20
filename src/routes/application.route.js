@@ -1,4 +1,5 @@
 import express from 'express';
+import passport from 'passport';
 import * as applicationController from '../controllers/application.controller.js';
 import * as authMiddleware from '../middleware/auth.middleware.js';
 import * as validationMiddleware from '../middleware/validation.middleware.js';
@@ -10,7 +11,7 @@ const router = express.Router();
 // Route để lấy danh sách ứng viên đã ứng tuyển vào một công việc cụ thể
 router.get(
   '/jobs/:jobId/applications',
-  authMiddleware.authenticate,
+  passport.authenticate('jwt', { session: false }),
   authMiddleware.recruiterOnly,
   validationMiddleware.validateParams(applicationSchema.jobIdParam),
   validationMiddleware.validateQuery(applicationSchema.getApplicationsQuery),
@@ -20,7 +21,7 @@ router.get(
 // Route để xem chi tiết một đơn ứng tuyển
 router.get(
   '/:applicationId',
-  authMiddleware.authenticate,
+  passport.authenticate('jwt', { session: false }),
   authMiddleware.recruiterOnly,
   validationMiddleware.validateParams(applicationSchema.applicationIdParam),
   applicationController.getApplicationById
@@ -29,7 +30,7 @@ router.get(
 // Route để cập nhật trạng thái một đơn ứng tuyển
 router.patch(
   '/:applicationId/status',
-  authMiddleware.authenticate,
+  passport.authenticate('jwt', { session: false }),
   authMiddleware.recruiterOnly,
   validationMiddleware.validateParams(applicationSchema.applicationIdParam),
   validationMiddleware.validateBody(applicationSchema.updateApplicationStatusBody),
@@ -39,7 +40,7 @@ router.patch(
 // Route để đánh giá ứng viên
 router.patch(
   '/:applicationId/rating',
-  authMiddleware.authenticate,
+  passport.authenticate('jwt', { session: false }),
   authMiddleware.recruiterOnly,
   validationMiddleware.validateParams(applicationSchema.applicationIdParam),
   validationMiddleware.validateBody(applicationSchema.updateCandidateRatingBody),
@@ -49,7 +50,7 @@ router.patch(
 // Route để cập nhật ghi chú cho đơn ứng tuyển
 router.patch(
   '/:applicationId/notes',
-  authMiddleware.authenticate,
+  passport.authenticate('jwt', { session: false }),
   authMiddleware.recruiterOnly,
   validationMiddleware.validateParams(applicationSchema.applicationIdParam),
   validationMiddleware.validateBody(applicationSchema.updateApplicationNotesBody),
@@ -59,7 +60,7 @@ router.patch(
 // Route để nhà tuyển dụng tạo lịch phỏng vấn cho một đơn ứng tuyển
 router.post(
   '/:applicationId/interviews',
-  authMiddleware.authenticate,
+  passport.authenticate('jwt', { session: false }),
   authMiddleware.recruiterOnly,
   validationMiddleware.validateParams(applicationSchema.applicationIdParam),
   validationMiddleware.validateBody(interviewSchema.scheduleInterviewBody),

@@ -12,8 +12,7 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: [true, 'Password is required'],
-    minlength: [1, 'Password must be at least 1 characters long'],
+    required: false,
   },
   email: {
     type: String,
@@ -51,8 +50,8 @@ userSchema.index({ role: 1 });
  * Hash password before saving
  */
 userSchema.pre('save', async function(next) {
-  // Only hash the password if it has been modified (or is new)
-  if (!this.isModified('password')) return next();
+  // Only hash the password if it has been modified (or is new) and it exists
+  if (!this.password || !this.isModified('password')) return next();
   
   try {
     // Hash password with cost of 12

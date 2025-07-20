@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import passport from 'passport';
 import * as recruiterController from '../controllers/recruiter.controller.js';
 import * as authMiddleware from '../middleware/auth.middleware.js';
 
@@ -11,7 +12,7 @@ const router = Router();
  */
 router.get(
   '/profile',
-  authMiddleware.authenticate,
+  passport.authenticate('jwt', { session: false }),
   authMiddleware.recruiterOnly,
   recruiterController.getRecruiterProfile
 );

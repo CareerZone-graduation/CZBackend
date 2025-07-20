@@ -6,6 +6,8 @@ import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
+import passport from 'passport'; // Đảm bảo có import này
+import './config/passport.js'; // Import để cấu hình passport
 
 // ⚙️ Configuration
 import config from './config/index.js';
@@ -55,7 +57,7 @@ app.use(
 // CORS
 app.use(
     cors({
-        origin: "*" || config.CLIENT_URL || 'http://localhost:3000',
+        origin: ["http://localhost:3001","http://localhost:3000"],
         credentials: true,
         methods: ['GET', 'POST','PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
         allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
@@ -75,6 +77,9 @@ app.use(compression({ filter: shouldCompress }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
+
+// === KHỞI TẠO PASSPORT ===
+app.use(passport.initialize());
 
 // Health check
 app.get('/health', (_, res) =>

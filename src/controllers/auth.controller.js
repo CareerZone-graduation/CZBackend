@@ -1,11 +1,24 @@
 import asyncHandler from 'express-async-handler';
-import * as authService from "../services/auth.service.js"; // Revert to importing authService object
-import config from "../config/index.js";
-import crypto from "crypto";
-import logger from "../utils/logger.js";
+import * as authService from "../services/auth.service.js";
+import jwt from 'jsonwebtoken';
+import config from '../config/index.js';
 import { User } from '../models/index.js';
+import { OAuth2Client } from 'google-auth-library';
 import { NotFoundError, BadRequestError } from '../utils/AppError.js';
 import * as queueService from '../services/queue.service.js';
+import crypto from "crypto";
+import { CandidateProfile } from '../models/index.js';
+import logger from '../utils/logger.js';
+
+const client = new OAuth2Client(config.GOOGLE_CLIENT_ID);
+
+// Hàm tạo token có thể đặt ở đây hoặc trong service
+const generateTokens = (user) => {
+    const payload = { id: user._id, role: user.role };
+    const accessToken = jwt.sign(payload, config.JWT_SECRET, { expiresIn: '1d' });
+    const refreshToken = jwt.sign(payload, config.JWT_REFRESH_SECRET, { expiresIn: '7d' });
+    return { accessToken, refreshToken };
+};
 
 export const register = asyncHandler(async (req, res) => {
   const { refreshToken, ...userData } = await authService.register(req.body);
@@ -14,7 +27,7 @@ export const register = asyncHandler(async (req, res) => {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'Lax',
-    maxAge: 999999999,
+    maxAge: 999999999 || 7 * 24 * 60 * 60 * 1000,
   });
 
   res.status(201).json({
@@ -25,33 +38,104 @@ export const register = asyncHandler(async (req, res) => {
 });
 
 export const login = asyncHandler(async (req, res) => {
-  const { username, password } = req.body;
-  const { refreshToken, ...userData } = await authService.login(
-    username,
-    password
-  );
+    // Passport 'local' strategy đã xác thực user và gắn vào req.user
+    const { accessToken, refreshToken } = generateTokens(req.user);
 
-  // res.cookie('accessToken', accessToken, {
-  //   httpOnly: true,
-  //   secure: process.env.NODE_ENV === 'production',
-  //   sameSite: 'Lax',
-  //   maxAge: 999999999,
-  // });
+    res.cookie('refreshToken', refreshToken, {
+        httpOnly: true,
+        secure: config.NODE_ENV === 'production',
+        sameSite: 'Lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
 
-  res.cookie('refreshToken', refreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'Lax',
-    maxAge: 999999999,
-  });
-
-  res.json({
-    success: true,
-    message: 'Login successful',
-    data: userData,
-  });
+    res.json({
+        success: true,
+        message: 'Đăng nhập thành công',
+        data: {
+            accessToken,
+            id: req.user._id,
+            username: req.user.username,
+            role: req.user.role,
+            email: req.user.email,
+            active: req.user.active,
+            isEmailVerified: req.user.isEmailVerified,
+        },
+    });
 });
 
+export const googleLogin = asyncHandler(async (req, res) => {
+    const { token } = req.body;
+    const ticket = await client.verifyIdToken({
+        idToken: token,
+        audience: config.GOOGLE_CLIENT_ID,
+    });
+    logger.info(`Google login with token: ${token}, ticket: ${JSON.stringify(ticket.getPayload())}`);
+    const { name, email, picture: avatar } = ticket.getPayload();
+    logger.info(name, email, avatar);
+    let user = await User.findOne({ email });
+
+    if (!user) {
+        // If user doesn't exist with googleId, check if email is already in use
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+            // Link the Google account to the existing user
+            existingUser.isEmailVerified = true; // Email from Google is considered verified
+            await existingUser.save();
+            user = existingUser;
+        } else {
+            // Create a new user
+            const newUser = new User({
+                email,
+                username: email, // Use email as default username
+                isEmailVerified: true,
+                // role is decided after, default is 'candidate'
+            });
+            await newUser.save();
+            
+            // Create a corresponding profile
+            await CandidateProfile.create({
+                userId: newUser._id,
+                fullname: name,
+                avatar: avatar
+            });
+            user = newUser;
+        }
+    }
+
+    const { accessToken, refreshToken } = generateTokens(user);
+
+    res.cookie('refreshToken', refreshToken, {
+        httpOnly: true,
+        secure: config.NODE_ENV === 'production',
+        sameSite: 'Lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.json({
+        success: true,
+        message: 'Đăng nhập bằng Google thành công.',
+        data: {
+            accessToken,
+            id: user._id,
+            username: user.username,
+            email: user.email,
+            role: user.role,
+            active: user.active,
+            isEmailVerified: true,
+        },
+    });
+});
+
+
+export const getMe = asyncHandler(async (req, res) => {
+    // Passport 'jwt' strategy đã xác thực và gắn user vào req.user
+    const userProfile = await authService.getMe(req.user._id);
+    res.json({
+        success: true,
+        message: 'Lấy thông tin người dùng thành công',
+        data: userProfile
+    });
+});
 
 export const refreshToken = asyncHandler(async (req, res) => {
   const refreshToken = req.cookies.refreshToken;
@@ -66,8 +150,6 @@ export const refreshToken = asyncHandler(async (req, res) => {
 
 
 export const logout = asyncHandler(async (req, res) => {
-  // const { refreshToken } = req.body;
-  // get from cookies
   const refreshToken = req.cookies.refreshToken;
   await authService.logout(refreshToken);
   res.cookie('refreshToken', '', {
@@ -110,82 +192,29 @@ export const changePassword = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, message: 'Đổi mật khẩu thành công.' });
 });
 
-
-export const googleLogin = asyncHandler(async (req, res) => {
-    const { idToken } = req.body;
-    const { accessToken, refreshToken, user } = await authService.googleLogin(idToken);
-
-    res.cookie('refreshToken', refreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'Lax',
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
-
-    res.json({
-        success: true,
-        message: 'Đăng nhập bằng Google thành công.',
-        data: { accessToken, user },
-    });
-});
-
-export const getCurrentUser = asyncHandler(async (req, res) => {
-  const userId = req.user._id;
-  const user = await authService.validateSession(userId);
-
-  res.json({
-    success: true,
-    data: {
-      user: {
-        id: user._id,
-        email: user.email,
-        role: user.role,
-        isActive: user.isActive,
-        emailVerified: user.emailVerified,
-        lastLogin: user.lastLogin,
-      },
-    },
-  });
-});
-
-export const verifyToken = asyncHandler(async (req, res) => {
-  // If we reach here, the token is valid (middleware already validated)
-  res.json({
-    success: true,
-    message: "Token is valid",
-    data: {
-      user: req.user,
-    },
-  });
-});
-
-
 export const resendEmailVerification = asyncHandler(async (req, res) => {
   const { email } = req.body;
 
-  // Find user and generate new verification token
   const user = await User.findOne({ email });
   if (!user) {
     throw new NotFoundError('User not found');
   }
 
-  if (user.emailVerified) {
+  if (user.isEmailVerified) {
     throw new BadRequestError('Email already verified');
   }
 
-  // Generate new verification token
   const verificationToken = crypto.randomBytes(32).toString('hex');
   user.emailVerificationToken = verificationToken;
   user.emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
   await user.save();
 
-  // Queue verification email
   await queueService.sendEmail({
     to: email,
     subject: 'Verify Your Email - CareerConnect',
     template: 'email-verification',
-    data: {
-      name: user.firstName || 'User',
+    context: {
+      name: user.username || 'User',
       verificationUrl: `${config.CLIENT_URL}/verify-email?token=${verificationToken}`,
     },
   });
@@ -193,28 +222,5 @@ export const resendEmailVerification = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     message: 'Verification email sent successfully',
-  });
-});
-
-/**
- * @desc    Get current user info
- * @route   GET /api/auth/me
- * @access  Private
- */
-export const getMe = asyncHandler(async (req, res) => {
-  // req.user is set by the authenticate middleware
-  const user = await authService.getMe(req.user._id);
-
-  if (!user) {
-    return res.status(404).json({
-      success: false,
-      message: 'Người dùng không tồn tại'
-    });
-  }
-
-  res.json({
-    success: true,
-    message: 'Lấy thông tin người dùng thành công',
-    data: user
   });
 });

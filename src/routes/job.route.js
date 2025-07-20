@@ -1,4 +1,5 @@
 import express from 'express';
+import passport from 'passport';
 import * as validationMiddleware from '../middleware/validation.middleware.js';
 import * as authMiddleware from '../middleware/auth.middleware.js';
 import * as jobSchema from '../schemas/job.schema.js';
@@ -9,7 +10,7 @@ const router = express.Router();
 
 router.post(
   '/',
-  authMiddleware.authenticate,
+  passport.authenticate('jwt', { session: false }),
   authMiddleware.recruiterOnly,
   validationMiddleware.validateBody(jobSchema.createJobSchema),
   jobController.createJob
@@ -17,7 +18,7 @@ router.post(
 
 router.get(
   '/my-jobs',
-  authMiddleware.authenticate,
+  passport.authenticate('jwt', { session: false }),
   authMiddleware.recruiterOnly,
   validationMiddleware.validateQuery(jobSchema.jobQuerySchema),
   jobController.getMyJobs
@@ -25,14 +26,20 @@ router.get(
 
 router.get(
   '/:id',
-  authMiddleware.optionalAuthenticate,
+  (req, res, next) => {
+    if (req.headers.authorization) {
+      passport.authenticate('jwt', { session: false })(req, res, next);
+    } else {
+      next();
+    }
+  },
   validationMiddleware.validateParams(commonSchema.idParamSchema),
   jobController.getJobById
 );
 
 router.put(
   '/:id',
-  authMiddleware.authenticate,
+  passport.authenticate('jwt', { session: false }),
   authMiddleware.recruiterOnly,
   validationMiddleware.validateParams(commonSchema.idParamSchema),
   validationMiddleware.validateBody(jobSchema.updateJobSchema),
@@ -41,7 +48,7 @@ router.put(
 
 router.delete(
   '/:id',
-  authMiddleware.authenticate,
+  passport.authenticate('jwt', { session: false }),
   authMiddleware.recruiterOnly,
   validationMiddleware.validateParams(commonSchema.idParamSchema),
   jobController.deleteJob
@@ -49,7 +56,7 @@ router.delete(
 
 router.post(
   '/:id/applicant-count',
-  authMiddleware.authenticate,
+  passport.authenticate('jwt', { session: false }),
   authMiddleware.candidateOnly,
   validationMiddleware.validateParams(commonSchema.idParamSchema),
   jobController.getApplicantCount
@@ -57,7 +64,7 @@ router.post(
 
 router.post(
   '/:id/apply',
-  authMiddleware.authenticate,
+  passport.authenticate('jwt', { session: false }),
   authMiddleware.candidateOnly,
   validationMiddleware.validateParams(commonSchema.idParamSchema),
   validationMiddleware.validateBody(jobSchema.applyToJobSchema),
@@ -66,7 +73,7 @@ router.post(
 
 router.post(
   '/:id/save',
-  authMiddleware.authenticate,
+  passport.authenticate('jwt', { session: false }),
   authMiddleware.candidateOnly,
   validationMiddleware.validateParams(commonSchema.idParamSchema),
   jobController.saveJob
@@ -74,7 +81,7 @@ router.post(
 
 router.delete(
   '/:id/save',
-  authMiddleware.authenticate,
+  passport.authenticate('jwt', { session: false }),
   authMiddleware.candidateOnly,
   validationMiddleware.validateParams(commonSchema.idParamSchema),
   jobController.unsaveJob
@@ -82,7 +89,7 @@ router.delete(
 
 router.get(
   '/saved/list',
-  authMiddleware.authenticate,
+  passport.authenticate('jwt', { session: false }),
   authMiddleware.candidateOnly,
   validationMiddleware.validateQuery(jobSchema.jobQuerySchema),
   jobController.getSavedJobs

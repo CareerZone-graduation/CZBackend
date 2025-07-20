@@ -1,4 +1,5 @@
 import express from 'express';
+import passport from 'passport';
 import * as paymentController from '../controllers/payment.controller.js';
 import * as authMiddleware from '../middleware/auth.middleware.js';
 import * as validationMiddleware from '../middleware/validation.middleware.js';
@@ -9,7 +10,7 @@ const router = express.Router();
 // Create a new payment order
 router.post(
     '/create-order',
-    authMiddleware.authenticate,
+    passport.authenticate('jwt', { session: false }),
     validationMiddleware.validateBody(paymentSchema.createOrderSchema),
     paymentController.createPaymentOrder
 );

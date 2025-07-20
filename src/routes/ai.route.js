@@ -6,6 +6,6 @@ import * as authMiddleware from '../middleware/auth.middleware.js';
 
 const router = Router();
 
-router.post('/chat', authMiddleware.authenticate, asyncHandler(aiController.chatWithBot));
+router.post('/chat', authMiddleware.authenticated, asyncHandler(aiController.chatWithBot));
 
 export default router;

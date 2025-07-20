@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import passport from 'passport';
 import * as companyController from '../controllers/company.controller.js';
 import * as authMiddleware from '../middleware/auth.middleware.js';
 import * as validationMiddleware from '../middleware/validation.middleware.js';
@@ -11,7 +12,7 @@ const router = Router();
 // Recruiter creates a company
 router.post(
   '/',
-  authMiddleware.authenticate,
+  passport.authenticate('jwt', { session: false }),
   authMiddleware.recruiterOnly,
   uploadMiddleware.upload.single('businessRegistrationFile'), // Field name for the file
   companyController.createCompany,
@@ -21,11 +22,11 @@ router.post(
 
 // === Recruiter Routes ===
 // Đặt các route cụ thể như 'my-company' LÊN TRÊN các route có tham số động
-router.get('/my-company', authMiddleware.authenticate, authMiddleware.recruiterOnly, companyController.getMyCompany);
+router.get('/my-company', passport.authenticate('jwt', { session: false }), authMiddleware.recruiterOnly, companyController.getMyCompany);
 
 router.patch(
   '/my-company',
-  authMiddleware.authenticate,
+  passport.authenticate('jwt', { session: false }),
   authMiddleware.recruiterOnly,
   uploadMiddleware.upload.single('businessRegistrationFile'), // Field name for the file
   companyController.updateMyCompany
@@ -33,7 +34,7 @@ router.patch(
 
 router.post(
   '/my-company/logo',
-  authMiddleware.authenticate,
+  passport.authenticate('jwt', { session: false }),
   authMiddleware.recruiterOnly,
   uploadMiddleware.upload.single('logo'),
   companyController.updateMyCompanyLogo
