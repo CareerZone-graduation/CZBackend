@@ -4,6 +4,7 @@ import CandidateProfile from '../models/CandidateProfile.js';
 import InterviewRoom from '../models/InterviewRoom.js';
 import { NotFoundError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
+import mongoose from 'mongoose';
 
 // =================================================================
 // Chức năng CRUD Thông báo (Phần tôi vừa thêm)
@@ -138,7 +139,6 @@ export const processNotification = async (payload) => {
       logger.info(`Successfully created notification for application ${applicationId}`);
       break;
     }
-    // TODO:
     // case 'INTERVIEW_REMINDER': {
     //   const { interviewId } = payload.data;
     //   logger.info(`Handling interview reminder for interview ID: ${interviewId}`);
@@ -185,10 +185,38 @@ export const processNotification = async (payload) => {
     //   logger.info(`Successfully created 2 interview reminders for interview ${interviewId}`);
     //   break;
     // }
-    // case 'DAILY_JOB_ALERT':
-    //   // Logic xử lý gửi job alert
-    //   logger.info(`Sending daily job alert for user ID: ${payload.userId}`);
-    //   break;
+    case 'DAILY_JOB_ALERT': {
+      const { recipientId, data } = payload;
+      const { keyword, jobs } = data;
+
+      if (!recipientId || !jobs || jobs.length === 0) {
+        logger.warn('DAILY_JOB_ALERT payload is missing recipientId or jobs.', payload);
+        return; // Bỏ qua nếu payload không hợp lệ
+      }
+
+      const title = `Việc làm mới hàng ngày`;
+      const message = `Chúng tôi đã tìm thấy ${jobs.length} công việc mới phù hợp với từ khóa "${keyword}" của bạn.`;
+
+      await Notification.create({
+        userId: new mongoose.Types.ObjectId(recipientId),
+        title,
+        message,
+        type: 'job_alert',
+        entity: {
+          type: 'Job',
+          // Lưu danh sách ID job để có thể click vào xem chi tiết
+          ids: jobs.map(j => j._id),
+        },
+        metadata: {
+          jobCount: jobs.length,
+          keyword,
+        },
+      });
+
+      // TODO: Implement email sending logic here if notificationMethod is 'EMAIL' or 'BOTH'
+      logger.info(`Successfully created daily job alert notification for user ${recipientId}`);
+      break;
+    }
     default:
       logger.warn('Unknown notification type:', payload.type);
   }

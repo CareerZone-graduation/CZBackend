@@ -107,6 +107,11 @@ const jobSchema = new mongoose.Schema({
     },
     required: [true, 'Job category is required']
   },
+  skills: [{
+    type: String,
+    trim: true,
+    maxlength: [50, 'Skill name cannot exceed 50 characters']
+  }],
   area: {
     type: String,
     enum: {

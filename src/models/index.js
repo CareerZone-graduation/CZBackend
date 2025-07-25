@@ -12,3 +12,4 @@ export { default as CoinRecharge } from './CoinRecharge.js';
 export { default as CV } from './CV.js';
 export { default as Conversation } from './Conversation.js';
 export { default as CandidateProfile } from './CandidateProfile.js';
+export { default as PendingNotification } from './PendingNotification.js';

@@ -8,7 +8,8 @@
     "start": "nodemon src/server.js",
     "dev": "nodemon --trace-warnings src/server.js",
     "prod": "node src/server.js",
-    "worker": "nodemon workers/notification.worker.js"
+    "worker:notification": "nodemon workers/notification.worker.js",
+    "worker:matching": "nodemon workers/matching.worker.js"
   },
   "keywords": [
     "job",
