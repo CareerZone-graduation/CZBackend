@@ -116,13 +116,12 @@ export const getJobsByRecruiter = async (userId, options) => {
   const jobs = await Job.find(query)
     .sort(sortOptions)
     .skip(skip)
-    .limit(limit)
-    .lean();
+    .limit(limit);
 
   const totalJobs = await Job.countDocuments(query);
 
   return {
-    data: jobs,
+    data: jobs.map(job => job.toObject()),
     meta: {
       currentPage: page,
       totalPages: Math.ceil(totalJobs / limit),
@@ -139,14 +138,16 @@ export const getJobsByRecruiter = async (userId, options) => {
  * @returns {Promise<Document>} Chi tiết tin tuyển dụng
  */
 export const getJobById = async (jobId, userId = null) => {
-    const job = await Job.findById(jobId).populate({
+    const jobDoc = await Job.findById(jobId).populate({
         path: 'recruiterProfileId',
         select: 'company.name company.logo'
-    }).lean();
+    });
 
-    if (!job) {
+    if (!jobDoc) {
         throw new NotFoundError('Không tìm thấy tin tuyển dụng.');
     }
+    
+    const job = jobDoc.toObject();
     
     // Gửi sự kiện xem việc làm nếu có userId
     if (userId) {
@@ -491,8 +492,8 @@ export const getSavedJobs = async (userId, options) => {
           _id: 1,
           jobId: '$job._id',
           title: '$job.title',
-          minSalary: '$job.minSalary',
-          maxSalary: '$job.maxSalary',
+          minSalary: { $toString: '$job.minSalary' },
+          maxSalary: { $toString: '$job.maxSalary' },
           deadline: '$job.deadline',
           area: '$job.area',
           company: {

@@ -59,15 +59,17 @@ const jobSchema = new mongoose.Schema({
     required: [true, 'Work type is required']
   },
   minSalary: {
-    type: Number,
-    min: [0, 'Minimum salary cannot be negative']
+    type: mongoose.Schema.Types.Decimal128,
+    get: v => v?.toString()
   },
   maxSalary: {
-    type: Number,
-    min: [0, 'Maximum salary cannot be negative'],
+    type: mongoose.Schema.Types.Decimal128,
+    get: v => v?.toString(),
     validate: {
       validator: function(value) {
-        return this.minSalary === undefined || value >= this.minSalary;
+        // Ensure this.minSalary is defined and compare their string representations as numbers
+        if (this.minSalary === undefined) return true;
+        return parseFloat(value.toString()) >= parseFloat(this.minSalary.toString());
       },
       message: 'Maximum salary must be greater than or equal to minimum salary'
     }
@@ -128,7 +130,9 @@ const jobSchema = new mongoose.Schema({
     required: [true, 'Recruiter ID is required']
   },
 }, {
-  timestamps: true
+  timestamps: true,
+  toJSON: { getters: true },
+  toObject: { getters: true }
 });
 
 // Create indexes for better search and query performance
