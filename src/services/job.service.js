@@ -120,8 +120,31 @@ export const getJobsByRecruiter = async (userId, options) => {
 
   const totalJobs = await Job.countDocuments(query);
 
+  const plainJobs = jobs.map(job => ({
+    _id: job._id,
+    title: job.title,
+    description: job.description,
+    requirements: job.requirements,
+    benefits: job.benefits,
+    location: job.location,
+    address: job.address,
+    type: job.type,
+    workType: job.workType,
+    minSalary: job.minSalary?.toString(),
+    maxSalary: job.maxSalary?.toString(),
+    deadline: job.deadline,
+    experience: job.experience,
+    category: job.category,
+    skills: job.skills,
+    status: job.status,
+    approved: job.approved,
+    recruiterProfileId: job.recruiterProfileId,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+  }));
+
   return {
-    data: jobs.map(job => job.toObject()),
+    data: plainJobs,
     meta: {
       currentPage: page,
       totalPages: Math.ceil(totalJobs / limit),
@@ -129,6 +152,67 @@ export const getJobsByRecruiter = async (userId, options) => {
       limit,
     },
   };
+};
+
+/**
+ * Lấy chi tiết một tin tuyển dụng cho nhà tuyển dụng (bao gồm các thống kê)
+ * @param {string} jobId - ID của tin tuyển dụng
+ * @param {string} userId - ID của nhà tuyển dụng
+ * @returns {Promise<object>} Chi tiết tin tuyển dụng và thống kê
+ */
+export const getJobDetailsForRecruiter = async (jobId, userId) => {
+  // 1. Xác thực nhà tuyển dụng và quyền sở hữu tin tuyển dụng
+  const recruiterProfile = await findRecruiterProfileByUserId(userId);
+  const job = await Job.findById(jobId).lean();
+
+  if (!job) {
+    throw new NotFoundError('Không tìm thấy tin tuyển dụng.');
+  }
+  if (job.recruiterProfileId.toString() !== recruiterProfile._id.toString()) {
+    throw new UnauthorizedError('Bạn không có quyền xem chi tiết tin tuyển dụng này.');
+  }
+
+  // 2. Sử dụng Aggregation Pipeline để lấy thống kê từ model Application
+  const statsPipeline = [
+    { $match: { jobId: new mongoose.Types.ObjectId(jobId) } },
+    {
+      $group: {
+        _id: '$jobId',
+        totalApplications: { $sum: 1 },
+        totalReapplications: {
+          $sum: { $cond: [{ $eq: ['$isReapplied', true] }, 1, 0] }
+        },
+        // Thống kê theo từng trạng thái
+        pendingCount: { $sum: { $cond: [{ $eq: ['$status', 'PENDING'] }, 1, 0] } },
+        reviewingCount: { $sum: { $cond: [{ $eq: ['$status', 'REVIEWING'] }, 1, 0] } },
+        interviewedCount: { $sum: { $cond: [{ $eq: ['$status', 'INTERVIEWED'] }, 1, 0] } },
+        acceptedCount: { $sum: { $cond: [{ $eq: ['$status', 'ACCEPTED'] }, 1, 0] } },
+        rejectedCount: { $sum: { $cond: [{ $eq: ['$status', 'REJECTED'] }, 1, 0] } },
+      }
+    }
+  ];
+
+  const [stats] = await Application.aggregate(statsPipeline);
+
+  // 3. Kết hợp thông tin tin tuyển dụng và thống kê
+  const result = {
+    ...job,
+    minSalary: job.minSalary ? parseFloat(job.minSalary.toString()) : null,
+    maxSalary: job.maxSalary ? parseFloat(job.maxSalary.toString()) : null,
+    stats: {
+      totalApplications: stats?.totalApplications || 0,
+      totalReapplications: stats?.totalReapplications || 0,
+      byStatus: {
+        pending: stats?.pendingCount || 0,
+        reviewing: stats?.reviewingCount || 0,
+        interviewed: stats?.interviewedCount || 0,
+        accepted: stats?.acceptedCount || 0,
+        rejected: stats?.rejectedCount || 0,
+      }
+    }
+  };
+
+  return result;
 };
 
 /**

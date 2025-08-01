@@ -52,7 +52,7 @@ const applicationSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: {
-      values: ['PENDING', 'REVIEWING', 'INTERVIEWED', 'ACCEPTED', 'REJECTED', 'WITHDRAWN'],
+      values: ['PENDING', 'REVIEWING', 'SCHEDULED_INTERVIEW', 'INTERVIEWED', 'ACCEPTED', 'REJECTED', 'WITHDRAWN'],
       message: '{VALUE} is not a valid application status'
     },
     default: 'PENDING',

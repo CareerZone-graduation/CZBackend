@@ -23,6 +23,13 @@ router.get(
   validationMiddleware.validateQuery(jobSchema.jobQuerySchema),
   jobController.getMyJobs
 );
+router.get(
+  '/recruiter/:id',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.recruiterOnly,
+  validationMiddleware.validateParams(commonSchema.idParamSchema),
+  jobController.getJobDetailsForRecruiter
+);
 
 router.get(
   '/:id',
@@ -36,6 +43,7 @@ router.get(
   validationMiddleware.validateParams(commonSchema.idParamSchema),
   jobController.getJobById
 );
+
 
 router.put(
   '/:id',
@@ -86,6 +94,7 @@ router.delete(
   validationMiddleware.validateParams(commonSchema.idParamSchema),
   jobController.unsaveJob
 );
+
 
 router.get(
   '/saved/list',

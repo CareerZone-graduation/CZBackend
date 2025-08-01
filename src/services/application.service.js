@@ -168,13 +168,23 @@ export const getApplicationById = async (applicationId, recruiterId) => {
     throw new NotFoundError('Không tìm thấy thông tin ứng viên');
   }
 
+  // Lấy thông tin phỏng vấn nếu có
+  const interview = await InterviewRoom.findOne({ applicationId: application._id }).lean();
+
   // Tạo và trả về đối tượng thông tin
   const applicationDetails = {
     ...application.toObject(),
-    candidateAvatar: candidateProfile.avatar
+    candidateAvatar: candidateProfile.avatar,
+    hasInterview: !!interview,
+    interviewInfo: interview
+      ? {
+          interviewId: interview._id,
+          scheduledTime: interview.scheduledTime,
+          status: interview.status,
+          roomName: interview.roomName,
+        }
+      : null,
   };
-
-
 
   return applicationDetails;
 };
@@ -374,7 +384,7 @@ export const scheduleInterview = async (applicationId, recruiterId, scheduledTim
   });
 
   // 5. Cập nhật trạng thái đơn ứng tuyển thành 'INTERVIEWED'
-  application.status = 'INTERVIEWED';
+  application.status = 'SCHEDULED_INTERVIEW';
   application.lastStatusUpdateAt = new Date();
   await application.save();
 
@@ -387,7 +397,7 @@ export const scheduleInterview = async (applicationId, recruiterId, scheduledTim
       applicationId: application._id.toString(),
       jobTitle: job.title,
       companyName: job.companyName, // Giả sử có trường này trong model Job
-      newStatus: 'INTERVIEWED',
+      newStatus: 'SCHEDULED_INTERVIEW',
     },
   });
 

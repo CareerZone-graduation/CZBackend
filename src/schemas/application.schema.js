@@ -23,7 +23,7 @@ export const getApplicationsQuery = z.object({
 
 // Validation schema cho cập nhật trạng thái đơn ứng tuyển
 export const updateApplicationStatusBody = z.object({
-  status: z.enum(['PENDING', 'REVIEWING', 'INTERVIEWED', 'ACCEPTED', 'REJECTED', 'WITHDRAWN'], {
+  status: z.enum(['PENDING', 'REVIEWING', 'INTERVIEWED', 'ACCEPTED', 'REJECTED', 'WITHDRAWN', 'SCHEDULED_INTERVIEW'], {
     errorMap: () => ({ message: 'Status không hợp lệ' })
   })
 });

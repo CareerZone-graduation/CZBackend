@@ -121,3 +121,14 @@ export const getSavedJobs = asyncHandler(async (req, res) => {
     data: result.data,
   });
 });
+
+export const getJobDetailsForRecruiter = asyncHandler(async (req, res) => {
+  const { id: jobId } = req.params;
+  const userId = req.user._id;
+  const jobDetails = await jobService.getJobDetailsForRecruiter(jobId, userId);
+  res.status(200).json({
+    success: true,
+    message: 'Lấy chi tiết tin tuyển dụng cho nhà tuyển dụng thành công.',
+    data: jobDetails,
+  });
+});
