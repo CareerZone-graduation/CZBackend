@@ -1,5 +1,4 @@
 import mongoose from 'mongoose';
-import { LOCATIONS } from '../constants/index.js';
 
 const jobAlertSubscriptionSchema = new mongoose.Schema({
   candidateId: {
@@ -14,21 +13,13 @@ const jobAlertSubscriptionSchema = new mongoose.Schema({
     maxlength: [100, 'Keyword cannot exceed 100 characters']
   },
   location: {
-    city: {
+    province: {
       type: String,
-      required: [true, 'City is required'],
-      enum: {
-          values: LOCATIONS.CITIES,
-          message: '{VALUE} is not a valid city'
-      }
+      required: true,
     },
-    district: {
-      type: String,
-      required: [true, 'District is required'],
-      enum: {
-          values: LOCATIONS.DISTRICTS,
-          message: '{VALUE} is not a valid district'
-      }
+    // Ward is optional, user can subscribe to a whole province
+    ward: {
+      type: String, 
     }
   },
   frequency: {

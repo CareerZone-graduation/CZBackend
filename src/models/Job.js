@@ -1,5 +1,4 @@
 import mongoose from 'mongoose';
-import { LOCATIONS } from '../constants/index.js';
 
 
 const jobSchema = new mongoose.Schema({
@@ -28,28 +27,20 @@ const jobSchema = new mongoose.Schema({
     maxlength: [2000, 'Job benefits cannot exceed 2000 characters']
   },
   location: {
-    city: {
+    province: {
       type: String,
-      required: [true, 'City is required'],
-      enum: {
-          values: LOCATIONS.CITIES,
-          message: '{VALUE} is not a valid city'
-      }
+      required: [true, 'Province/City is required']
     },
-    district: {
+    ward: {
       type: String,
-      required: [true, 'District is required'],
-      enum: {
-          values: LOCATIONS.DISTRICTS,
-          message: '{VALUE} is not a valid district'
-      }
-    },
-    address: {
-      type: String,
-      required: [true, 'Address is required'],
-      trim: true,
-      maxlength: [200, 'Address cannot exceed 200 characters']
+      required: [true, 'Ward/District is required']
     }
+  },
+  address: {
+    type: String,
+    required: [true, 'Address is required'],
+    trim: true,
+    maxlength: [200, 'Address cannot exceed 200 characters']
   },
   type: {
     type: String,
@@ -141,13 +132,14 @@ const jobSchema = new mongoose.Schema({
 });
 
 // Create indexes for better search and query performance
-jobSchema.index({ title: 'text', description: 'text', 'location.city': 'text' }); // Updated text index to include city
+jobSchema.index({ title: 'text', description: 'text', 'location.province': 'text', 'location.ward': 'text' });
 jobSchema.index({ recruiterProfileId: 1 }); 
 jobSchema.index({ type: 1 });
 jobSchema.index({ workType: 1 }); // Added index for workType
 jobSchema.index({ category: 1 });
 jobSchema.index({ experience: 1 });
-jobSchema.index({ 'location.city': 1 }); // Added index for location city
+jobSchema.index({ 'location.province': 1 });
+jobSchema.index({ 'location.ward': 1 });
 jobSchema.index({ status: 1 }); // Added index for status
 jobSchema.index({ approved: 1 }); // Added index for approved
 jobSchema.index({ deadline: 1 });
@@ -156,6 +148,6 @@ jobSchema.index({ createdAt: -1 });
 // Compound indexes for common queries
 jobSchema.index({ status: 1, approved: 1, deadline: 1 }); // Updated compound index
 jobSchema.index({ category: 1, type: 1, workType: 1, status: 1 }); // Updated compound index
-jobSchema.index({ 'location.city': 1, category: 1, status: 1 }); // New compound index for location and category
+jobSchema.index({ 'location.province': 1, 'location.ward': 1, category: 1, status: 1 });
 
 export default mongoose.model('Job', jobSchema);
