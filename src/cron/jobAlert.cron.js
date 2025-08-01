@@ -7,7 +7,7 @@ import { ROUTING_KEYS } from '../queues/rabbitmq.js';
 import JobAlertSubscription from '../models/JobAlertSubscription.js';
 import Job from '../models/Job.js';
 // tạm thời đổi thành mỗi 5s để kiểm tra
-cron.schedule('*/5 * * * * *', async () => {
+cron.schedule('*/555555 * * * * *', async () => {
 // cron.schedule('0 8 * * *', async () => {
     logger.info('Running daily digest cron job...');
     try {
