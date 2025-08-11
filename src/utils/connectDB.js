@@ -3,6 +3,12 @@ import config from '../config/index.js';
 import logger from './logger.js';
 
 const connectDB = async () => {
+  // Don't connect to the database in a test environment
+  // The test setup will handle the in-memory database connection
+  if (config.NODE_ENV === 'test') {
+    return;
+  }
+
   try {
     const conn = await mongoose.connect(config.DB_URI);
 
