@@ -1,0 +1,567 @@
+import { Job, User, RecruiterProfile, CandidateProfile, Application, CoinRecharge } from '../models/index.js';
+import { NotFoundError, BadRequestError, UnauthorizedError } from '../utils/AppError.js';
+import mongoose from 'mongoose';
+import * as queueService from './queue.service.js';
+import { ROUTING_KEYS } from '../queues/rabbitmq.js';
+
+// === QUẢN LÝ TIN TUYỂN DỤNG ===
+
+export const getJobsForAdmin = async (queryParams) => {
+  const { page = 1, limit = 10, search, company, status, sort = '-createdAt' } = queryParams;
+  
+  const filter = {};
+  
+  // Tìm kiếm theo title hoặc công ty
+  if (search) {
+    // Nếu có search, tìm trong cả title và company name
+    const searchFilter = [
+      { title: { $regex: search, $options: 'i' } }
+    ];
+    
+    // Tìm RecruiterProfile có company name khớp
+    const matchingCompanies = await RecruiterProfile.find({
+      'company.name': { $regex: search, $options: 'i' }
+    }).select('_id');
+    
+    if (matchingCompanies.length > 0) {
+      searchFilter.push({
+        recruiterProfileId: { $in: matchingCompanies.map(c => c._id) }
+      });
+    }
+    
+    filter.$or = searchFilter;
+  }
+  
+  // Lọc theo công ty cụ thể (nếu có)
+  if (company) {
+    const companyProfiles = await RecruiterProfile.find({
+      'company.name': { $regex: company, $options: 'i' }
+    }).select('_id');
+    
+    if (companyProfiles.length > 0) {
+      filter.recruiterProfileId = { $in: companyProfiles.map(c => c._id) };
+    } else {
+      // Nếu không tìm thấy công ty nào, trả về empty result
+      return {
+        meta: { currentPage: page, totalPages: 0, total: 0, hasNextPage: false, hasPrevPage: false },
+        data: []
+      };
+    }
+  }
+  
+  if (status === 'pending') {
+    filter.approved = false;
+  } else if (status === 'approved') {
+    filter.approved = true;
+  }
+  
+  const skip = (page - 1) * limit;
+  
+  const [jobs, total] = await Promise.all([
+    Job.find(filter)
+      .populate({
+        path: 'recruiterProfileId',
+        select: 'company.name company.logo'
+      })
+      .select('title description approved status createdAt recruiterProfileId')
+      .sort(sort)
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    Job.countDocuments(filter)
+  ]);
+  
+  const totalPages = Math.ceil(total / limit);
+  
+  return {
+    meta: {
+      currentPage: page,
+      totalPages,
+      totalItems: total,
+      limit
+    },
+    data: jobs
+  };
+};
+
+export const getJobDetail = async (jobId) => {
+  const job = await Job.findById(jobId)
+    .populate({
+      path: 'recruiterProfileId',
+      select: 'fullname company.name company.logo company.about company.industry verified userId',
+      populate: {
+        path: 'userId',
+        select: 'username email'
+      }
+    })
+    .lean();
+  
+  if (!job) {
+    throw new NotFoundError('Tin tuyển dụng không tồn tại.');
+  }
+  
+  return job;
+};
+
+export const approveJob = async (jobId) => {
+  const updatedJob = await Job.findByIdAndUpdate(
+    jobId,
+    { approved: true },
+    { new: true }
+  );
+  
+  if (!updatedJob) {
+    throw new NotFoundError('Tin tuyển dụng không tồn tại.');
+  }
+  
+  return updatedJob;
+};
+
+export const rejectJob = async (jobId) => {
+  const updatedJob = await Job.findByIdAndUpdate(
+    jobId,
+    { approved: false, status: 'INACTIVE' },
+    { new: true }
+  );
+  
+  if (!updatedJob) {
+    throw new NotFoundError('Tin tuyển dụng không tồn tại.');
+  }
+  
+  return updatedJob;
+};
+
+// === QUẢN LÝ NGƯỜI DÙNG ===
+
+export const getUsersForAdmin = async (queryParams) => {
+  const { page = 1, limit = 10, search, status, role, sort = '-createdAt' } = queryParams;
+  
+  const filter = {};
+  
+  // Tìm kiếm theo username, email hoặc fullname
+  if (search) {
+    const userFilter = [
+      { username: { $regex: search, $options: 'i' } },
+      { email: { $regex: search, $options: 'i' } }
+    ];
+    
+    // Tìm trong RecruiterProfile (fullname) nếu không phải chỉ candidate
+    if (role !== 'candidate') {
+      const matchingRecruiters = await RecruiterProfile.find({
+        fullname: { $regex: search, $options: 'i' }
+      }).select('userId');
+      
+      if (matchingRecruiters.length > 0) {
+        userFilter.push({
+          _id: { $in: matchingRecruiters.map(r => r.userId) }
+        });
+      }
+    }
+    
+    // Tìm trong CandidateProfile (fullname) nếu không phải chỉ recruiter
+    if (role !== 'recruiter') {
+      const matchingCandidates = await CandidateProfile.find({
+        fullname: { $regex: search, $options: 'i' }
+      }).select('userId');
+      
+      if (matchingCandidates.length > 0) {
+        userFilter.push({
+          _id: { $in: matchingCandidates.map(c => c.userId) }
+        });
+      }
+    }
+    
+    filter.$or = userFilter;
+  }
+  
+  // Lọc theo trạng thái
+  if (status === 'active') {
+    filter.active = true;
+  } else if (status === 'banned') {
+    filter.active = false;
+  }
+  
+  // Lọc theo role
+  if (role) {
+    filter.role = role;
+  }
+  
+  const skip = (page - 1) * limit;
+  
+  const [users, total] = await Promise.all([
+    User.find(filter)
+      .select('username email role active createdAt')
+      .sort(sort)
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    User.countDocuments(filter)
+  ]);
+  
+  // Lấy thông tin fullname cho tất cả users
+  const userIds = users.map(u => u._id);
+  const recruiterProfiles = await RecruiterProfile.find({
+    userId: { $in: userIds }
+  }).select('userId fullname').lean();
+  
+  const candidateProfiles = await CandidateProfile.find({
+    userId: { $in: userIds }
+  }).select('userId fullname').lean();
+  
+  // Map fullname từ cả RecruiterProfile và CandidateProfile
+  const recruiterMap = recruiterProfiles.reduce((acc, profile) => {
+    acc[profile.userId.toString()] = profile.fullname;
+    return acc;
+  }, {});
+  
+  const candidateMap = candidateProfiles.reduce((acc, profile) => {
+    acc[profile.userId.toString()] = profile.fullname;
+    return acc;
+  }, {});
+  
+  // Tạo cấu trúc cố định cho tất cả users
+  const usersWithFullname = users.map(user => ({
+    _id: user._id,
+    email: user.email,
+    role: user.role,
+    username: user.username,
+    active: user.active,
+    createdAt: user.createdAt,
+    fullname: user.role === 'recruiter' 
+      ? recruiterMap[user._id.toString()] || null 
+      : candidateMap[user._id.toString()] || null
+  }));
+  
+  const totalPages = Math.ceil(total / limit);
+  
+  return {
+    meta: {
+      currentPage: page,
+      totalPages,
+      totalItems: total,
+      limit
+    },
+    data: usersWithFullname
+  };
+};
+
+export const updateUserStatus = async (userId, statusData) => {
+  if (statusData.status === 'admin') {
+    throw new BadRequestError('Không thể thay đổi trạng thái của admin.');
+  }
+  
+  const isActive = statusData.status === 'active';
+  
+  const updatedUser = await User.findByIdAndUpdate(
+    userId,
+    { active: isActive },
+    { new: true }
+  ).select('username email role active');
+  
+  if (!updatedUser) {
+    throw new NotFoundError('Người dùng không tồn tại.');
+  }
+  
+  return updatedUser;
+};
+
+// === QUẢN LÝ CÔNG TY ===
+
+export const getCompaniesForAdmin = async (queryParams) => {
+  const { page = 1, limit = 10, search, verified, sort = '-createdAt' } = queryParams;
+  
+  const filter = {};
+  
+  if (search) {
+    const searchFilter = [
+      { 'company.name': { $regex: search, $options: 'i' } },
+      { fullname: { $regex: search, $options: 'i' } }
+    ];
+    filter.$or = searchFilter;
+  }
+  
+  // Lọc theo trạng thái xác thực
+  if (verified !== undefined) {
+    filter['company.verified'] = verified === 'true';
+  }
+  
+  const skip = (page - 1) * limit;
+  
+  const [recruiterProfiles, total] = await Promise.all([
+    RecruiterProfile.find(filter)
+      .populate({
+        path: 'userId',
+        select: 'username email active createdAt'
+      })
+      .select('fullname company createdAt userId')
+      .sort(sort)
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    RecruiterProfile.countDocuments(filter)
+  ]);
+  
+  // Tạo cấu trúc response cố định cho hồ sơ nhà tuyển dụng
+  const formattedData = recruiterProfiles.map(profile => ({
+    _id: profile._id,
+    recruiterInfo: {
+      fullname: profile.fullname,
+      userId: profile.userId._id,
+      username: profile.userId.username,
+      email: profile.userId.email,
+      active: profile.userId.active,
+      userCreatedAt: profile.userId.createdAt
+    },
+    company: {
+      name: profile.company?.name || null,
+      about: profile.company?.about || null,
+      logo: profile.company?.logo || null,
+      industry: profile.company?.industry || null,
+      taxCode: profile.company?.taxCode || null,
+      businessRegistrationUrl: profile.company?.businessRegistrationUrl || null,
+      size: profile.company?.size || null,
+      website: profile.company?.website || null,
+      address: {
+        street: profile.company?.address?.street || null,
+        city: profile.company?.address?.city || null,
+        country: profile.company?.address?.country || null
+      },
+      contactInfo: {
+        email: profile.company?.contactInfo?.email || null,
+        phone: profile.company?.contactInfo?.phone || null
+      },
+      verified: profile.company?.verified || false
+    },
+    profileCreatedAt: profile.createdAt
+  }));
+  
+  const totalPages = Math.ceil(total / limit);
+  
+  return {
+    meta: {
+      currentPage: page,
+      totalPages,
+      totalItems: total,
+      limit
+    },
+    data: formattedData
+  };
+};
+
+
+export const getCompanyDetail = async (companyId) => {
+  const recruiterProfile = await RecruiterProfile.findById(companyId)
+    .populate({
+      path: 'userId',
+      select: 'username email active createdAt'
+    })
+    .lean();
+  
+  if (!recruiterProfile) {
+    throw new NotFoundError('Hồ sơ nhà tuyển dụng không tồn tại.');
+  }
+  
+  // Trả về cấu trúc chi tiết đầy đủ
+  return {
+    _id: recruiterProfile._id,
+    recruiterInfo: {
+      fullname: recruiterProfile.fullname,
+      userId: recruiterProfile.userId._id,
+      username: recruiterProfile.userId.username,
+      email: recruiterProfile.userId.email,
+      active: recruiterProfile.userId.active,
+      userCreatedAt: recruiterProfile.userId.createdAt
+    },
+    company: {
+      name: recruiterProfile.company?.name || null,
+      about: recruiterProfile.company?.about || null,
+      logo: recruiterProfile.company?.logo || null,
+      industry: recruiterProfile.company?.industry || null,
+      taxCode: recruiterProfile.company?.taxCode || null,
+      businessRegistrationUrl: recruiterProfile.company?.businessRegistrationUrl || null,
+      size: recruiterProfile.company?.size || null,
+      website: recruiterProfile.company?.website || null,
+      address: {
+        street: recruiterProfile.company?.address?.street || null,
+        city: recruiterProfile.company?.address?.city || null,
+        country: recruiterProfile.company?.address?.country || null
+      },
+      contactInfo: {
+        email: recruiterProfile.company?.contactInfo?.email || null,
+        phone: recruiterProfile.company?.contactInfo?.phone || null
+      },
+      verified: recruiterProfile.company?.verified || false
+    },
+    profileCreatedAt: recruiterProfile.createdAt,
+    profileUpdatedAt: recruiterProfile.updatedAt
+  };
+};
+
+export const verifyCompany = async (companyId, verificationData) => {
+  const updatedCompany = await RecruiterProfile.findByIdAndUpdate(
+    companyId,
+    { verified: verificationData.verified },
+    { new: true }
+  ).select('company.name company.logo verified');
+  
+  if (!updatedCompany) {
+    throw new NotFoundError('Công ty không tồn tại.');
+  }
+  
+  return updatedCompany;
+};
+
+export const approveCompany = async (companyId) => {
+  const updatedProfile = await RecruiterProfile.findByIdAndUpdate(
+    companyId,
+    { 'company.verified': true },
+    { new: true }
+  ).populate({
+    path: 'userId',
+    select: 'username email active createdAt'
+  }).lean();
+  
+  if (!updatedProfile) {
+    throw new NotFoundError('Hồ sơ nhà tuyển dụng không tồn tại.');
+  }
+  
+  // Trả về cấu trúc cố định đầy đủ
+  return {
+    _id: updatedProfile._id,
+    recruiterInfo: {
+      fullname: updatedProfile.fullname,
+      userId: updatedProfile.userId._id,
+      username: updatedProfile.userId.username,
+      email: updatedProfile.userId.email,
+      active: updatedProfile.userId.active,
+      userCreatedAt: updatedProfile.userId.createdAt
+    },
+    company: {
+      name: updatedProfile.company?.name || null,
+      about: updatedProfile.company?.about || null,
+      logo: updatedProfile.company?.logo || null,
+      industry: updatedProfile.company?.industry || null,
+      taxCode: updatedProfile.company?.taxCode || null,
+      businessRegistrationUrl: updatedProfile.company?.businessRegistrationUrl || null,
+      size: updatedProfile.company?.size || null,
+      website: updatedProfile.company?.website || null,
+      address: {
+        street: updatedProfile.company?.address?.street || null,
+        city: updatedProfile.company?.address?.city || null,
+        country: updatedProfile.company?.address?.country || null
+      },
+      contactInfo: {
+        email: updatedProfile.company?.contactInfo?.email || null,
+        phone: updatedProfile.company?.contactInfo?.phone || null
+      },
+      verified: updatedProfile.company?.verified || false
+    },
+    profileCreatedAt: updatedProfile.createdAt,
+    profileUpdatedAt: updatedProfile.updatedAt
+  };
+};
+
+export const rejectCompany = async (companyId) => {
+  const updatedProfile = await RecruiterProfile.findByIdAndUpdate(
+    companyId,
+    { 'company.verified': false },
+    { new: true }
+  ).populate({
+    path: 'userId',
+    select: 'username email active createdAt'
+  }).lean();
+  
+  if (!updatedProfile) {
+    throw new NotFoundError('Hồ sơ nhà tuyển dụng không tồn tại.');
+  }
+  
+  // Trả về cấu trúc cố định đầy đủ
+  return {
+    _id: updatedProfile._id,
+    recruiterInfo: {
+      fullname: updatedProfile.fullname,
+      userId: updatedProfile.userId._id,
+      username: updatedProfile.userId.username,
+      email: updatedProfile.userId.email,
+      active: updatedProfile.userId.active,
+      userCreatedAt: updatedProfile.userId.createdAt
+    },
+    company: {
+      name: updatedProfile.company?.name || null,
+      about: updatedProfile.company?.about || null,
+      logo: updatedProfile.company?.logo || null,
+      industry: updatedProfile.company?.industry || null,
+      taxCode: updatedProfile.company?.taxCode || null,
+      businessRegistrationUrl: updatedProfile.company?.businessRegistrationUrl || null,
+      size: updatedProfile.company?.size || null,
+      website: updatedProfile.company?.website || null,
+      address: {
+        street: updatedProfile.company?.address?.street || null,
+        city: updatedProfile.company?.address?.city || null,
+        country: updatedProfile.company?.address?.country || null
+      },
+      contactInfo: {
+        email: updatedProfile.company?.contactInfo?.email || null,
+        phone: updatedProfile.company?.contactInfo?.phone || null
+      },
+      verified: updatedProfile.company?.verified || false
+    },
+    profileCreatedAt: updatedProfile.createdAt,
+    profileUpdatedAt: updatedProfile.updatedAt
+  };
+};
+
+// === DASHBOARD THỐNG KÊ ===
+
+export const getAdminStats = async () => {
+  const [
+    totalUsers,
+    totalCandidates,
+    totalRecruiters,
+    totalJobs,
+    pendingJobs,
+    approvedJobs,
+    totalApplications,
+    verifiedCompanies,
+    unverifiedCompanies,
+    pendingCompanies
+  ] = await Promise.all([
+    User.countDocuments(),
+    User.countDocuments({ role: 'candidate' }),
+    User.countDocuments({ role: 'recruiter' }),
+    Job.countDocuments(),
+    Job.countDocuments({ approved: false }),
+    Job.countDocuments({ approved: true }),
+    Application.countDocuments(),
+    RecruiterProfile.countDocuments({ 'company.verified': true }),
+    RecruiterProfile.countDocuments({ 'company.verified': false }),
+    RecruiterProfile.countDocuments({ 
+      'company.verified': false, 
+      'company.name': { $exists: true, $ne: null } 
+    })
+  ]);
+  
+  return {
+    overview: {
+      totalUsers,
+      totalJobs,
+      totalApplications
+    },
+    users: {
+      candidates: totalCandidates,
+      recruiters: totalRecruiters,
+      total: totalUsers
+    },
+    jobs: {
+      pending: pendingJobs,
+      approved: approvedJobs,
+      total: totalJobs
+    },
+    companies: {
+      verified: verifiedCompanies,
+      unverified: unverifiedCompanies,
+      pending: pendingCompanies,
+      total: verifiedCompanies + unverifiedCompanies
+    }
+  };
+};

@@ -15,6 +15,7 @@ import './config/redis.js'; // Initialize Redis connection
 
 // 🚦 Routes
 import authRoutes from './routes/auth.route.js';
+import userRoutes from './routes/user.route.js';
 import jobRoutes from './routes/job.route.js';
 import candidateRoutes from './routes/candidate.route.js';
 import companyRoutes from './routes/company.route.js';
@@ -26,6 +27,7 @@ import cvRoutes from './routes/cv.route.js';
 import aiRoutes from './routes/ai.route.js';
 import paymentRoutes from './routes/payment.route.js';
 import chatRoutes from './routes/chat.route.js';
+import adminRoutes from './routes/admin.route.js';
 
 // 🚧 Middlewares
 import * as errorMiddleware from './middleware/error.middleware.js';
@@ -92,7 +94,7 @@ app.get('/health', (_, res) =>
 
 // Routes
 app.use('/api/auth', authRoutes);
-// app.use('/api/users', userRoutes); // No longer in use
+app.use('/api/users', userRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/candidate', candidateRoutes);
 app.use('/api/companies', companyRoutes);
@@ -104,6 +106,7 @@ app.use('/api/cvs', cvRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/admin', adminRoutes);
 
 // 404 & error
 app.use(notFoundMiddleware.notFound);

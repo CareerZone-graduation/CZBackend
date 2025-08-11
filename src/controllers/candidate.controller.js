@@ -58,13 +58,17 @@ export const deleteCv = asyncHandler(async (req, res) => {
 
 export const updateProfile = asyncHandler(async (req, res) => {
     const userId = req.user._id;
-    logger.info('Updating candidate profile', { userId, body: req.body });
-    const profile = await candidateService.updateProfile(userId, req.body);
+    logger.info('Updating candidate profile', { 
+        userId, 
+        fields: Object.keys(req.body) 
+    });
+    
+    const updatedProfile = await candidateService.updateProfile(userId, req.body);
     
     res.status(200).json({
         success: true,
         message: 'Cập nhật hồ sơ thành công.',
-        data: profile,
+        data: updatedProfile,
     });
 });
 
@@ -83,5 +87,19 @@ export const updateAvatar = asyncHandler(async (req, res) => {
         success: true,
         message: 'Cập nhật ảnh đại diện thành công.',
         data: updatedProfile,
+    });
+});
+
+export const getMyApplications = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    const options = req.query;
+    
+    const result = await candidateService.getMyApplications(userId, options);
+    
+    res.status(200).json({
+        success: true,
+        message: 'Lấy danh sách đơn ứng tuyển thành công.',
+        meta: result.meta,
+        data: result.data
     });
 });

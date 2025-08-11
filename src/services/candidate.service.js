@@ -1,4 +1,4 @@
-import { CandidateProfile, User } from '../models/index.js';
+import { CandidateProfile, User, Application } from '../models/index.js';
 import { NotFoundError, BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
 import * as uploadService from './upload.service.js';
@@ -10,74 +10,45 @@ import mongoose from 'mongoose';
  * @returns {Promise<Object>}
  */
 export const getProfile = async (userId) => {
-    // Use .lean() to get a plain JavaScript object
-    let profile = await CandidateProfile.findOne({ userId: userId }).populate('userId', 'fullname email').lean();
-
+    const profile = await CandidateProfile.findOne({ userId: userId }).lean();
     if (!profile) {
-        const user = await User.findById(userId).lean();
-        if (!user || user.role !== 'candidate') {
-            throw new NotFoundError('Không tìm thấy ứng viên.');
-        }
-        // Return a default structure if profile is empty but user exists
-        return {
-            userId: user._id,
-            email: user.email,
-            fullname: user.fullname,
-            // other fields are empty
-        };
+        throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
     }
-
-    // Flatten the response
-    if (profile.userId) {
-        profile.email = profile.userId.email;
-        profile.fullname = profile.userId.fullname;
-        profile.userId = profile.userId._id;
-    }
-
     return profile;
 };
 
 /**
- * Update candidate profile
+ * Update candidate profile (for PUT - full update)
  * @param {string} userId
  * @param {Object} updateData
  * @returns {Promise<Object>}
  */
 export const updateProfile = async (userId, updateData) => {
-    const { fullname, ...profileData } = updateData;
+    const { fullname, phone, bio, skills, educations, experiences } = updateData;
 
-    // Start a transaction if we need to update both User and CandidateProfile
-    const session = await User.startSession();
-    session.startTransaction();
-    try {
-        // Update fullname in User model if provided
-        if (fullname) {
-            await User.findByIdAndUpdate(userId, { fullname }, { session, new: true });
-        }
+    // Prepare data for database update
+    const profileUpdateData = {
+        fullname,
+        phone, 
+        bio: bio || '',
+        skills: skills || [],
+        educations: educations || [],
+        experiences: experiences || []
+    };
 
-        // Update the rest of the data in CandidateProfile model
-        let profile = await CandidateProfile.findOneAndUpdate(
-            { userId: userId },
-            { $set: { ...profileData, userId } }, // Ensure userId is set on upsert
-            { new: true, upsert: true, session }
-        ).populate('userId', 'fullname email').lean();
-        
-        // Flatten the response after update
-        if (profile && profile.userId) {
-            profile.email = profile.userId.email;
-            profile.fullname = profile.userId.fullname;
-            profile.userId = profile.userId._id;
-        }
+    // Update the profile in CandidateProfile model
+    const updatedProfile = await CandidateProfile.findOneAndUpdate(
+        { userId },
+        { $set: profileUpdateData },
+        { new: true, upsert: true, runValidators: true }
+    ).select('fullname avatar phone bio skills educations experiences createdAt updatedAt')
+    .lean();
 
-        await session.commitTransaction();
-        session.endSession();
-
-        return profile;
-    } catch (error) {
-        await session.abortTransaction();
-        session.endSession();
-        throw error;
+    if (!updatedProfile) {
+        throw new NotFoundError('Không tìm thấy hồ sơ để cập nhật.');
     }
+
+    return updatedProfile;
 };
 
 /**
@@ -91,14 +62,8 @@ export const updateAvatar = async (userId, avatarUrl) => {
         { userId: userId },
         { $set: { avatar: avatarUrl, userId } },
         { new: true, upsert: true }
-    ).populate('userId', 'fullname email').lean();
-
-    // Flatten the response
-    if (profile && profile.userId) {
-        profile.email = profile.userId.email;
-        profile.fullname = profile.userId.fullname;
-        profile.userId = profile.userId._id;
-    }
+    )
+    .select('fullname avatar phone bio skills educations experiences createdAt updatedAt').lean();
 
     return profile;
 };
@@ -124,7 +89,6 @@ export const uploadCv = async (userId, file) => {
     }
 
     // If this is the first CV, set it as default
-    // kiểm tra có null hay undefined không
     if (!profile.cvs) {
         profile.cvs = [];
     }
@@ -220,4 +184,80 @@ export const deleteCv = async (userId, cvId) => {
 
     await profile.save();
     return profile.cvs;
+};
+
+/**
+ * Lấy danh sách các đơn ứng tuyển của candidate
+ * @param {string} userId ID của user
+ * @param {Object} options Các tùy chọn lọc và phân trang
+ * @returns {Object} Object chứa mảng data và object meta
+ */
+export const getMyApplications = async (userId, options = {}) => {
+    logger.info('Getting applications for candidate', { userId, options });
+    
+    // Lấy candidate profile để có candidateProfileId
+    const candidateProfile = await CandidateProfile.findOne({ userId }).lean();
+    if (!candidateProfile) {
+        throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
+    }
+
+    // Xử lý các options
+    const page = options.page || 1;
+    const limit = Math.min(options.limit || 10, 50); // Giới hạn tối đa 50 items per page
+    const skip = (page - 1) * limit;
+
+    // Xây dựng query filter
+    const filter = { candidateProfileId: candidateProfile._id };
+    
+    if (options.status) {
+        filter.status = options.status;
+    }
+
+    if (options.search) {
+        // Search trong jobSnapshot.title và jobSnapshot.company
+        filter.$or = [
+            { 'jobSnapshot.title': { $regex: options.search, $options: 'i' } },
+            { 'jobSnapshot.company': { $regex: options.search, $options: 'i' } }
+        ];
+    }
+
+    // Xử lý sort
+    let sortOptions = { appliedAt: -1 }; // Default sort by newest first
+    if (options.sort) {
+        const sortField = options.sort.startsWith('-') 
+            ? options.sort.substring(1) 
+            : options.sort;
+        const sortDirection = options.sort.startsWith('-') ? -1 : 1;
+        
+        if (['appliedAt', 'lastStatusUpdateAt'].includes(sortField)) {
+            sortOptions = { [sortField]: sortDirection };
+        }
+    }
+
+    // Thực hiện truy vấn với pagination
+    const [applications, totalCount] = await Promise.all([
+        Application.find(filter)
+            .select('jobId status appliedAt lastStatusUpdateAt coverLetter submittedCV jobSnapshot candidateName candidateEmail candidatePhone')
+            .sort(sortOptions)
+            .skip(skip)
+            .limit(limit)
+            .lean(),
+        Application.countDocuments(filter)
+    ]);
+
+    const meta = {
+        currentPage: page,
+        totalPages: Math.ceil(totalCount / limit),
+        totalItems: totalCount,
+        limit
+    }
+
+    logger.info('Successfully retrieved applications for candidate', { 
+        userId, 
+        candidateProfileId: candidateProfile._id,
+        totalCount,
+        currentPageCount: applications.length 
+    });
+
+    return { data: applications, meta };
 };

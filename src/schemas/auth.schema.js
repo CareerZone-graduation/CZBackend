@@ -5,8 +5,11 @@ import { z } from 'zod';
  */
 
 export const loginSchema = z.object({
-  username: z.string().min(1, 'Username không được để trống').trim(),
+  email: z.string().email('Email không hợp lệ'),
   password: z.string().min(1, 'Password không được để trống'),
+}).refine(data => data.email, {
+  message: 'Email là bắt buộc',
+  path: ['email'], // path to show the error on
 });
 
 export const registerSchema = z.object({

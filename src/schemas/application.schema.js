@@ -39,3 +39,12 @@ export const updateCandidateRatingBody = z.object({
 export const updateApplicationNotesBody = z.object({
   notes: z.string().max(2000, 'Ghi chú không thể vượt quá 2000 ký tự')
 });
+
+// Validation schema cho query parameters lấy danh sách đơn ứng tuyển của candidate
+export const getCandidateApplicationsQuery = z.object({
+  page: z.string().regex(/^\d+$/, 'Page phải là số').optional().transform(Number),
+  limit: z.string().regex(/^\d+$/, 'Limit phải là số').optional().transform(Number),
+  status: z.string().optional(),
+  sort: z.enum(['appliedAt', '-appliedAt', 'lastStatusUpdateAt', '-lastStatusUpdateAt']).optional(),
+  search: z.string().optional(),
+}).optional();
