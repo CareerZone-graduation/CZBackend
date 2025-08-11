@@ -28,7 +28,7 @@ dist-ssr
 /testapi
 testapi
 *.http
-
+.trae
 docs
 /docs
 MIGRATION_SUMMARY.md
@@ -42,3 +42,4 @@ test-kafka-producer.js
 test-websocket-chat.html
 .clinerules
 .clineignore
+.ignore
