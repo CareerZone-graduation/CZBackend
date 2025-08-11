@@ -89,3 +89,17 @@ export const updateAvatar = asyncHandler(async (req, res) => {
         data: updatedProfile,
     });
 });
+
+export const getMyApplications = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    const options = req.query;
+    
+    const result = await candidateService.getMyApplications(userId, options);
+    
+    res.status(200).json({
+        success: true,
+        message: 'Lấy danh sách đơn ứng tuyển thành công.',
+        meta: result.meta,
+        data: result.data
+    });
+});

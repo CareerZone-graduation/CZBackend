@@ -7,6 +7,7 @@ import * as uploadMiddleware from '../middleware/upload.middleware.js';
 import { z } from 'zod';
 import * as userSchema from '../schemas/user.schema.js';
 import * as commonSchema from '../schemas/common.schema.js';
+import * as applicationSchema from '../schemas/application.schema.js';
 
 const router = express.Router();
 
@@ -38,5 +39,11 @@ router.route('/cvs/:cvId/set-default')
 router.route('/cvs/:cvId')
     .delete(validationMiddleware.validateParams(z.object({ cvId: commonSchema.idParamSchema.shape.id })), candidateController.deleteCv);
 
+// Route để lấy danh sách các đơn ứng tuyển của candidate
+router.get(
+    '/my-applications',
+    validationMiddleware.validateQuery(applicationSchema.getCandidateApplicationsQuery),
+    candidateController.getMyApplications
+);
 
 export default router;
