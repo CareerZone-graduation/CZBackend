@@ -39,6 +39,7 @@ const sendErrorDev = (err, res) => {
     err.errors.length > 0
   ) {
     return res.status(err.statusCode).json({
+      success: false,
       status: err.status,
       message: err.errors[0].message, // Lấy thông điệp của lỗi đầu tiên
       errors: err.errors, // Vẫn gửi đầy đủ mảng lỗi
@@ -48,6 +49,7 @@ const sendErrorDev = (err, res) => {
 
   // Các lỗi khác giữ nguyên
   res.status(err.statusCode).json({
+    success: false,
     status: err.status,
     error: err, // Giữ nguyên object error đầy đủ cho dev
     message: err.message,
@@ -108,7 +110,7 @@ export const errorHandler = (err, req, res, next) => {
   //   userAgent: req.get('User-Agent'),
   // });
 
-  if (process.env.NODE_ENV === "development") {
+  if (process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test") {
     sendErrorDev(err, res);
   } else if (process.env.NODE_ENV === "production") {
     let error = { ...err, message: err.message }; // 1. Tạo bản sao của `err`

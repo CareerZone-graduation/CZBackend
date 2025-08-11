@@ -18,8 +18,8 @@ import './cron/jobAlert.cron.js';
 dotenv.config();
 
 // Tạo HTTP server và Socket.IO
-const httpServer = http.createServer(app);
-const io = new socketio.Server(httpServer, {
+const server = http.createServer(app);
+const io = new socketio.Server(server, {
   cors: {
     origin: [config.CLIENT_URL,"http://localhost:3001","http://localhost:3000","http://localhost:3002", "http://localhost:3003"],
     methods: ['GET', 'POST','PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
@@ -36,7 +36,7 @@ const startServer = async () => {
     await kafkaService.connectProducer();
 
     const PORT = config.PORT || 8080;
-    httpServer.listen(PORT, () => {
+    server.listen(PORT, () => {
       logger.info(`Server is running on port ${PORT}`);
       logger.info(`Environment: ${config.NODE_ENV}`);
     });
@@ -49,7 +49,7 @@ const startServer = async () => {
 // Xử lý lỗi toàn cục
 process.on('unhandledRejection', (err) => {
   logger.error('Unhandled Promise Rejection:', err);
-  httpServer.close(() => process.exit(1));
+  server.close(() => process.exit(1));
 });
 
 process.on('uncaughtException', (err) => {
@@ -60,7 +60,9 @@ process.on('uncaughtException', (err) => {
 // Tắt an toàn
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received');
-  httpServer.close(() => logger.info('Process terminated'));
+  server.close(() => logger.info('Process terminated'));
 });
 
 startServer();
+
+export { server };

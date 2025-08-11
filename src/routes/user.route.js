@@ -1,7 +1,18 @@
 import express from 'express';
+import passport from 'passport';
+import * as userController from '../controllers/user.controller.js';
+import { validate } from '../middleware/validation.middleware.js';
+import { updateUserProfileSchema as updateUserSchema } from '../schemas/user.schema.js';
 
 const router = express.Router();
 
-// This route is currently not in use and can be extended later.
+const jwtAuth = passport.authenticate('jwt', { session: false });
+
+router.route('/me')
+  .get(jwtAuth, userController.getMe)
+  .put(jwtAuth, validate(updateUserSchema), userController.updateMe);
+
+router.route('/change-password')
+    .put(jwtAuth, userController.changePassword);
 
 export default router;

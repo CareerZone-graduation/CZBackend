@@ -15,6 +15,7 @@ import './config/redis.js'; // Initialize Redis connection
 
 // 🚦 Routes
 import authRoutes from './routes/auth.route.js';
+import userRoutes from './routes/user.route.js';
 import jobRoutes from './routes/job.route.js';
 import candidateRoutes from './routes/candidate.route.js';
 import companyRoutes from './routes/company.route.js';
@@ -92,7 +93,7 @@ app.get('/health', (_, res) =>
 
 // Routes
 app.use('/api/auth', authRoutes);
-// app.use('/api/users', userRoutes); // No longer in use
+app.use('/api/users', userRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/candidate', candidateRoutes);
 app.use('/api/companies', companyRoutes);
