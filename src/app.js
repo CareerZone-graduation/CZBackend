@@ -27,6 +27,7 @@ import cvRoutes from './routes/cv.route.js';
 import aiRoutes from './routes/ai.route.js';
 import paymentRoutes from './routes/payment.route.js';
 import chatRoutes from './routes/chat.route.js';
+import adminRoutes from './routes/admin.route.js';
 
 // 🚧 Middlewares
 import * as errorMiddleware from './middleware/error.middleware.js';
@@ -105,6 +106,7 @@ app.use('/api/cvs', cvRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/admin', adminRoutes);
 
 // 404 & error
 app.use(notFoundMiddleware.notFound);

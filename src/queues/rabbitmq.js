@@ -29,6 +29,8 @@ export const ROUTING_KEYS = {
   STATUS_UPDATE: 'notification.status_update', // Dành cho cập nhật trạng thái đơn ứng tuyển
   INTERVIEW_REMINDER: 'notification.interview_reminder', // Dành cho nhắc lịch phỏng vấn
   DAILY_DIGEST: 'notification.daily_digest', // Dành cho email tổng hợp tin tuyển dụng hàng ngày
+  JOB_APPROVAL: 'notification.job_approval', // Dành cho thông báo phê duyệt tin tuyển dụng
+  COMPANY_VERIFICATION: 'notification.company_verification', // Dành cho thông báo xác thực công ty
 };
 
 /**
