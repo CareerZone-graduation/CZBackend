@@ -17,6 +17,12 @@ router.post(
 );
 
 router.get(
+  '/',
+  validationMiddleware.validateQuery(jobSchema.jobQuerySchema),
+  jobController.getAllJobs
+);
+
+router.get(
   '/my-jobs',
   passport.authenticate('jwt', { session: false }),
   authMiddleware.recruiterOnly,

@@ -54,7 +54,7 @@ const educationSchema = new mongoose.Schema({
 
 
 const experienceSchema = new mongoose.Schema({
-  companyName: {
+  company: {
     type: String,
     required: [true, 'Company name is required'],
     trim: true,

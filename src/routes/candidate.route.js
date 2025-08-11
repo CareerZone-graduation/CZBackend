@@ -13,9 +13,9 @@ const router = express.Router();
 router.use(passport.authenticate('jwt', { session: false }), authMiddleware.candidateOnly);
 
 router
-    .route('/profile')
+    .route('/my-profile')
     .get(candidateController.getProfile)
-    .patch(
+    .put(
         validationMiddleware.validateBody(userSchema.candidateProfileSchema),
         candidateController.updateProfile
     );

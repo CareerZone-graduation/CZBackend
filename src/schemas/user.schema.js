@@ -71,7 +71,7 @@ export const educationSchema = z.object({
  */
 export const experienceSchema = z.object({
   experienceId: z.string().optional(),
-  companyName: z.string()
+  company: z.string()
     .min(1, 'Tên công ty không được để trống')
     .max(200, 'Tên công ty không được dài quá 200 ký tự')
     .trim(),
@@ -156,26 +156,35 @@ export const userProfileSchema = z.object({
 });
 
 /**
- * Candidate profile update validation schema
+ * Candidate profile update validation schema (for PUT - full update)
  */
 export const candidateProfileSchema = z.object({
   fullname: z.string()
-    .min(1, 'Họ tên không được để trống')
+    .min(2, 'Họ tên phải có ít nhất 2 ký tự')
     .max(100, 'Họ tên không được dài quá 100 ký tự')
-    .trim()
-    .optional(),
-  avatar: z.string().trim().optional(),
+    .trim(),
   phone: z.string()
-.regex(/^[\+]?[\d]{1,15}$/, 'Số điện thoại không hợp lệ')    .optional(),
+    .regex(/^[\+]?[\d\-\s\(\)]{10,15}$/, 'Số điện thoại không hợp lệ')
+    .trim(),
   bio: z.string()
     .max(1000, 'Mô tả không được dài quá 1000 ký tự')
     .trim()
-    .optional(),
-  skills: z.array(skillSchema).optional(),
-  educations: z.array(educationSchema).optional(),
-  experiences: z.array(experienceSchema).optional(),
-  cvs: z.array(cvSchema).optional(),
-});
+    .default(''),
+  skills: z.array(skillSchema)
+    .max(50, 'Không được vượt quá 50 kỹ năng')
+    .default([]),
+  educations: z.array(educationSchema)
+    .max(10, 'Không được vượt quá 10 học vấn')
+    .default([]),
+  experiences: z.array(experienceSchema)
+    .max(15, 'Không được vượt quá 15 kinh nghiệm')
+    .default([])
+}).strict();
+
+/**
+ * Candidate profile partial update validation schema (for PATCH)
+ */
+export const candidateProfilePartialSchema = candidateProfileSchema.partial();
 
 /**
  * Update unified User profile schema (all fields optional)

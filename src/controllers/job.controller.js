@@ -12,6 +12,17 @@ export const createJob = asyncHandler(async (req, res) => {
   });
 });
 
+export const getAllJobs = asyncHandler(async (req, res) => {
+  const options = req.query;
+  const result = await jobService.getAllJobs(options);
+  res.status(200).json({
+    success: true,
+    message: 'Lấy danh sách công việc thành công.',
+    meta: result.meta,
+    data: result.data,
+  });
+});
+
 export const getMyJobs = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const options = req.query;
