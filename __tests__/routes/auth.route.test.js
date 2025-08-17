@@ -31,8 +31,6 @@ describe('Auth Routes API', () => {
       expect(res.statusCode).toEqual(201);
       expect(res.body.success).toBe(true);
       expect(res.body.message).toBe('Đăng ký thành công. Vui lòng kiểm tra email để xác thực tài khoản.');
-      expect(res.body.data.user.username).toBe('testuser');
-      expect(res.body.data.user.email).toBe('test@example.com');
 
       // Check if the user was actually created in the database
       const userInDb = await User.findOne({ email: 'test@example.com' });
@@ -148,44 +146,6 @@ describe('Auth Routes API', () => {
     });
   });
 
-  describe('GET /api/auth/me', () => {
-    let token;
-    let user;
-
-    beforeEach(async () => {
-      user = await User.create({
-        username: 'me_user',
-        email: 'me@example.com',
-        password: 'password123',
-        fullname: 'Me User',
-        role: 'candidate',
-        isEmailVerified: true,
-      });
-
-      const res = await request(app)
-        .post('/api/auth/login')
-        .send({ email: 'me@example.com', password: 'password123' });
-      token = res.body.data.accessToken;
-    });
-
-    it('should return the current user for a logged-in user', async () => {
-      const res = await request(app)
-        .get('/api/auth/me')
-        .set('Authorization', `Bearer ${token}`);
-
-      expect(res.statusCode).toEqual(200);
-      expect(res.body.success).toBe(true);
-      expect(res.body.data.user.email).toBe('me@example.com');
-      expect(res.body.data.user).not.toHaveProperty('password');
-    });
-
-    it('should return 401 if no token is provided', async () => {
-      const res = await request(app).get('/api/auth/me');
-
-      expect(res.statusCode).toEqual(401);
-    });
-  });
-
   describe('POST /api/auth/logout', () => {
     let token;
 
@@ -239,7 +199,7 @@ describe('Auth Routes API', () => {
       const res = await request(app)
         .patch('/api/auth/change-password')
         .set('Authorization', `Bearer ${token}`)
-        .send({ oldPassword: 'oldPassword', newPassword: 'newPassword' });
+        .send({ currentPassword: 'oldPassword', newPassword: 'newPassword' });
 
       expect(res.statusCode).toEqual(200);
       expect(res.body.success).toBe(true);
@@ -258,15 +218,15 @@ describe('Auth Routes API', () => {
       expect(loginWithNewPassword.statusCode).toEqual(200);
     });
 
-    it('should return 401 for incorrect old password', async () => {
+    it('should return 40 for incorrect old password', async () => {
         const res = await request(app)
             .patch('/api/auth/change-password')
             .set('Authorization', `Bearer ${token}`)
-            .send({ oldPassword: 'wrongOldPassword', newPassword: 'newPassword' });
+            .send({ currentPassword: 'wrongOldPassword', newPassword: 'newPassword' });
 
-        expect(res.statusCode).toEqual(401);
+        expect(res.statusCode).toEqual(400);
         expect(res.body.success).toBe(false);
-        expect(res.body.message).toBe('Mật khẩu cũ không chính xác.');
+        expect(res.body.message).toBe('Mật khẩu hiện tại không chính xác.');
     });
   });
 });

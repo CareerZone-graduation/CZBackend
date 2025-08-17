@@ -72,10 +72,10 @@ export const createJob = async (userId, jobData) => {
       maxSalary: newJob.maxSalary,
       companyName: recruiterProfile.company.name,
       location: {
-        city: newJob.location.city,
-        district: newJob.location.district,
-        address: newJob.location.address
+        province: newJob.location.province,
+        ward: newJob.location.ward,
       },
+      address: newJob.address,
       type: newJob.type,
       workType: newJob.workType,
       experience: newJob.experience,
@@ -525,13 +525,13 @@ export const applyToJob = async (userId, jobId, applicationData) => {
  * @returns {Promise<Document>} Bản ghi SavedJob đã được tạo
  */
 export const saveJob = async (userId, jobId) => {
-  // 1. Tìm hồ sơ ứng viên
-  const candidateProfile = await findCandidateProfileByUserId(userId);
-  
+  // 1. Tìm hồ sơ ứng viên để đảm bảo user là candidate
+  await findCandidateProfileByUserId(userId);
+
   // 2. Kiểm tra tin tuyển dụng có tồn tại và đang hoạt động không
   const job = await Job.findById(jobId);
   if (!job || job.status !== 'ACTIVE') {
-    throw new NotFoundError('Tin tuyển dụng không tồn tại hoặc đã hết hạn.');
+    throw new NotFoundError('Không tìm thấy công việc.');
   }
 
   // 3. Kiểm tra xem đã lưu công việc này chưa
@@ -545,18 +545,18 @@ export const saveJob = async (userId, jobId) => {
   }
 
   // 4. Tạo bản ghi lưu công việc
-  const savedJob = await SavedJob.create({
+  await SavedJob.create({
     candidateId: userId,
     jobId,
   });
 
   // Gửi sự kiện SAVE_JOB
   kafkaService.sendUserInteraction({
-      eventType: 'SAVE_JOB',
-      userId,
-      jobId,
-      timestamp: new Date().toISOString(),
-      details: { weight: 3 }
+    eventType: 'SAVE_JOB',
+    userId,
+    jobId,
+    timestamp: new Date().toISOString(),
+    details: { weight: 3 },
   });
 };
 
@@ -568,7 +568,7 @@ export const saveJob = async (userId, jobId) => {
 export const unsaveJob = async (userId, jobId) => {
   // 1. Tìm hồ sơ ứng viên để đảm bảo user là candidate
   await findCandidateProfileByUserId(userId);
-  
+
   // 2. Tìm và xóa bản ghi lưu công việc
   const savedJob = await SavedJob.findOneAndDelete({
     candidateId: userId,
@@ -576,7 +576,7 @@ export const unsaveJob = async (userId, jobId) => {
   });
 
   if (!savedJob) {
-    throw new NotFoundError('Không tìm thấy công việc đã lưu để xóa.');
+    throw new NotFoundError('Công việc chưa được lưu.');
   }
 };
 
@@ -588,7 +588,7 @@ export const unsaveJob = async (userId, jobId) => {
  */
 export const getSavedJobs = async (userId, options) => {
   const { page = 1, limit = 10, sortBy } = options;
-  
+
   // 1. Tìm hồ sơ ứng viên để đảm bảo user là candidate
   await findCandidateProfileByUserId(userId);
 
@@ -606,7 +606,7 @@ export const getSavedJobs = async (userId, options) => {
   const pipeline = [
     // Match các saved job của user
     { $match: { candidateId: new mongoose.Types.ObjectId(userId) } },
-    
+
     // Sort theo thời gian tạo
     { $sort: sortOptions },
     

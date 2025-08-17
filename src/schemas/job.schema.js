@@ -106,9 +106,9 @@ export const applyToJobSchema = z.object({
   coverLetter: z.string().trim().max(2000, 'Thư xin việc không được vượt quá 2000 ký tự').optional(),
   
   // Thông tin cá nhân từ form
-  candidateName: z.string().trim().min(1, 'Họ tên là bắt buộc').max(100, 'Họ tên không được vượt quá 100 ký tự'),
-  candidateEmail: z.string().trim().email('Email không hợp lệ'),
-  candidatePhone: z.string().trim().regex(/^[\+]?[\d]{1,15}$/, 'Số điện thoại không hợp lệ'),
+  candidateName: z.string({required_error: "Họ tên là bắt buộc"}).trim().min(2, 'Họ tên phải có ít nhất 2 ký tự').max(100, 'Họ tên không được vượt quá 100 ký tự'),
+  candidateEmail: z.string({required_error: "Email là bắt buộc"}).trim().email('Email không hợp lệ'),
+  candidatePhone: z.string({required_error: "Số điện thoại là bắt buộc"}).trim().regex(/^[\+]?[\d]{1,15}$/, 'Số điện thoại không hợp lệ'),
 }).refine(data => {
   // Điều kiện XOR: một trong hai trường phải tồn tại, nhưng không phải cả hai.
   return (data.cvId && !data.cvTemplateId) || (!data.cvId && data.cvTemplateId);

@@ -18,24 +18,6 @@ export const getMe = asyncHandler(async (req, res) => {
   });
 });
 
-/**
- * Update the profile of the currently logged-in user.
- * @route PUT /api/users/me
- * @access Private
- */
-export const updateMe = asyncHandler(async (req, res) => {
-  const userId = req.user._id;
-  const userRole = req.user.role;
-  const updateData = req.body;
-
-  const updatedProfile = await userService.updateUserProfile(userId, userRole, updateData);
-
-  res.status(200).json({
-    success: true,
-    message: 'Cập nhật thông tin thành công.',
-    data: updatedProfile,
-  });
-});
 
 /**
  * Change the password of the currently logged-in user.

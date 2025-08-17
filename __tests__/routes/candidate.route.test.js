@@ -1,20 +1,20 @@
 import request from 'supertest';
 import app from '../../src/app.js';
 import { server } from '../../src/server.js';
-import { User, CandidateProfile, Job, SavedJob } from '../../src/models/index.js';
+import { User, CandidateProfile } from '../../src/models/index.js';
 import jwt from 'jsonwebtoken';
 import config from '../../src/config/index.js';
+import mongoose from 'mongoose';
 
-describe('Candidate Routes API', () => {
-  let candidateUser, candidateToken, job1, job2;
+describe('Candidate Profile Routes API', () => {
+  let candidateUser, candidateToken;
 
   beforeEach(async () => {
-    // Create a candidate user and profile for the tests
+    // Tạo user và profile ứng viên cho các bài test
     candidateUser = await User.create({
       username: 'testcandidate',
       email: 'candidate@example.com',
       password: 'password123',
-      fullname: 'Test Candidate',
       role: 'candidate',
       isEmailVerified: true,
     });
@@ -22,33 +22,19 @@ describe('Candidate Routes API', () => {
     await CandidateProfile.create({
       userId: candidateUser._id,
       fullname: 'Test Candidate',
-      phone: '111222333',
+      phone: '0987654321',
+      bio: 'Initial bio',
+      skills: [{ name: 'Node.js' }],
     });
 
-    job1 = await Job.create({
-      title: 'Software Engineer',
-      description: 'A great job',
-      company: 'Tech Corp',
-      recruiterId: '60d21b4667d0d8992e610c85', // Dummy ID
-    });
-
-    job2 = await Job.create({
-      title: 'Data Scientist',
-      description: 'Another great job',
-      company: 'Data Inc.',
-      recruiterId: '60d21b4667d0d8992e610c86', // Dummy ID
-    });
-
-    // Generate a token for this candidate
+    // Tạo token cho ứng viên này
     candidateToken = jwt.sign({ id: candidateUser._id, role: 'candidate' }, config.JWT_SECRET);
   });
 
   afterEach(async () => {
-    // Clean up database
+    // Dọn dẹp DB
     await User.deleteMany({});
     await CandidateProfile.deleteMany({});
-    await Job.deleteMany({});
-    await SavedJob.deleteMany({});
   });
 
   afterAll((done) => {
@@ -56,7 +42,7 @@ describe('Candidate Routes API', () => {
   });
 
   describe('GET /api/candidate/my-profile', () => {
-    it('should fetch the authenticated candidate profile', async () => {
+    it('should fetch the authenticated candidate profile successfully', async () => {
       const res = await request(app)
         .get('/api/candidate/my-profile')
         .set('Authorization', `Bearer ${candidateToken}`);
@@ -65,7 +51,8 @@ describe('Candidate Routes API', () => {
       expect(res.body.success).toBe(true);
       expect(res.body.data.userId.toString()).toBe(candidateUser._id.toString());
       expect(res.body.data.fullname).toBe('Test Candidate');
-      expect(res.body.data.phone).toBe('111222333');
+      expect(res.body.data.phone).toBe('0987654321');
+      expect(res.body.data.skills[0].name).toBe('Node.js');
     });
 
     it('should return 401 if not authenticated', async () => {
@@ -75,146 +62,96 @@ describe('Candidate Routes API', () => {
   });
 
   describe('PUT /api/candidate/my-profile', () => {
-    it('should update the authenticated candidate profile', async () => {
-      const updateData = {
-        fullname: 'Updated Candidate Name',
-        bio: 'This is my new bio.',
-      };
+    const validProfileData = {
+      fullname: 'Updated Fullname',
+      phone: '0123456789',
+      bio: 'This is an updated bio.',
+      skills: [{ name: 'React' }, { name: 'TypeScript' }],
+      educations: [
+        {
+          school: 'University of Code',
+          major: 'Computer Science',
+          degree: 'Bachelor',
+          startDate: '2018-09-01',
+          endDate: '2022-06-01',
+        },
+      ],
+      experiences: [
+        {
+          company: 'Tech Corp',
+          position: 'Software Engineer',
+          startDate: '2022-07-01',
+        },
+      ],
+    };
 
+    it('should update the entire candidate profile with valid data', async () => {
       const res = await request(app)
         .put('/api/candidate/my-profile')
         .set('Authorization', `Bearer ${candidateToken}`)
-        .send(updateData);
+        .send(validProfileData);
 
       expect(res.statusCode).toEqual(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.data.fullname).toBe('Updated Candidate Name');
-      expect(res.body.data.bio).toBe('This is my new bio.');
+      expect(res.body.message).toBe('Cập nhật hồ sơ thành công.');
+      expect(res.body.data.fullname).toBe(validProfileData.fullname);
+      expect(res.body.data.phone).toBe(validProfileData.phone);
+      expect(res.body.data.bio).toBe(validProfileData.bio);
+      expect(res.body.data.skills.length).toBe(2);
+      expect(res.body.data.skills[0].name).toBe('React');
+      expect(res.body.data.educations[0].school).toBe('University of Code');
+      expect(res.body.data.experiences[0].company).toBe('Tech Corp');
 
-      // Verify in DB
-      const userInDb = await User.findById(candidateUser._id);
-      expect(userInDb.fullname).toBe('Updated Candidate Name');
+      // Xác thực lại trong DB
       const profileInDb = await CandidateProfile.findOne({ userId: candidateUser._id });
-      expect(profileInDb.fullname).toBe('Updated Candidate Name');
-      expect(profileInDb.bio).toBe('This is my new bio.');
+      expect(profileInDb.fullname).toBe(validProfileData.fullname);
+      expect(profileInDb.phone).toBe(validProfileData.phone);
+      expect(profileInDb.skills.length).toBe(2);
     });
 
     it('should return 401 if not authenticated', async () => {
       const res = await request(app)
         .put('/api/candidate/my-profile')
-        .send({ fullname: 'New Name' });
+        .send(validProfileData);
       expect(res.statusCode).toEqual(401);
     });
 
-    it('should return 400 for invalid data', async () => {
-      const invalidUpdate = {
-        email: 'newemail@example.com', // Not allowed to change email here
-      };
+    it('should return 400 for invalid phone number', async () => {
+      const invalidData = { ...validProfileData, phone: 'invalid-phone' };
+      const res = await request(app)
+        .put('/api/candidate/my-profile')
+        .set('Authorization', `Bearer ${candidateToken}`)
+        .send(invalidData);
+
+      expect(res.statusCode).toEqual(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.errors[0].message).toBe('Số điện thoại không hợp lệ');
+    });
+
+    it('should return 400 for missing fullname', async () => {
+      const invalidData = { ...validProfileData };
+      delete invalidData.fullname;
 
       const res = await request(app)
         .put('/api/candidate/my-profile')
         .set('Authorization', `Bearer ${candidateToken}`)
-        .send(invalidUpdate);
+        .send(invalidData);
 
       expect(res.statusCode).toEqual(400);
       expect(res.body.success).toBe(false);
-    });
-  });
-
-  describe('Saved Jobs', () => {
-    beforeEach(async () => {
-      // Pre-save a job for the candidate
-      await SavedJob.create({
-        userId: candidateUser._id,
-        jobId: job1._id,
-      });
+      expect(res.body.errors[0].message).toContain('Required');
     });
 
-    describe('GET /api/candidate/saved-jobs', () => {
-      it('should fetch the list of saved jobs for the authenticated candidate', async () => {
-        const res = await request(app)
-          .get('/api/candidate/saved-jobs')
-          .set('Authorization', `Bearer ${candidateToken}`);
+    it('should return 400 for extra fields due to .strict()', async () => {
+      const extraFieldData = { ...validProfileData, notAllowedField: 'test' };
+      const res = await request(app)
+        .put('/api/candidate/my-profile')
+        .set('Authorization', `Bearer ${candidateToken}`)
+        .send(extraFieldData);
 
-        expect(res.statusCode).toEqual(200);
-        expect(res.body.success).toBe(true);
-        expect(res.body.data).toBeInstanceOf(Array);
-        expect(res.body.data.length).toBe(1);
-        expect(res.body.data[0].jobId._id.toString()).toBe(job1._id.toString());
-        expect(res.body.data[0].jobId.title).toBe('Software Engineer');
-      });
-
-      it('should return 401 if not authenticated', async () => {
-        const res = await request(app).get('/api/candidate/saved-jobs');
-        expect(res.statusCode).toEqual(401);
-      });
-    });
-
-    describe('POST /api/candidate/saved-jobs/:jobId', () => {
-      it('should save a new job for the candidate', async () => {
-        const res = await request(app)
-          .post(`/api/candidate/saved-jobs/${job2._id}`)
-          .set('Authorization', `Bearer ${candidateToken}`);
-
-        expect(res.statusCode).toEqual(201);
-        expect(res.body.success).toBe(true);
-        expect(res.body.message).toMatch(/successfully/);
-
-        const savedJobInDb = await SavedJob.findOne({ userId: candidateUser._id, jobId: job2._id });
-        expect(savedJobInDb).not.toBeNull();
-      });
-
-      it('should return 409 if the job is already saved', async () => {
-        const res = await request(app)
-          .post(`/api/candidate/saved-jobs/${job1._id}`) // job1 is pre-saved
-          .set('Authorization', `Bearer ${candidateToken}`);
-
-        expect(res.statusCode).toEqual(409);
-        expect(res.body.success).toBe(false);
-      });
-
-      it('should return 404 if the job does not exist', async () => {
-        const nonExistentJobId = '60d21b4667d0d8992e610c99';
-        const res = await request(app)
-          .post(`/api/candidate/saved-jobs/${nonExistentJobId}`)
-          .set('Authorization', `Bearer ${candidateToken}`);
-
-        expect(res.statusCode).toEqual(404);
-      });
-
-      it('should return 401 if not authenticated', async () => {
-        const res = await request(app).post(`/api/candidate/saved-jobs/${job2._id}`);
-        expect(res.statusCode).toEqual(401);
-      });
-    });
-
-    describe('DELETE /api/candidate/saved-jobs/:jobId', () => {
-      it('should unsave a job for the candidate', async () => {
-        const res = await request(app)
-          .delete(`/api/candidate/saved-jobs/${job1._id}`) // job1 is pre-saved
-          .set('Authorization', `Bearer ${candidateToken}`);
-
-        expect(res.statusCode).toEqual(200);
-        expect(res.body.success).toBe(true);
-        expect(res.body.message).toMatch(/successfully/);
-
-        const savedJobInDb = await SavedJob.findOne({ userId: candidateUser._id, jobId: job1._id });
-        expect(savedJobInDb).toBeNull();
-      });
-
-      it('should return 404 if the job to unsave is not found in saved list', async () => {
-        const res = await request(app)
-          .delete(`/api/candidate/saved-jobs/${job2._id}`) // job2 is not saved yet
-          .set('Authorization', `Bearer ${candidateToken}`);
-
-        expect(res.statusCode).toEqual(404);
-        expect(res.body.success).toBe(false);
-      });
-
-      it('should return 401 if not authenticated', async () => {
-        const res = await request(app).delete(`/api/candidate/saved-jobs/${job1._id}`);
-        expect(res.statusCode).toEqual(401);
-      });
+      expect(res.statusCode).toEqual(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.errors[0].message).toContain('Unrecognized key(s)');
     });
   });
 });

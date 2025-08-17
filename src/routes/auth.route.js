@@ -29,10 +29,14 @@ router.get('/me', passport.authenticate('jwt', { session: false }), authControll
 router.post('/logout', passport.authenticate('jwt', { session: false }), authController.logout);
 router.patch('/change-password', passport.authenticate('jwt', { session: false }), validationMiddleware.validateBody(authSchema.changePasswordSchema), authController.changePassword);
 
+// Quên mật khẩu
+router.post('/forgot-password', validationMiddleware.validateBody(authSchema.emailSchema), authController.forgotPassword);
+router.post('/reset-password', validationMiddleware.validateBody(authSchema.resetPasswordSchema), authController.resetPassword);
+
+
 // Các route không thay đổi
 router.post('/refresh', authController.refreshToken);
 router.post('/verify-email', validationMiddleware.validateQuery(authSchema.verifyEmailSchema), authController.verifyEmail);
-router.patch('/reset-password/:token', validationMiddleware.validateBody(authSchema.resetPasswordSchema), authController.resetPassword);
 router.post('/resend-verification-email', authController.resendEmailVerification);
 
 

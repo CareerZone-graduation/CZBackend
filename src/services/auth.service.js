@@ -10,7 +10,8 @@ import {
   UnauthorizedError,
 } from "../utils/AppError.js";
 import { CandidateProfile, RecruiterProfile } from "../models/index.js";
-import * as emailService from "./email.service.js";
+import * as queueService from "./queue.service.js";
+import { ROUTING_KEYS } from "../queues/rabbitmq.js";
 import * as redisService from "./redis.service.js";
 import * as kafkaService from "./kafka.service.js";
 
@@ -30,21 +31,17 @@ const sendVerificationEmail = async (user, fullname) => {
   const redisKey = `verify-email:${verificationToken}`;
   await redisService.setWithExpiry(redisKey, user._id.toString(), 24 * 60 * 60);
 
-  try {
-    const verificationUrl = `${config.CLIENT_URL}/verify-email?token=${verificationToken}`;
-    await emailService.sendEmail({
-      to: user.email,
-      subject: "Xác thực tài khoản CareerZone",
-      template: "verifyEmail",
-      data: { name: fullname, verificationUrl },
-    });
-    logger.info(`Verification email sent to ${user.email}`);
-  } catch (emailError) {
-    logger.error(
-      `Failed to send verification email to ${user.email}`,
-      emailError
-    );
-  }
+  const verificationUrl = `${config.CLIENT_URL}/verify-email?token=${verificationToken}`;
+  const emailPayload = {
+    to: user.email,
+    subject: "Xác thực tài khoản CareerZone",
+    template: "verifyEmail",
+    data: { name: fullname, verificationUrl },
+  };
+
+  // Push email task to RabbitMQ instead of sending directly
+  queueService.publishNotification(ROUTING_KEYS.EMAIL_SEND, emailPayload);
+  logger.info(`Queued verification email for ${user.email}`);
 };
 
 export const register = async (userData) => {
@@ -67,13 +64,8 @@ export const register = async (userData) => {
     // Optional: Send a RECRUITER_REGISTERED event if needed in the future
   }
 
-  await sendVerificationEmail(user, fullname);
-
-  return {
-    message:
-      "Đăng ký thành công. Vui lòng kiểm tra email để xác thực tài khoản.",
-    user: user.toSafeObject(),
-  };
+  // No longer awaits, just fires the event
+  sendVerificationEmail(user, fullname);
 };
 
 export const login = async (username, password) => {
@@ -180,42 +172,55 @@ export const resendVerificationEmail = async (email) => {
 export const forgotPassword = async (email) => {
   const user = await User.findOne({ email });
   if (!user) {
-    return;
+    throw new NotFoundError("Email không tồn tại trong hệ thống.");
   }
-  const resetToken = crypto.randomBytes(32).toString("hex");
-  const redisKey = `reset-password:${resetToken}`;
-  await redisService.setWithExpiry(redisKey, user._id.toString(), 10 * 60);
 
-  try {
-    const resetURL = `${config.CLIENT_URL}/reset-password/${resetToken}`;
-    await emailService.sendEmail({
-      to: user.email,
-      subject: "Yêu cầu đặt lại mật khẩu CareerZone",
-      template: "passwordReset",
-      data: { name: user.username, resetUrl: resetURL },
-    });
-  } catch (err) {
-    await redisService.del(redisKey);
-    throw new Error("Gửi email thất bại, vui lòng thử lại.");
-  }
+  // Tạo một token JWT đặc biệt cho việc reset password
+  const resetToken = jwt.sign({ id: user._id }, config.JWT_SECRET, {
+    expiresIn: "10m", // Token chỉ có hiệu lực 10 phút
+  });
+
+  const resetURL = `${config.CLIENT_URL}/reset-password?token=${resetToken}`;
+
+  const emailPayload = {
+    to: user.email,
+    subject: "Yêu cầu đặt lại mật khẩu CareerZone",
+    template: "passwordReset", // Đảm bảo template này tồn tại trong `src/views/emails`
+    data: {
+      name: user.username,
+      resetUrl: resetURL,
+    },
+  };
+
+  // Đẩy task gửi email vào RabbitMQ
+  queueService.publishNotification(ROUTING_KEYS.EMAIL_SEND, emailPayload);
+  logger.info(`Queued password reset email for ${user.email}`);
 };
 
 export const resetPassword = async (token, newPassword) => {
-  const redisKey = `reset-password:${token}`;
-  const userId = await redisService.get(redisKey);
+  try {
+    const decoded = jwt.verify(token, config.JWT_SECRET);
+    logger.info(decoded);
+    const user = await User.findById(decoded.id);
 
-  if (!userId) {
-    throw new BadRequestError("Token không hợp lệ hoặc đã hết hạn.");
+    if (!user) {
+      throw new NotFoundError("Người dùng không tồn tại.");
+    }
+
+    user.password = newPassword;
+    await user.save();
+    logger.info(`Password has been reset for user: ${user.email}`);
+  } catch (error) {
+    // Bắt lỗi token hết hạn hoặc không hợp lệ
+    if (error instanceof jwt.TokenExpiredError) {
+      throw new BadRequestError("Token đặt lại mật khẩu đã hết hạn.");
+    }
+    if (error instanceof jwt.JsonWebTokenError) {
+      throw new BadRequestError("Token đặt lại mật khẩu không hợp lệ.");
+    }
+    // Ném lại các lỗi khác
+    throw error;
   }
-
-  const user = await User.findById(userId);
-  if (!user) {
-    throw new NotFoundError("Người dùng không tồn tại.");
-  }
-
-  user.password = newPassword;
-  await user.save();
-  await redisService.del(redisKey);
 };
 
 export const changePassword = async (userId, currentPassword, newPassword) => {

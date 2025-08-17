@@ -57,6 +57,7 @@ export const changePasswordSchema = z.object({
 });
 
 export const resetPasswordSchema = z.object({
+  token: z.string().min(1, 'Token là bắt buộc'),
   newPassword: z.string()
     .min(8, 'Mật khẩu mới phải có ít nhất 8 ký tự')
     .max(100, 'Mật khẩu mới không được dài quá 100 ký tự'),

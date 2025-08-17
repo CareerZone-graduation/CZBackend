@@ -33,7 +33,6 @@ export const register = asyncHandler(async (req, res) => {
   res.status(201).json({
     success: true,
     message: "Đăng ký thành công. Vui lòng kiểm tra email để xác thực tài khoản.",
-    data: userData,
   });
 });
 
@@ -160,7 +159,7 @@ export const logout = asyncHandler(async (req, res) => {
   });
   res.json({
     success: true,
-    message: "Logout successful",
+    message: "Đăng xuất thành công",
   });
 });
 
@@ -178,9 +177,17 @@ export const verifyEmail = asyncHandler(async (req, res) => {
 
 
 
+export const forgotPassword = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  await authService.forgotPassword(email);
+  res.status(200).json({
+    success: true,
+    message: 'Yêu cầu đặt lại mật khẩu đã được gửi đến email của bạn.',
+  });
+});
+
 export const resetPassword = asyncHandler(async (req, res) => {
-  const { token } = req.params;
-  const { newPassword } = req.body;
+  const { token, newPassword } = req.body;
   await authService.resetPassword(token, newPassword);
   res.status(200).json({ success: true, message: 'Đặt lại mật khẩu thành công.' });
 });
