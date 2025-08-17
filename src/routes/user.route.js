@@ -9,8 +9,7 @@ const router = express.Router();
 const jwtAuth = passport.authenticate('jwt', { session: false });
 
 router.route('/me')
-  .get(jwtAuth, userController.getMe)
-  .put(jwtAuth, validate(updateUserSchema), userController.updateMe);
+  .get(jwtAuth, userController.getMe);
 
 router.route('/change-password')
     .put(jwtAuth, userController.changePassword);

@@ -57,33 +57,4 @@ describe('User Routes API', () => {
       expect(res.statusCode).toEqual(401);
     });
   });
-
-  describe('PUT /api/users/me', () => {
-    it('should update the current user profile successfully', async () => {
-      const updateData = {
-        fullname: 'Updated Test User',
-        phone: '123456789',
-      };
-
-      const res = await request(app)
-        .put('/api/users/me')
-        .set('Authorization', `Bearer ${token}`)
-        .send(updateData);
-
-      expect(res.statusCode).toEqual(200);
-      expect(res.body.success).toBe(true);
-      expect(res.body.message).toBe('Cập nhật thông tin thành công.');
-      expect(res.body.data.profile.fullname).toBe('Updated Test User');
-      expect(res.body.data.profile.phone).toBe('123456789');
-
-      // Verify the update in the database
-      const updatedProfile = await CandidateProfile.findOne({ userId: testUser._id });
-      expect(updatedProfile.fullname).toBe('Updated Test User');
-    });
-
-    it('should return 401 if not authenticated', async () => {
-        const res = await request(app).put('/api/users/me').send({});
-        expect(res.statusCode).toEqual(401);
-    });
-  });
 });

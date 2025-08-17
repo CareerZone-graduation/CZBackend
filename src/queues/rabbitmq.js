@@ -31,6 +31,7 @@ export const ROUTING_KEYS = {
   DAILY_DIGEST: 'notification.daily_digest', // Dành cho email tổng hợp tin tuyển dụng hàng ngày
   JOB_APPROVAL: 'notification.job_approval', // Dành cho thông báo phê duyệt tin tuyển dụng
   COMPANY_VERIFICATION: 'notification.company_verification', // Dành cho thông báo xác thực công ty
+  EMAIL_SEND: 'notification.email.send', // Dành cho các tác vụ gửi email chung
 };
 
 /**
@@ -91,6 +92,7 @@ export async function getChannel() {
     // Gắn (bind) queue này với exchange chính để nhận message có routing key tương ứng.
     await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.STATUS_UPDATE);
     await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.INTERVIEW_REMINDER);
+    await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.EMAIL_SEND);
 
     // 6. Queue cho thông báo TỔNG HỢP (daily digest)  (job alert)
     await channel.assertQueue(QUEUES.DIGEST, {
