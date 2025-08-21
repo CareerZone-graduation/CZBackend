@@ -2,11 +2,7 @@ import asyncHandler from 'express-async-handler';
 import * as authService from "../services/auth.service.js";
 import jwt from 'jsonwebtoken';
 import config from '../config/index.js';
-import { User } from '../models/index.js';
 import { OAuth2Client } from 'google-auth-library';
-import { NotFoundError, BadRequestError } from '../utils/AppError.js';
-import * as queueService from '../services/queue.service.js';
-import crypto from "crypto";
 import { CandidateProfile } from '../models/index.js';
 import logger from '../utils/logger.js';
 
@@ -21,8 +17,7 @@ const generateTokens = (user) => {
 };
 
 export const register = asyncHandler(async (req, res) => {
-  const { refreshToken, ...userData } = await authService.register(req.body);
-
+  await authService.register(req.body);
   res.cookie('refreshToken', refreshToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
@@ -197,37 +192,4 @@ export const changePassword = asyncHandler(async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   await authService.changePassword(userId, currentPassword, newPassword);
   res.status(200).json({ success: true, message: 'Đổi mật khẩu thành công.' });
-});
-
-export const resendEmailVerification = asyncHandler(async (req, res) => {
-  const { email } = req.body;
-
-  const user = await User.findOne({ email });
-  if (!user) {
-    throw new NotFoundError('User not found');
-  }
-
-  if (user.isEmailVerified) {
-    throw new BadRequestError('Email already verified');
-  }
-
-  const verificationToken = crypto.randomBytes(32).toString('hex');
-  user.emailVerificationToken = verificationToken;
-  user.emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-  await user.save();
-
-  await queueService.sendEmail({
-    to: email,
-    subject: 'Verify Your Email - CareerConnect',
-    template: 'email-verification',
-    context: {
-      name: user.username || 'User',
-      verificationUrl: `${config.CLIENT_URL}/verify-email?token=${verificationToken}`,
-    },
-  });
-
-  res.json({
-    success: true,
-    message: 'Verification email sent successfully',
-  });
 });
