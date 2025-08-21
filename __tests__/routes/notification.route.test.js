@@ -383,7 +383,6 @@ describe('Notification Routes API', () => {
 
   describe('Notification data integrity', () => {
 
-
     it('should not expose sensitive user data in notifications', async () => {
       const res = await request(app)
         .get('/api/notifications')
