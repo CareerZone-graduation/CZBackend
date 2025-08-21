@@ -286,15 +286,16 @@ export const getJobDetailsForRecruiter = async (jobId, userId) => {
 export const getJobById = async (jobId, userId = null) => {
     const jobDoc = await Job.findById(jobId).populate({
         path: 'recruiterProfileId',
-        select: 'company.name company.logo'
+        select: 'company.name company.logo company._id'
     });
 
     if (!jobDoc) {
         throw new NotFoundError('Không tìm thấy tin tuyển dụng.');
     }
-    
+
     const job = jobDoc.toObject();
-    
+    logger.info(job);
+
     // Gửi sự kiện xem việc làm nếu có userId
     if (userId) {
       kafkaService.sendUserInteraction({
@@ -306,13 +307,33 @@ export const getJobById = async (jobId, userId = null) => {
       });
     }
 
-    // rename the recruiterProfileId to recruiter
-    if (job) {
-        job.company = job.recruiterProfileId.company;
-        delete job.recruiterProfileId;
-    }
-    
-    return job;
+    // tường minh
+    return {
+      _id: job._id,
+      title: job.title,
+      description: job.description,
+      requirements: job.requirements,
+      benefits: job.benefits,
+      location: job.location,
+      address: job.address,
+      type: job.type,
+      workType: job.workType,
+      minSalary: job.minSalary,
+      maxSalary: job.maxSalary,
+      deadline: job.deadline,
+      experience: job.experience,
+      category: job.category,
+      skills: job.skills,
+      area: job.area,
+      status: job.status,
+      approved: job.approved,
+      company: {
+        name: job.recruiterProfileId.company.name,
+        logo: job.recruiterProfileId.company.logo,
+        _id: job.recruiterProfileId.company._id
+      }
+
+    };
 };
 
 /**

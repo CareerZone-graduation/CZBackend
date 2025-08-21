@@ -37,7 +37,5 @@ router.post('/reset-password', validationMiddleware.validateBody(authSchema.rese
 // Các route không thay đổi
 router.post('/refresh', authController.refreshToken);
 router.post('/verify-email', validationMiddleware.validateQuery(authSchema.verifyEmailSchema), authController.verifyEmail);
-router.post('/resend-verification-email', authController.resendEmailVerification);
-
 
 export default router;

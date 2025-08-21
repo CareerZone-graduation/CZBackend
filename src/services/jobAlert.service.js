@@ -1,6 +1,7 @@
 import JobAlertSubscription from '../models/JobAlertSubscription.js';
 import { BadRequestError, NotFoundError } from '../utils/AppError.js';
 import redisClient from '../config/redis.js';
+import logger from '../utils/logger.js';
 
 const getKeywordRedisKey = (keyword) => `job_alert:keyword:${keyword.toLowerCase().trim()}`;
 
@@ -15,8 +16,11 @@ export const createJobAlert = async (candidateId, data) => {
 };
 
 export const updateJobAlert = async (candidateId, subscriptionId, data) => {
+    logger.info(`Updating job alert subscription ${subscriptionId} for candidate ${candidateId}`);
+
     const subscription = await JobAlertSubscription.findById(subscriptionId);
-    if (!subscription || subscription.candidateId.toString() !== candidateId) {
+
+    if (!subscription || !subscription.candidateId.equals(candidateId)) {
         throw new NotFoundError('Không tìm thấy đăng ký hoặc bạn không có quyền.');
     }
     const oldKeyword = subscription.keyword;

@@ -11,9 +11,9 @@ import mongoose from 'mongoose';
 // =================================================================
 
 /**
- * Get notifications for a user with pagination
+ * Get notifications for a user with pagination and filtering
  * @param {string} userId - The ID of the user
- * @param {object} options - Pagination options (page, limit)
+ * @param {object} options - Query options (page, limit, type, isRead, search)
  * @returns {Promise<object>} - A promise that resolves to an object containing notifications and pagination metadata
  */
 export const getNotifications = async (userId, options = {}) => {
@@ -22,6 +22,24 @@ export const getNotifications = async (userId, options = {}) => {
   const skip = (page - 1) * limit;
 
   const query = { userId };
+
+  // // Filter by type
+  // if (options.type) {
+  //   query.type = options.type;
+  // }
+
+  // Filter by read status
+  if (options.isRead !== undefined) {
+    query.isRead = options.isRead === 'true' || options.isRead === true;
+  }
+
+  // Search by title or message
+  // if (options.search) {
+  //   query.$or = [
+  //     { title: { $regex: options.search, $options: 'i' } },
+  //     { message: { $regex: options.search, $options: 'i' } }
+  //   ];
+  // }
 
   const notifications = await Notification.find(query)
     .sort({ createdAt: -1 })
@@ -51,8 +69,11 @@ export const getNotifications = async (userId, options = {}) => {
  */
 export const markNotificationAsRead = async (userId, notificationId) => {
   const notification = await Notification.findOneAndUpdate(
-    { _id: notificationId,  userId },
-    { isRead: true },
+    { _id: notificationId, userId },
+    { 
+      isRead: true,
+      readAt: new Date()
+    },
     { new: true }
   ).lean();
 
@@ -70,8 +91,11 @@ export const markNotificationAsRead = async (userId, notificationId) => {
  */
 export const markAllNotificationsAsRead = async (userId) => {
   const result = await Notification.updateMany(
-    {  userId, isRead: false },
-    { isRead: true }
+    { userId, isRead: false },
+    { 
+      isRead: true,
+      readAt: new Date()
+    }
   );
 
   return result;
