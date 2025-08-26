@@ -33,11 +33,11 @@ describe('Company Routes', () => {
         taxCode: '123456789',
         size: '10-20',
         website: 'https://awesomeinc.com',
-        address: {
-          street: '123 Main St',
-          city: 'Hanoi',
-          country: 'Vietnam',
+        location: {
+          province: 'Thành phố Hà Nội',
+          ward: 'Phường Trung Hoà'
         },
+        address: '123 Main St',
         contactInfo: {
           email: 'contact@awesomeinc.com',
           phone: '0987654321',

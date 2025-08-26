@@ -23,7 +23,7 @@ const locationSchema = z.object({
 
 const contactInfoSchema = z.object({
     email: z.string().email('Please enter a valid email').trim().toLowerCase().optional(),
-    phone: z.string().regex(/^[+]?[d]{1,15}$/, 'Please enter a valid phone number').trim().optional(),
+    phone: z.string().regex(/^[\+]?[\d]{1,15}$/, 'Please enter a valid phone number').trim().optional(),
 }).optional();
 
 

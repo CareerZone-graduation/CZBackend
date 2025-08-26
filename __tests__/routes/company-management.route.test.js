@@ -68,11 +68,11 @@ describe('Company Management Routes', () => {
       taxCode: '0123456789',
       size: '50-100',
       website: 'https://techinnovation.com',
-      address: {
-        street: '123 Nguyễn Huệ',
-        city: 'Ho Chi Minh City',
-        country: 'Vietnam'
+      location: {
+        province: 'Hà Nội',
+        ward: 'Hà Đông',
       },
+      address: '123 Nguyễn Huệ',
       contactInfo: {
         email: 'contact@techinnovation.com',
         phone: '0901234567'
@@ -271,11 +271,11 @@ describe('Company Management Routes', () => {
             taxCode: '0123456789',
             size: '10-50',
             website: 'https://mytestcompany.com',
-            address: {
-              street: '456 Test Street',
-              city: 'Hanoi',
-              country: 'Vietnam'
+            location: {
+              province: 'Thành phố Hà Nội',
+              ward: 'Phường Cống Vị'
             },
+            address: '456 Test Street',
             contactInfo: {
               email: 'info@mytestcompany.com',
               phone: '0987654321'
@@ -353,11 +353,11 @@ describe('Company Management Routes', () => {
       industry: 'Tài chính',
       size: '100-200',
       website: 'https://updatedcompany.com',
-      address: {
-        street: '789 Updated Street',
-        city: 'Da Nang',
-        country: 'Vietnam'
+      location: {
+        province: 'Hà Nội',
+        ward: 'Hà Đông'
       },
+      address: '789 Updated Street',
       contactInfo: {
         email: 'contact@updatedcompany.com',
         phone: '0912345678'
