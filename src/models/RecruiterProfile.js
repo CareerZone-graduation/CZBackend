@@ -74,22 +74,22 @@ const companyInfoSchema = new mongoose.Schema({
     trim: true,
     match: [/^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/, 'Please enter a valid website URL']
   },
-  address: {
-    street: {
+  location: {
+    province: {
       type: String,
       trim: true,
-      maxlength: [200, 'Street cannot exceed 200 characters']
+      maxlength: [100, 'Province/City cannot exceed 100 characters']
     },
-    city: {
+    ward: {
       type: String,
       trim: true,
-      maxlength: [100, 'City cannot exceed 100 characters']
-    },
-    country: {
-      type: String,
-      trim: true,
-      maxlength: [100, 'Country cannot exceed 100 characters']
+      maxlength: [100, 'Ward/District cannot exceed 100 characters']
     }
+  },
+  address: { // Địa chỉ chi tiết (số nhà, tên đường)
+    type: String,
+    trim: true,
+    maxlength: [200, 'Address cannot exceed 200 characters']
   },
   contactInfo: {
     email: {
