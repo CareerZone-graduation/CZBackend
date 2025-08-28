@@ -26,7 +26,7 @@ export const getAllJobs = asyncHandler(async (req, res) => {
 export const getMyJobs = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const options = req.query;
-  console.log('getMyJobs options:', options);
+  
   const result = await jobService.getJobsByRecruiter(userId, options);
   res.status(200).json({
     success: true,

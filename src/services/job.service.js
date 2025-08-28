@@ -155,7 +155,7 @@ export const getAllJobs = async (options) => {
  * @returns {Promise<object>} Danh sách tin tuyển dụng và thông tin phân trang
  */
 export const getJobsByRecruiter = async (userId, options) => {
-  const { page = 1, limit = 10, status, sortBy } = options;
+  const { page = 1, limit = 10, status, sortBy, search } = options;
   
   const recruiterProfile = await findRecruiterProfileByUserId(userId);
   const recruiterProfileId = recruiterProfile._id;
@@ -163,6 +163,24 @@ export const getJobsByRecruiter = async (userId, options) => {
   const query = { recruiterProfileId };
   if (status) {
     query.status = status;
+  }
+
+  /**
+ * Escape special characters for MongoDB regex
+ * @param {string} text - Text to escape
+ * @returns {string} Escaped text
+ */
+const escapeRegex = (text) => {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+  // Add search functionality with escaped regex
+  if (search) {
+    const escapedSearch = escapeRegex(search);
+    query.$or = [
+      { title: { $regex: escapedSearch, $options: 'i' } },
+      { skills: { $regex: escapedSearch, $options: 'i' } }
+    ];
   }
 
   const sortOptions = {};
@@ -178,7 +196,8 @@ export const getJobsByRecruiter = async (userId, options) => {
   const jobs = await Job.find(query)
     .sort(sortOptions)
     .skip(skip)
-    .limit(limit);
+    .limit(limit)
+    .lean();
 
   const totalJobs = await Job.countDocuments(query);
 

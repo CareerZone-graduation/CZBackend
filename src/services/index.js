@@ -8,7 +8,7 @@ export { notificationService } from './notification.service.js';
 export { cloudinaryService } from './cloudinary.service.js';
 export { queueService } from './queue.service.js';
 export * as chatService from './chat.service.js';
-export { interviewService } from './interview.service.js';
+export * as interviewService from './interview.service.js';
 export { adminService } from './admin.service.js';
 export * as templateService from './template.service.js';
 export * as cvService from './cv.service.js';

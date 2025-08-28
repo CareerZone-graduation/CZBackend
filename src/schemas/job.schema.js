@@ -95,6 +95,7 @@ export const jobQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(10),
   status: z.enum(jobStatusEnum).optional(),
   sortBy: z.string().optional(),
+  search: z.string().optional(), // Thêm dòng này
 });
 
 export const applyToJobSchema = z.object({
@@ -115,4 +116,13 @@ export const applyToJobSchema = z.object({
 }, {
   message: 'Bạn phải cung cấp `cvId` (cho CV tải lên) hoặc `cvTemplateId` (cho CV tạo từ mẫu). Không thể cung cấp cả hai hoặc không cung cấp trường nào.',
   path: ['cvId'], // Báo lỗi ở trường đầu tiên để dễ xử lý
+});
+
+// Update the getMyJobs query schema to include search parameter
+export const getMyJobsQuerySchema = z.object({
+  page: z.coerce.number().min(1).optional().default(1),
+  limit: z.coerce.number().min(1).max(100).optional().default(10),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'EXPIRED']).optional(),
+  sortBy: z.string().optional(),
+  search: z.string().optional(), // Add this line
 });

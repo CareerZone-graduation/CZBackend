@@ -26,7 +26,7 @@ router.get(
   '/my-jobs',
   passport.authenticate('jwt', { session: false }),
   authMiddleware.recruiterOnly,
-  validationMiddleware.validateQuery(jobSchema.jobQuerySchema),
+  validationMiddleware.validateQuery(jobSchema.getMyJobsQuerySchema), // Updated schema validation
   jobController.getMyJobs
 );
 router.get(

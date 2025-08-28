@@ -28,6 +28,8 @@ const DLX = 'notifications_dlx';
 export const ROUTING_KEYS = {
   STATUS_UPDATE: 'notification.status_update', // Dành cho cập nhật trạng thái đơn ứng tuyển
   INTERVIEW_REMINDER: 'notification.interview_reminder', // Dành cho nhắc lịch phỏng vấn
+  INTERVIEW_RESCHEDULE: 'notification.interview_reschedule', // Dành cho dời lịch phỏng vấn
+  INTERVIEW_CANCEL: 'notification.interview_cancel', // Dành cho hủy lịch phỏng vấn
   DAILY_DIGEST: 'notification.daily_digest', // Dành cho email tổng hợp tin tuyển dụng hàng ngày
   JOB_APPROVAL: 'notification.job_approval', // Dành cho thông báo phê duyệt tin tuyển dụng
   COMPANY_VERIFICATION: 'notification.company_verification', // Dành cho thông báo xác thực công ty
@@ -92,6 +94,9 @@ export async function getChannel() {
     // Gắn (bind) queue này với exchange chính để nhận message có routing key tương ứng.
     await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.STATUS_UPDATE);
     await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.INTERVIEW_REMINDER);
+    await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.INTERVIEW_RESCHEDULE);
+    await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.INTERVIEW_CANCEL);
+    await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.INTERVIEW_COMPLETE);
     await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.EMAIL_SEND);
 
     // 6. Queue cho thông báo TỔNG HỢP (daily digest)  (job alert)

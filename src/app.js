@@ -28,6 +28,7 @@ import aiRoutes from './routes/ai.route.js';
 import paymentRoutes from './routes/payment.route.js';
 import chatRoutes from './routes/chat.route.js';
 import adminRoutes from './routes/admin.route.js';
+import interviewRoutes from './routes/interview.route.js';
 
 // 🚧 Middlewares
 import * as errorMiddleware from './middleware/error.middleware.js';
@@ -38,23 +39,23 @@ dotenv.config();
 const app = express();
 
 // Bảo mật
-app.use(
-    helmet({
-        crossOriginResourcePolicy: { policy: 'cross-origin' },
-    }),
-);
+// app.use(
+//     helmet({
+//         crossOriginResourcePolicy: { policy: 'cross-origin' },
+//     }),
+// );
 
-// Giới hạn số request
-app.use(
-    '/api/',
-    rateLimit({
-        windowMs: 15 * 60 * 1000,
-        max: 1000000,
-        message: 'Too many requests from this IP, please try again later.',
-        standardHeaders: true,
-        legacyHeaders: false,
-    }),
-);
+// // Giới hạn số request
+// app.use(
+//     '/api/',
+//     rateLimit({
+//         windowMs: 15 * 60 * 1000,
+//         max: 1000000,
+//         message: 'Too many requests from this IP, please try again later.',
+//         standardHeaders: true,
+//         legacyHeaders: false,
+//     }),
+// );
 
 // CORS
 app.use(
@@ -107,6 +108,7 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/interviews', interviewRoutes);
 
 // 404 & error
 app.use(notFoundMiddleware.notFound);

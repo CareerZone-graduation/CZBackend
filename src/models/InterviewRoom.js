@@ -50,7 +50,7 @@ const interviewRoomSchema = new mongoose.Schema({
   notes: {
     type: String,
     trim: true,
-    maxlength: [500, 'Notes cannot exceed 500 characters']
+    maxlength: [9000, 'Notes cannot exceed 9000 characters']
   },
   isReminderSent: {
     type: Boolean,

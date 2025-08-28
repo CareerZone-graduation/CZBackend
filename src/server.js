@@ -26,7 +26,7 @@ const io = new socketio.Server(server, {
     credentials: true,
   },
 });
-socket.initializeSocket(io);
+// socket.initializeSocket(io);
 
 // Khởi động
 const startServer = async () => {

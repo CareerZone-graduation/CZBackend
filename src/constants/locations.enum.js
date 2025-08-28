@@ -25,6 +25,6 @@ export const provinceNames = tree.map((province) => province.name);
 export const locationMap = new Map(tree.map(province => [
   province.name,
   {
-    wards: province.wards.map(ward => ward.name)
+    wards: province.wards
   }
 ]));
