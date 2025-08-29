@@ -1,6 +1,7 @@
 import asyncHandler from 'express-async-handler';
 import * as paymentService from '../services/payment.service.js';
 import { BadRequestError } from '../utils/AppError.js';
+import config from './../config/index.js';
 
 /**
  * @desc    Create a new payment order
@@ -47,11 +48,11 @@ export const handleZaloPayRedirect = asyncHandler(async (req, res) => {
     await paymentService.handleZaloPayCallback(apptransid, status);
     if (status === '1') {
         // Thanh toán thành công
-        res.header('Location', `http://localhost:3000/success`);
+        res.header('Location', config.CLIENT_URL+`/payment/success`);
         res.status(302).end();
     } else {
         // Thanh toán thất bại
-        res.header('Location', 'http://localhost:3000/failure');
+        res.header('Location', config.CLIENT_URL+`/payment/failure`);
         res.status(302).end();
     }
 });

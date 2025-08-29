@@ -1,5 +1,34 @@
 import mongoose from 'mongoose';
 
+// ĐỊNH NGHĨA SCHEMA CHO MỘT MỤC LỊCH SỬ HOẠT ĐỘNG
+const activityLogSchema = new mongoose.Schema({
+  actor: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User', // Tham chiếu đến User của Recruiter
+    required: true
+  },
+  action: {
+    type: String,
+    enum: [
+      'STATUS_CHANGE',
+      'RATING_UPDATE', 
+      'NOTES_UPDATE',
+      'INTERVIEW_SCHEDULED',
+      'INTERVIEW_RESCHEDULED',
+      'INTERVIEW_CANCELLED',
+      'INTERVIEW_COMPLETED',
+      'APPLICATION_VIEWED'
+    ],
+    required: true
+  },
+  detail: {
+    type: String
+  },
+  timestamp: {
+    type: Date,
+    default: Date.now
+  }
+}, { _id: false });
 
 const submittedCV = new mongoose.Schema({
   name: {
@@ -119,6 +148,11 @@ const applicationSchema = new mongoose.Schema({
       trim: true
     }
   },
+  // THÊM MẢNG LỊCH SỬ HOẠT ĐỘNG
+  activityHistory: {
+    type: [activityLogSchema],
+    default: []
+  }
 }, {
   timestamps: true
 });

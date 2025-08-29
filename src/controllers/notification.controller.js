@@ -14,6 +14,17 @@ export const getNotifications = asyncHandler(async (req, res) => {
   });
 });
 
+export const getUnreadCount = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  const count = await notificationService.getUnreadNotificationCount(userId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy số lượng thông báo chưa đọc thành công.',
+    data: { unreadCount: count },
+  });
+});
+
 export const markNotificationAsRead = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const { id: notificationId } = req.params;

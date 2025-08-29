@@ -16,7 +16,7 @@ const interviewStatusEnum = ['SCHEDULED', 'STARTED', 'COMPLETED', 'CANCELLED', '
  * @property {string} applicationId - ID of the application (optional)
  * @property {string} roomName - Name of the interview room
  * @property {string} scheduledTime - Scheduled interview time (ISO string)
- * @property {string} notes - Interview notes (optional)
+ * @property {string} initialNotes - Initial notes for the interview (optional)
  */
 export const createInterviewSchema = z.object({
   userId: z.string() // Changed candidateId to userId
@@ -30,8 +30,8 @@ export const createInterviewSchema = z.object({
     .datetime('Scheduled time must be a valid datetime')
     .transform((str) => new Date(str))
     .refine((date) => date > new Date(), 'Scheduled time must be in the future'),
-  notes: z.string()
-    .max(500, 'Notes cannot exceed 500 characters')
+  initialNotes: z.string()
+    .max(1000, 'Initial notes cannot exceed 1000 characters')
     .trim()
     .optional()
 });
@@ -65,7 +65,7 @@ export const updateInterviewStatusSchema = z.object({
     errorMap: () => ({ message: 'Invalid interview status' })
   }),
   notes: z.string()
-    .max(500, 'Notes cannot exceed 500 characters')
+    .max(1000, 'Notes cannot exceed 1000 characters')
     .trim()
     .optional(),
   recordingUrl: z.string()

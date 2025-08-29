@@ -13,10 +13,6 @@ const notificationSchema = new mongoose.Schema({
     trim: true,
     maxlength: [1000, "Message cannot exceed 1000 characters"],
   },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
   isRead: {
     type: Boolean,
     default: false,
@@ -36,7 +32,6 @@ const notificationSchema = new mongoose.Schema({
         "interview",
         "recommendation",
         "profile_view",
-        "profile_update",
         "job_alert",
         "system",
       ],
@@ -46,7 +41,7 @@ const notificationSchema = new mongoose.Schema({
   },
   entity: {
     type: {
-      type: String, // 'Application', 'Job', 'InterviewRoom'
+      type: String, // 'Application', 'Job', 'InterviewRoom', 'RecruiterProfile'
     },
     id: {
       type: mongoose.Schema.Types.ObjectId,
@@ -57,12 +52,19 @@ const notificationSchema = new mongoose.Schema({
     ref: "User",
     required: [true, "User reference is required"],
   },
+}, { 
+  timestamps: true
 });
 
-// Create indexes for better query performance
+// BẮT BUỘC: Thêm indexes cho các trường thường xuyên được truy vấn
 notificationSchema.index({ userId: 1, createdAt: -1 });
 notificationSchema.index({ userId: 1, isRead: 1 });
+notificationSchema.index({ userId: 1, type: 1 });
 notificationSchema.index({ type: 1 });
 notificationSchema.index({ createdAt: -1 });
+notificationSchema.index({ userId: 1, isRead: 1, createdAt: -1 });
+
+// Tự động xóa thông báo sau 30 ngày (2592000 giây)
 notificationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 2592000 });
+
 export default mongoose.model("Notification", notificationSchema);

@@ -9,7 +9,11 @@ const router = Router();
 
 router.use(passport.authenticate('jwt', { session: false }));
 
+// GET /notifications - Lấy danh sách thông báo
 router.get('/', notificationController.getNotifications);
+
+// GET /notifications/unread-count - Lấy số lượng thông báo chưa đọc
+router.get('/unread-count', notificationController.getUnreadCount);
 
 router.patch(
   '/:id/read',

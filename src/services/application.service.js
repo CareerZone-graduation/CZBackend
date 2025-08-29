@@ -12,6 +12,26 @@ import logger from '../utils/logger.js';
 import * as queueService from './queue.service.js';
 import * as rabbitmq from '../queues/rabbitmq.js';
 
+// ==========================================================
+// === HELPER FUNCTIONS FOR AUTOMATION & LOGGING (NEW) ====
+// ==========================================================
+
+/**
+ * Ghi lại một hành động vào lịch sử của đơn ứng tuyển.
+ * Hàm này không tự save, việc save sẽ do hàm gọi nó quyết định.
+ */
+const logActivity = (application, recruiterId, action, detail) => {
+  console.log("Logging activity: ", { recruiterId, action, detail });
+  application.activityHistory.push({
+    actor: recruiterId,
+    action,
+    detail,
+    timestamp: new Date()
+  });
+};
+
+
+
 /**
  * Lấy danh sách ứng viên đã ứng tuyển vào một công việc cụ thể
  * @param {string} jobId ID của công việc
@@ -140,8 +160,7 @@ export const getApplicationsByJob = async (jobId, recruiterId, options = {}) => 
  * @returns {Object} Thông tin chi tiết đơn ứng tuyển
  */
 export const getApplicationById = async (applicationId, recruiterId) => {
-
-    const application = await Application.findById(applicationId).select('-createdAt -updatedAt -__v')
+  const application = await Application.findById(applicationId); // Lấy document đầy đủ
   if (!application) {
     throw new NotFoundError('Không tìm thấy đơn ứng tuyển');
   }
@@ -189,65 +208,6 @@ export const getApplicationById = async (applicationId, recruiterId) => {
   return applicationDetails;
 };
 
-/**
- * Cập nhật trạng thái đơn ứng tuyển
- * @param {string} applicationId ID của đơn ứng tuyển
- * @param {string} recruiterId ID của nhà tuyển dụng
- * @param {string} status Trạng thái mới
- * @returns {Object} Đơn ứng tuyển đã cập nhật
- */
-export const updateApplicationStatus = async (applicationId, recruiterId, status) => {
-  // Kiểm tra ID hợp lệ
-  if (!mongoose.Types.ObjectId.isValid(applicationId)) {
-    throw new BadRequestError('ID đơn ứng tuyển không hợp lệ');
-  }
-
-  // Lấy thông tin đơn ứng tuyển
-  const application = await Application.findById(applicationId).select('-createdAt -updatedAt -__v');
-  if (!application) {
-    throw new NotFoundError('Không tìm thấy đơn ứng tuyển');
-  }
-
-  // Kiểm tra quyền sở hữu
-  const job = await Job.findById(application.jobId);
-  if (!job) {
-    throw new NotFoundError('Không tìm thấy công việc liên quan');
-  }
-
-  // Lấy recruiter profile của người dùng hiện tại
-  const recruiterProfile = await RecruiterProfile.findOne({ userId: recruiterId });
-  if (!recruiterProfile) {
-    throw new UnauthorizedError('Bạn không phải là nhà tuyển dụng');
-  }
-
-  if (job.recruiterProfileId.toString() !== recruiterProfile._id.toString()) {
-    throw new UnauthorizedError('Bạn không có quyền cập nhật đơn ứng tuyển này');
-  }
-
-  // Cập nhật trạng thái
-  application.status = status;
-  application.lastStatusUpdateAt = new Date();
-  await application.save();
-
-  logger.info(`Đơn ứng tuyển ${applicationId} đã được cập nhật trạng thái thành ${status}`);
-
-  // Gửi thông báo vào queue
-  const candidateProfile = await CandidateProfile.findById(application.candidateProfileId).select('userId');
-  if (candidateProfile) {
-    queueService.publishNotification(rabbitmq.ROUTING_KEYS.STATUS_UPDATE, {
-      type: 'APPLICATION_STATUS_UPDATE',
-      recipientId: candidateProfile.userId.toString(),
-      data: {
-        applicationId: application._id.toString(),
-        jobTitle: application.jobSnapshot.title,
-        companyName: application.jobSnapshot.company,
-        newStatus: status,
-      }
-    });
-  }
-
-  return application;
-};
 
 /**
  * Cập nhật đánh giá ứng viên
@@ -263,7 +223,7 @@ export const updateCandidateRating = async (applicationId, recruiterId, rating) 
   }
 
   // Lấy thông tin đơn ứng tuyển
-  const application = await Application.findById(applicationId).select('-createdAt -updatedAt -__v');
+  const application = await Application.findById(applicationId);
   if (!application) {
     throw new NotFoundError('Không tìm thấy đơn ứng tuyển');
   }
@@ -283,12 +243,36 @@ export const updateCandidateRating = async (applicationId, recruiterId, rating) 
   if (job.recruiterProfileId.toString() !== recruiterProfile._id.toString()) {
     throw new UnauthorizedError('Bạn không có quyền cập nhật đánh giá ứng viên này');
   }
-
-  // Cập nhật đánh giá
+  const ratingMessage = rating === "NOT_RATED" ? "chưa được đánh giá" :
+              rating === "NOT_SUITABLE" ? "không phù hợp" :
+              rating === "MAYBE" ? "có thể phù hợp" :
+              rating === "SUITABLE" ? "phù hợp" :
+              rating === "PERFECT_MATCH" ? "rất phù hợp" : rating;
+  if (application.status === 'PENDING' || application.status === 'REVIEWING') {
+    application.status = 'REVIEWING';
+    application.lastStatusUpdateAt = new Date();
+    console.log("Logging RATING_UPDATE with status change "+ratingMessage);
+    logActivity(application, recruiterId, 'RATING_UPDATE', `Đã đánh giá ứng viên là: ${ratingMessage}`);
+  }
+  
   application.candidateRating = rating;
   await application.save();
 
-  logger.info(`Đơn ứng tuyển ${applicationId} đã được cập nhật đánh giá thành ${rating}`);
+  // gửi thông báo vào queue
+  const candidateProfile = await CandidateProfile.findById(application.candidateProfileId).select('userId');
+  if (candidateProfile) {
+    queueService.publishNotification(rabbitmq.ROUTING_KEYS.RATING_UPDATE, {
+      type: 'APPLICATION_UPDATE',
+      recipientId: candidateProfile.userId.toString(),
+      data: {
+        action: 'RATING_UPDATE',
+        applicationId: application._id.toString(),
+        jobTitle: application.jobSnapshot.title,
+        companyName: application.jobSnapshot.company,
+        newRating: rating,
+      }
+    });
+  }
 
   return application;
 };
@@ -307,7 +291,7 @@ export const updateApplicationNotes = async (applicationId, recruiterId, notes) 
   }
 
   // Lấy thông tin đơn ứng tuyển
-  const application = await Application.findById(applicationId).select('-createdAt -updatedAt -__v');
+  const application = await Application.findById(applicationId);
   if (!application) {
     throw new NotFoundError('Không tìm thấy đơn ứng tuyển');
   }
@@ -328,11 +312,11 @@ export const updateApplicationNotes = async (applicationId, recruiterId, notes) 
     throw new UnauthorizedError('Bạn không có quyền cập nhật ghi chú cho đơn ứng tuyển này');
   }
 
-  // Cập nhật ghi chú
+
+  logActivity(application, recruiterId, 'NOTES_UPDATE', "Ghi chú cập nhật: " + notes);
+
   application.notes = notes;
   await application.save();
-
-  logger.info(`Đơn ứng tuyển ${applicationId} đã được cập nhật ghi chú`);
 
   return application;
 };
@@ -372,6 +356,7 @@ export const scheduleInterview = async (applicationId, recruiterId, scheduledTim
   if (!candidateProfile) {
     throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
   }
+  
   // 4. Tạo phòng phỏng vấn
   const roomName = `Phỏng vấn vị trí ${job.title} - Ứng viên: ${application.candidateName}`;
   const newInterview = await InterviewRoom.create({
@@ -381,27 +366,39 @@ export const scheduleInterview = async (applicationId, recruiterId, scheduledTim
     applicationId,
     scheduledTime,
     status: 'SCHEDULED',
+    changeHistory: [{
+      timestamp: new Date(),
+      action: 'CREATED',
+      actor: recruiterId
+    }]
   });
 
-  // 5. Cập nhật trạng thái đơn ứng tuyển thành 'INTERVIEWED'
+  // 5. Cập nhật trạng thái đơn ứng tuyển và ghi log
+  const oldStatus = application.status;
   application.status = 'SCHEDULED_INTERVIEW';
   application.lastStatusUpdateAt = new Date();
+
+  // Ghi log cho việc lên lịch và việc đổi trạng thái
+  logActivity(application, recruiterId, 'INTERVIEW_SCHEDULED', 
+    "Lên lịch phỏng vấn vào " + new Date(scheduledTime).toLocaleString('vi-VN'),
+  );
+  
   await application.save();
 
   // 6. Gửi thông báo (tùy chọn, có thể tách ra event)
   // Gửi cho ứng viên
   queueService.publishNotification(rabbitmq.ROUTING_KEYS.STATUS_UPDATE, {
-    type: 'APPLICATION_STATUS_UPDATE',
+    type: 'APPLICATION_UPDATE',
     recipientId: candidateProfile.userId.toString(),
     data: {
+      action: 'INTERVIEW_SCHEDULED',
       applicationId: application._id.toString(),
       jobTitle: job.title,
       companyName: job.companyName, // Giả sử có trường này trong model Job
-      newStatus: 'SCHEDULED_INTERVIEW',
+      scheduledTime: scheduledTime
     },
   });
 
-  logger.info(`Đã tạo lịch phỏng vấn ${newInterview._id} cho đơn ứng tuyển ${applicationId}.`);
 
   return newInterview;
 };

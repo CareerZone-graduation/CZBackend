@@ -28,19 +28,19 @@ export const getRecruiterInterviews = async (recruiterId, options = {}) => {
 
   // Lấy danh sách cuộc phỏng vấn
   const interviews = await InterviewRoom.find(query)
-    .populate('candidateId', 'username email')
+    .populate('candidateId', 'fullName email avatar')
     .populate({
       path: 'applicationId',
-      select: 'jobSnapshot candidateProfileId appliedAt status'
+      select: 'jobSnapshot candidateProfileId appliedAt status candidateName candidateEmail candidatePhone'
     })
-    .sort({ scheduledTime: 1 }) // Sắp xếp theo thời gian sắp tới trước
+    .sort({ scheduledTime: 1 })
     .skip(skip)
     .limit(Number(limit))
     .lean();
 
   const totalPages = Math.ceil(total / limit);
 
-  // Tối ưu và định dạng lại dữ liệu trả về
+  // Tối ưu và định dạng lại dữ liệu trả về cho recruiter
   const formattedInterviews = interviews.map(interview => ({
     id: interview._id,
     roomName: interview.roomName,
@@ -48,26 +48,32 @@ export const getRecruiterInterviews = async (recruiterId, options = {}) => {
     startTime: interview.startTime,
     endTime: interview.endTime,
     status: interview.status,
-    notes: interview.notes,
     isReminderSent: interview.isReminderSent,
     createdAt: interview.createdAt,
     updatedAt: interview.updatedAt,
     candidate: {
       id: interview.candidateId._id,
+      fullName: interview.candidateId.fullName || interview.applicationId?.candidateName,
+      email: interview.candidateId.email || interview.applicationId?.candidateEmail,
       username: interview.candidateId.username,
-      email: interview.candidateId.email
+      avatar: interview.candidateId.avatar,
+      phone: interview.applicationId?.candidatePhone
     },
     application: interview.applicationId ? {
       id: interview.applicationId._id,
       appliedAt: interview.applicationId.appliedAt,
       status: interview.applicationId.status,
-      job: {
-        title: interview.applicationId.jobSnapshot?.title,
-        company: {
-          name: interview.applicationId.jobSnapshot?.company,
-          logo: interview.applicationId.jobSnapshot?.logo
-        }
-      }
+      candidateProfileId: interview.applicationId.candidateProfileId
+    } : null,
+    job: interview.applicationId?.jobSnapshot ? {
+      title: interview.applicationId.jobSnapshot.title,
+      company: {
+        name: interview.applicationId.jobSnapshot.company,
+        logo: interview.applicationId.jobSnapshot.logo
+      },
+      location: interview.applicationId.jobSnapshot.location,
+      employmentType: interview.applicationId.jobSnapshot.employmentType,
+      level: interview.applicationId.jobSnapshot.level
     } : null
   }));
 
@@ -76,8 +82,7 @@ export const getRecruiterInterviews = async (recruiterId, options = {}) => {
       currentPage: Number(page),
       totalPages,
       totalItems: total,
-      hasNextPage: page < totalPages,
-      hasPrevPage: page > 1
+      limit: Number(limit)
     },
     data: formattedInterviews
   };
@@ -123,7 +128,7 @@ export const getCandidateInterviews = async (candidateId, options = {}) => {
     startTime: interview.startTime,
     endTime: interview.endTime,
     status: interview.status,
-    notes: interview.notes,
+    changeHistory: interview.changeHistory,
     isReminderSent: interview.isReminderSent,
     createdAt: interview.createdAt,
     updatedAt: interview.updatedAt,
@@ -170,8 +175,11 @@ export const getCandidateInterviews = async (candidateId, options = {}) => {
  */
 export const getInterviewDetails = async (interviewId, userId, userRole) => {
   const interview = await InterviewRoom.findById(interviewId)
-     .populate({
-      path: 'applicationId'
+    .populate('candidateId', 'fullName email avatar username')
+    .populate('recruiterId', 'fullName email avatar')
+    .populate({
+      path: 'applicationId',
+      select: 'jobSnapshot candidateProfileId appliedAt status candidateName candidateEmail candidatePhone coverLetter candidateRating notes submittedCV activityHistory'
     })
     .lean();
 
@@ -187,42 +195,71 @@ export const getInterviewDetails = async (interviewId, userId, userRole) => {
     throw new ForbiddenError('Bạn không có quyền truy cập cuộc phỏng vấn này.');
   }
 
+  // Tính thời lượng phỏng vấn nếu đã hoàn thành
+  let duration = null;
+  if (interview.startTime && interview.endTime) {
+    const durationMs = interview.endTime - interview.startTime;
+    duration = {
+      minutes: Math.round(durationMs / (1000 * 60)),
+      milliseconds: durationMs,
+      formatted: `${Math.floor(durationMs / (1000 * 60))}:${Math.floor((durationMs % (1000 * 60)) / 1000).toString().padStart(2, '0')}`
+    };
+  }
+
   const formattedInterview = {
     id: interview._id,
     roomName: interview.roomName,
     scheduledTime: interview.scheduledTime,
     startTime: interview.startTime,
     endTime: interview.endTime,
+    duration,
     status: interview.status,
-    notes: interview.notes,
+    changeHistory: interview.changeHistory,
     isReminderSent: interview.isReminderSent,
     createdAt: interview.createdAt,
     updatedAt: interview.updatedAt,
-    application: interview.applicationId 
-    ? {
+    candidate: {
+      id: interview.candidateId._id,
+      fullName: interview.candidateId.fullName || interview.applicationId?.candidateName,
+      email: interview.candidateId.email || interview.applicationId?.candidateEmail,
+      username: interview.candidateId.username,
+      avatar: interview.candidateId.avatar,
+      phone: interview.applicationId?.candidatePhone
+    },
+    recruiter: isCandidate ? {
+      id: interview.recruiterId._id,
+      fullName: interview.recruiterId.fullName,
+      email: interview.recruiterId.email,
+      avatar: interview.recruiterId.avatar
+    } : null,
+    application: interview.applicationId ? {
       id: interview.applicationId._id,
-      jobId: interview.applicationId.jobId,
-      candidateProfileId: interview.applicationId.candidateProfileId,
-      coverLetter: interview.applicationId.coverLetter,
-      status: interview.applicationId.status,
-      candidateRating: interview.applicationId.candidateRating,
-      isReapplied: interview.applicationId.isReapplied,
-      candidateName: interview.applicationId.candidateName,
-      candidateEmail: interview.applicationId.candidateEmail,
-      candidatePhone: interview.applicationId.candidatePhone,
-      submittedCV: interview.applicationId.submittedCV,
-      jobSnapshot: interview.applicationId.jobSnapshot,
       appliedAt: interview.applicationId.appliedAt,
       status: interview.applicationId.status,
-      lastStatusUpdateAt: interview.applicationId.lastStatusUpdateAt,
-      createdAt: interview.applicationId.createdAt,
-      updatedAt: interview.applicationId.updatedAt
+      candidateProfileId: interview.applicationId.candidateProfileId,
+      coverLetter: interview.applicationId.coverLetter,
+      candidateRating: interview.applicationId.candidateRating,
+      submittedCV: interview.applicationId.submittedCV,
+      // Chỉ hiển thị notes cho recruiter
+      notes: isRecruiter ? interview.applicationId.notes : undefined,
+      // Chỉ hiển thị activity history cho recruiter
+      activityHistory: isRecruiter ? interview.applicationId.activityHistory : undefined
+    } : null,
+    job: interview.applicationId?.jobSnapshot ? {
+      title: interview.applicationId.jobSnapshot.title,
+      company: {
+        name: interview.applicationId.jobSnapshot.company,
+        logo: interview.applicationId.jobSnapshot.logo
+      },
+      location: interview.applicationId.jobSnapshot.location,
+      employmentType: interview.applicationId.jobSnapshot.employmentType,
+      level: interview.applicationId.jobSnapshot.level,
+      salary: interview.applicationId.jobSnapshot.salary,
+      description: interview.applicationId.jobSnapshot.description,
+      requirements: interview.applicationId.jobSnapshot.requirements,
+      benefits: interview.applicationId.jobSnapshot.benefits
     } : null
   };
-  // nếu là recruiter thì thêm notes trong application
-  if (isRecruiter) {
-    formattedInterview.application.notes = interview.applicationId.notes;
-  }
 
   return formattedInterview;
 };
@@ -268,31 +305,45 @@ export const rescheduleInterview = async (interviewId, recruiterId, data) => {
   interview.status = 'RESCHEDULED';
   interview.isReminderSent = false; // Reset để có thể gửi reminder cho lịch mới
   
-  // Cập nhật notes với thông tin dời lịch
-  const rescheduleNote = `\n[${new Date().toLocaleString('vi-VN')}] Lịch phỏng vấn đã được dời từ ${oldScheduledTime.toLocaleString('vi-VN')} sang ${scheduledTime.toLocaleString('vi-VN')}`;
-  if (message) {
-    interview.notes = `${interview.notes || ''}${rescheduleNote}\nLý do: ${message}`.trim();
-  } else {
-    interview.notes = `${interview.notes || ''}${rescheduleNote}`.trim();
-  }
+  // Thêm vào changeHistory thay vì cập nhật notes
+  interview.changeHistory.push({
+    timestamp: new Date(),
+    action: 'RESCHEDULED',
+    fromTime: oldScheduledTime,
+    toTime: scheduledTime,
+    reason: message || 'Không có lý do cụ thể',
+    actor: recruiterId
+  });
 
   await interview.save();
 
-  // Lấy thông tin để gửi thông báo
+  if (interview.applicationId) {
+    const application = await Application.findById(interview.applicationId);
+    if (application) {
+      application.activityHistory.push({
+        actor: recruiterId,
+        action: 'INTERVIEW_RESCHEDULED',
+        detail: "Dời lịch phỏng vấn từ " + oldScheduledTime.toLocaleString('vi-VN') + " sang " + new Date(scheduledTime).toLocaleString('vi-VN'),
+        timestamp: new Date()
+      });
+      
+      await application.save();
+    }
+  }
 
   // Gửi thông báo qua RabbitMQ để worker xử lý
   queueService.publishNotification(rabbitmq.ROUTING_KEYS.INTERVIEW_RESCHEDULE, {
-    type: 'INTERVIEW_RESCHEDULE',
+    type: 'APPLICATION_UPDATE',
     recipientId: interview.candidateId._id.toString(),
     data: {
-      interviewId: interview._id.toString(),
-      oldTime: oldScheduledTime,
-      newTime: scheduledTime,
-      message: message || 'Nhà tuyển dụng đã dời lịch phỏng vấn.'
+      action: 'INTERVIEW_RESCHEDULED',
+      applicationId: interview.applicationId ? interview.applicationId._id.toString() : null,
+      jobTitle: interview.applicationId?.jobSnapshot?.title,
+      companyName: interview.applicationId?.jobSnapshot?.company,
+      scheduledTime: scheduledTime
     }
   });
 
-  logger.info(`Interview ${interviewId} rescheduled by recruiter ${recruiterId} from ${oldScheduledTime} to ${scheduledTime}`);
 
   return interview;
 };
@@ -328,20 +379,40 @@ export const cancelInterview = async (interviewId, recruiterId) => {
   // Lấy thông tin recruiter
   const recruiter = await User.findById(recruiterId).select('fullName');
 
-  // Cập nhật status và notes
+  // Cập nhật status và changeHistory
   interview.status = 'CANCELLED';
-  interview.notes = `${interview.notes || ''}\n[${new Date().toLocaleString('vi-VN')}] Cuộc phỏng vấn đã bị hủy bởi nhà tuyển dụng.`.trim();
+  interview.changeHistory.push({
+    timestamp: new Date(),
+    action: 'CANCELLED',
+    reason: 'Cuộc phỏng vấn đã bị hủy bởi nhà tuyển dụng',
+    actor: recruiterId
+  });
   
   await interview.save();
 
+  if (interview.applicationId) {
+    const application = await Application.findById(interview.applicationId);
+    if (application) {
+      application.activityHistory.push({
+        actor: recruiterId,
+        action: 'INTERVIEW_CANCELLED',
+        detail: 'Cuộc phỏng vấn đã bị hủy bởi nhà tuyển dụng',
+        timestamp: new Date()
+      });
+      
+      await application.save();
+    }
+  }
+
   // Gửi thông báo qua RabbitMQ để worker xử lý
   queueService.publishNotification(rabbitmq.ROUTING_KEYS.INTERVIEW_CANCEL, {
-    type: 'INTERVIEW_CANCEL',
+    type: 'APPLICATION_UPDATE',
     recipientId: interview.candidateId._id.toString(),
     data: {
-      interviewId: interview._id.toString(),
-      scheduledTime: interview.scheduledTime,
-      message: 'Nhà tuyển dụng đã hủy cuộc phỏng vấn.',
+      action: 'INTERVIEW_CANCELLED',
+      applicationId: interview.applicationId ? interview.applicationId._id.toString() : null,
+      jobTitle: interview.applicationId?.jobSnapshot?.title,
+      companyName: interview.applicationId?.jobSnapshot?.company
     }
   });
 
@@ -376,6 +447,11 @@ export const startInterview = async (interviewId, recruiterId) => {
   // Cập nhật thông tin
   interview.status = 'STARTED';
   interview.startTime = new Date();
+  interview.changeHistory.push({
+    timestamp: new Date(),
+    action: 'STARTED',
+    actor: recruiterId
+  });
   await interview.save();
 
   logger.info(`Interview ${interviewId} started by recruiter ${recruiterId}`);
@@ -425,7 +501,7 @@ export const completeInterview = async (interviewId, recruiterId, data) => {
   // Lấy thông tin recruiter
   const recruiter = await User.findById(recruiterId).select('fullName');
 
-  // Cập nhật thông tin
+  // Cập nhật thông tin interview
   interview.status = 'COMPLETED';
   interview.endTime = new Date();
   
@@ -433,14 +509,43 @@ export const completeInterview = async (interviewId, recruiterId, data) => {
   const durationMs = interview.endTime - interview.startTime;
   const durationMinutes = Math.round(durationMs / (1000 * 60));
   
-  // Cập nhật notes
-  let completionNote = `\n[${new Date().toLocaleString('vi-VN')}] Phỏng vấn kết thúc. Thời lượng: ${durationMinutes} phút.`;
-  if (notes) {
-    completionNote += `\nGhi chú từ nhà tuyển dụng: ${notes}`;
-  }
-  interview.notes = `${interview.notes || ''}${completionNote}`.trim();
+  // Thêm vào changeHistory thay vì cập nhật notes
+  interview.changeHistory.push({
+    timestamp: new Date(),
+    action: 'COMPLETED',
+    notes: notes || `Phỏng vấn kết thúc. Thời lượng: ${durationMinutes} phút.`,
+    actor: recruiterId
+  });
 
   await interview.save();
+
+  // === BƯỚC NÂNG CẤP: TỰ ĐỘNG CẬP NHẬT APPLICATION ===
+  if (interview.applicationId) {
+    const application = await Application.findById(interview.applicationId);
+    if (application) {
+      const oldStatus = application.status;
+      application.status = 'INTERVIEWED';
+      application.lastStatusUpdateAt = new Date();
+
+      // Ghi log vào Application
+      application.activityHistory.push({
+        actor: recruiterId,
+        action: 'INTERVIEW_COMPLETED',
+        details: { interviewId: interview._id },
+        timestamp: new Date()
+      });
+      
+      application.activityHistory.push({
+        actor: recruiterId,
+        action: 'STATUS_CHANGE',
+        details: { from: oldStatus, to: 'INTERVIEWED' },
+        timestamp: new Date()
+      });
+      
+      await application.save();
+      logger.info(`Updated application ${application._id} status from ${oldStatus} to INTERVIEWED after interview completion`);
+    }
+  }
 
   // Lấy thông tin để gửi thông báo
   const jobTitle = interview.applicationId?.jobId?.title || 'Vị trí ứng tuyển';
@@ -468,6 +573,40 @@ export const completeInterview = async (interviewId, recruiterId, data) => {
   });
 
   logger.info(`Interview ${interviewId} completed by recruiter ${recruiterId}. Duration: ${durationMinutes} minutes`);
+
+  return interview;
+};
+
+/**
+ * Thêm ghi chú vào cuộc phỏng vấn
+ * @param {string} interviewId - ID của cuộc phỏng vấn
+ * @param {string} recruiterId - ID của recruiter
+ * @param {string} notes - Ghi chú cần thêm
+ * @returns {Object} Cuộc phỏng vấn đã được cập nhật
+ */
+export const addInterviewNote = async (interviewId, recruiterId, notes) => {
+  const interview = await InterviewRoom.findById(interviewId);
+
+  if (!interview) {
+    throw new NotFoundError('Không tìm thấy cuộc phỏng vấn.');
+  }
+
+  // Kiểm tra quyền
+  if (interview.recruiterId.toString() !== recruiterId.toString()) {
+    throw new ForbiddenError('Bạn không có quyền thêm ghi chú cho cuộc phỏng vấn này.');
+  }
+
+  // Thêm ghi chú vào changeHistory
+  interview.changeHistory.push({
+    timestamp: new Date(),
+    action: 'NOTE_ADDED',
+    notes: notes,
+    actor: recruiterId
+  });
+
+  await interview.save();
+
+  logger.info(`Note added to interview ${interviewId} by recruiter ${recruiterId}`);
 
   return interview;
 };

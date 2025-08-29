@@ -47,11 +47,38 @@ const interviewRoomSchema = new mongoose.Schema({
     },
     default: 'SCHEDULED'
   },
-  notes: {
-    type: String,
-    trim: true,
-    maxlength: [9000, 'Notes cannot exceed 9000 characters']
-  },
+  changeHistory: [{
+    timestamp: {
+      type: Date,
+      default: Date.now
+    },
+    action: {
+      type: String,
+      required: true,
+      enum: ['CREATED', 'RESCHEDULED', 'CANCELLED', 'STARTED', 'COMPLETED', 'NOTE_ADDED']
+    },
+    fromTime: {
+      type: Date // Thời gian cũ (dành cho RESCHEDULED)
+    },
+    toTime: {
+      type: Date // Thời gian mới (dành cho RESCHEDULED)
+    },
+    reason: {
+      type: String,
+      trim: true,
+      maxlength: [500, 'Reason cannot exceed 500 characters']
+    },
+    notes: {
+      type: String,
+      trim: true,
+      maxlength: [1000, 'Notes cannot exceed 1000 characters']
+    },
+    actor: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    }
+  }],
   isReminderSent: {
     type: Boolean,
     default: false // Cờ để đánh dấu đã gửi thông báo nhắc nhở hay chưa

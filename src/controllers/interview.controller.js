@@ -41,6 +41,25 @@ export const getMyCandidateInterviews = asyncHandler(async (req, res) => {
 
 /**
  * @desc    Lấy chi tiết một cuộc phỏng vấn
+ * @route   GET /api/interviews/:id/details
+ * @access  Private
+ */
+export const getInterviewDetails = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user._id;
+  const userRole = req.user.role;
+
+  const interview = await interviewService.getInterviewDetails(id, userId, userRole);
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy thông tin chi tiết cuộc phỏng vấn thành công.',
+    data: interview
+  });
+});
+
+/**
+ * @desc    Lấy chi tiết một cuộc phỏng vấn
  * @route   GET /api/interviews/:id
  * @access  Private
  */
@@ -131,6 +150,25 @@ export const completeInterview = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     message: 'Kết thúc phỏng vấn thành công.',
+    data: interview
+  });
+});
+
+/**
+ * @desc    Thêm ghi chú vào cuộc phỏng vấn
+ * @route   PATCH /api/interviews/:id/add-note
+ * @access  Private/Recruiter
+ */
+export const addInterviewNote = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const recruiterId = req.user._id;
+  const { notes } = req.body;
+
+  const interview = await interviewService.addInterviewNote(id, recruiterId, notes);
+
+  res.status(200).json({
+    success: true,
+    message: 'Thêm ghi chú thành công.',
     data: interview
   });
 });
