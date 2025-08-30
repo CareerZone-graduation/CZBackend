@@ -55,7 +55,6 @@ export const getRecruiterInterviews = async (recruiterId, options = {}) => {
       id: interview.candidateId._id,
       fullName: interview.candidateId.fullName || interview.applicationId?.candidateName,
       email: interview.candidateId.email || interview.applicationId?.candidateEmail,
-      username: interview.candidateId.username,
       avatar: interview.candidateId.avatar,
       phone: interview.applicationId?.candidatePhone
     },
@@ -175,7 +174,7 @@ export const getCandidateInterviews = async (candidateId, options = {}) => {
  */
 export const getInterviewDetails = async (interviewId, userId, userRole) => {
   const interview = await InterviewRoom.findById(interviewId)
-    .populate('candidateId', 'fullName email avatar username')
+    .populate('candidateId', 'fullName email avatar')
     .populate('recruiterId', 'fullName email avatar')
     .populate({
       path: 'applicationId',
@@ -222,7 +221,6 @@ export const getInterviewDetails = async (interviewId, userId, userRole) => {
       id: interview.candidateId._id,
       fullName: interview.candidateId.fullName || interview.applicationId?.candidateName,
       email: interview.candidateId.email || interview.applicationId?.candidateEmail,
-      username: interview.candidateId.username,
       avatar: interview.candidateId.avatar,
       phone: interview.applicationId?.candidatePhone
     },

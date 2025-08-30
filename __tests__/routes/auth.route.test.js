@@ -17,7 +17,6 @@ describe('Auth Routes API', () => {
   describe('POST /api/auth/register', () => {
     it('should register a new user successfully', async () => {
       const newUser = {
-        username: 'testuser',
         email: 'test@example.com',
         password: 'password123',
         fullname: 'Test User',
@@ -35,13 +34,11 @@ describe('Auth Routes API', () => {
       // Check if the user was actually created in the database
       const userInDb = await User.findOne({ email: 'test@example.com' });
       expect(userInDb).not.toBeNull();
-      expect(userInDb.username).toBe('testuser');
     });
 
     it('should return 400 if email is already taken', async () => {
       // First, create a user
       await User.create({
-        username: 'existinguser',
         email: 'test@example.com',
         password: 'password123',
         fullname: 'Existing User',
@@ -50,7 +47,6 @@ describe('Auth Routes API', () => {
 
       // Then, try to register with the same email
       const newUser = {
-        username: 'newuser',
         email: 'test@example.com',
         password: 'password456',
         fullname: 'New User',
@@ -68,7 +64,6 @@ describe('Auth Routes API', () => {
 
     it('should return 400 for invalid data (e.g., missing password)', async () => {
         const newUser = {
-            username: 'invaliduser',
             email: 'invalid@example.com',
             fullname: 'Invalid User',
             role: 'candidate',
@@ -89,7 +84,6 @@ describe('Auth Routes API', () => {
     beforeEach(async () => {
       // Create a user to test login against
       await User.create({
-        username: 'loginuser',
         email: 'login@example.com',
         password: 'password123', // The service will hash this
         fullname: 'Login User',
@@ -151,7 +145,6 @@ describe('Auth Routes API', () => {
 
     beforeEach(async () => {
       await User.create({
-        username: 'logoutuser',
         email: 'logout@example.com',
         password: 'password123',
         fullname: 'Logout User',
@@ -181,7 +174,6 @@ describe('Auth Routes API', () => {
 
     beforeEach(async () => {
       await User.create({
-        username: 'changepassworduser',
         email: 'changepassword@example.com',
         password: 'oldPassword',
         fullname: 'Change Password User',

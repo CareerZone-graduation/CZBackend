@@ -10,7 +10,7 @@ const router = express.Router();
 // Đăng ký vẫn như cũ
 router.post('/register', validationMiddleware.validateBody(authSchema.registerSchema), authController.register);
 
-// Đăng nhập bằng username/password
+// Đăng nhập bằng email/password
 router.post(
     '/login',
     validationMiddleware.validateBody(authSchema.loginSchema),

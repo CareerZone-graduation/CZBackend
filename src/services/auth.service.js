@@ -45,16 +45,14 @@ const sendVerificationEmail = async (user, fullname) => {
 };
 
 export const register = async (userData) => {
-  const { username, email, fullname, password, role } = userData;
+  const { email, fullname, password, role } = userData;
 
   if (await User.findOne({ email })) {
     throw new BadRequestError("Email đã được sử dụng.");
   }
-  if (await User.findOne({ username })) {
-    throw new BadRequestError("Tên đăng nhập đã được sử dụng.");
-  }
 
-  const user = new User({ username, email, password, role });
+
+  const user = new User({ email, password, role });
   await user.save();
 
   if (role === "candidate") {
@@ -68,10 +66,10 @@ export const register = async (userData) => {
   sendVerificationEmail(user, fullname);
 };
 
-export const login = async (username, password) => {
-  const user = await User.findOne({ username }).select("+password");
+export const login = async (email, password) => {
+  const user = await User.findOne({ email }).select("+password");
   if (!user || !(await user.comparePassword(password))) {
-    throw new UnauthorizedError("Tên đăng nhập hoặc mật khẩu không chính xác.");
+    throw new UnauthorizedError("Email hoặc mật khẩu không chính xác.");
   }
 
   if (!user.isEmailVerified) {
@@ -81,7 +79,6 @@ export const login = async (username, password) => {
   const { accessToken, refreshToken } = generateTokens(user);
   return {
     id: user._id,
-    username: user.username,
     role: user.role,
     email: user.email,
     active: user.active,
@@ -187,7 +184,7 @@ export const forgotPassword = async (email) => {
     subject: "Yêu cầu đặt lại mật khẩu CareerZone",
     template: "passwordReset", // Đảm bảo template này tồn tại trong `src/views/emails`
     data: {
-      name: user.username,
+      name: user.email,
       resetUrl: resetURL,
     },
   };
@@ -246,7 +243,6 @@ export const getMe = async (userId) => {
   return {
     id: user._id,
     email: user.email,
-    username: user.username,
     role: user.role,
     fullname: profile ? profile.fullname : "N/A",
     isEmailVerified: user.isEmailVerified,

@@ -48,7 +48,6 @@ export const login = asyncHandler(async (req, res) => {
         data: {
             accessToken,
             id: req.user._id,
-            username: req.user.username,
             role: req.user.role,
             email: req.user.email,
             active: req.user.active,
@@ -80,7 +79,6 @@ export const googleLogin = asyncHandler(async (req, res) => {
             // Create a new user
             const newUser = new User({
                 email,
-                username: email, // Use email as default username
                 isEmailVerified: true,
                 // role is decided after, default is 'candidate'
             });
@@ -111,7 +109,6 @@ export const googleLogin = asyncHandler(async (req, res) => {
         data: {
             accessToken,
             id: user._id,
-            username: user.username,
             email: user.email,
             role: user.role,
             active: user.active,

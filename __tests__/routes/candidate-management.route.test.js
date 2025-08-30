@@ -33,7 +33,6 @@ describe('Candidate Management Routes', () => {
 
     // Tạo recruiter user
     const recruiterUser = await User.create({
-      username: 'recruiter_test',
       email: 'recruiter@test.com',
       password: 'password123',
       role: 'recruiter',
@@ -55,7 +54,6 @@ describe('Candidate Management Routes', () => {
 
     // Tạo candidate user
     const candidateUser = await User.create({
-      username: 'candidate_test',
       email: 'candidate@test.com',
       password: 'password123',
       role: 'candidate',
@@ -375,98 +373,6 @@ describe('Candidate Management Routes', () => {
     });
   });
 
-  describe('PATCH /api/applications/:applicationId/status - Thay đổi trạng thái ứng tuyển', () => {
-    test('Thành công - Cập nhật trạng thái thành REVIEWING', async () => {
-      const response = await request(app)
-        .patch(`/api/applications/${applicationId}/status`)
-        .set('Authorization', `Bearer ${recruiterToken}`)
-        .send({ status: 'REVIEWING' })
-        .expect(200);
-
-      expect(response.body).toMatchObject({
-        success: true,
-        message: expect.stringContaining('thành công'),
-        data: {
-          _id: applicationId.toString(),
-          status: 'REVIEWING',
-          lastStatusUpdateAt: expect.any(String)
-        }
-      });
-    });
-
-    test('Thành công - Cập nhật trạng thái thành ACCEPTED', async () => {
-      const response = await request(app)
-        .patch(`/api/applications/${applicationId}/status`)
-        .set('Authorization', `Bearer ${recruiterToken}`)
-        .send({ status: 'ACCEPTED' })
-        .expect(200);
-
-      expect(response.body.data.status).toBe('ACCEPTED');
-    });
-
-    test('Thành công - Cập nhật trạng thái thành REJECTED', async () => {
-      const response = await request(app)
-        .patch(`/api/applications/${applicationId}/status`)
-        .set('Authorization', `Bearer ${recruiterToken}`)
-        .send({ status: 'REJECTED' })
-        .expect(200);
-
-      expect(response.body.data.status).toBe('REJECTED');
-    });
-
-    test('Lỗi - Status không hợp lệ', async () => {
-      const response = await request(app)
-        .patch(`/api/applications/${applicationId}/status`)
-        .set('Authorization', `Bearer ${recruiterToken}`)
-        .send({ status: 'INVALID_STATUS' })
-        .expect(400);
-
-      expect(response.body).toMatchObject({
-        success: false,
-        message: expect.stringContaining('không hợp lệ')
-      });
-    });
-
-    test('Lỗi - Thiếu trường status', async () => {
-      const response = await request(app)
-        .patch(`/api/applications/${applicationId}/status`)
-        .set('Authorization', `Bearer ${recruiterToken}`)
-        .send({})
-        .expect(400);
-
-      expect(response.body).toMatchObject({
-        success: false,
-        message: expect.any(String)
-      });
-    });
-
-    test('Lỗi - Application không tồn tại', async () => {
-      const fakeId = new mongoose.Types.ObjectId();
-      const response = await request(app)
-        .patch(`/api/applications/${fakeId}/status`)
-        .set('Authorization', `Bearer ${recruiterToken}`)
-        .send({ status: 'REVIEWING' })
-        .expect(404);
-
-      expect(response.body).toMatchObject({
-        success: false,
-        message: 'Không tìm thấy đơn ứng tuyển'
-      });
-    });
-
-    test('Lỗi - Không có quyền truy cập (candidate)', async () => {
-      const response = await request(app)
-        .patch(`/api/applications/${applicationId}/status`)
-        .set('Authorization', `Bearer ${candidateToken}`)
-        .send({ status: 'REVIEWING' })
-        .expect(403);
-
-      expect(response.body).toMatchObject({
-        success: false,
-        message: 'Access denied. Insufficient permissions.'
-      });
-    });
-  });
 
   describe('PATCH /api/applications/:applicationId/rating - Đánh giá ứng viên', () => {
     test('Thành công - Đánh giá SUITABLE', async () => {

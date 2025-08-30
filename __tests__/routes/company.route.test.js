@@ -16,7 +16,6 @@ describe('Company Routes', () => {
     await RecruiterProfile.deleteMany({});
 
     const recruiterUser = await User.create({
-      username: 'company_recruiter',
       email: 'recruiter@company.com',
       password: 'password123',
       role: 'recruiter',

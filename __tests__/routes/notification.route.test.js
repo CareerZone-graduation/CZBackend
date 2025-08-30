@@ -25,7 +25,6 @@ describe('Notification Routes API', () => {
 
     // Create test users
     candidateUser = await User.create({
-      username: 'candidate_test',
       email: 'candidate@test.com',
       password: 'password123',
       fullname: 'Candidate Test',
@@ -34,7 +33,6 @@ describe('Notification Routes API', () => {
     });
 
     recruiterUser = await User.create({
-      username: 'recruiter_test',
       email: 'recruiter@test.com',
       password: 'password123',
       fullname: 'Recruiter Test',

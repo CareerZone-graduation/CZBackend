@@ -23,7 +23,6 @@ describe('Job Alert API', () => {
     beforeEach(async () => {
         // Create a mock user and get a token for each test
         const user = await User.create({
-            username: 'testjobalert',
             email: 'testjobalert@example.com',
             password: 'password123',
             role: 'candidate',
@@ -231,7 +230,6 @@ describe('Job Alert API', () => {
 
         it('should not update a job alert if it does not belong to the authenticated candidate', async () => {
             const otherUser = await User.create({
-                username: 'otheruser',
                 email: 'otheruser@example.com',
                 password: 'password123',
                 role: 'candidate',
@@ -310,7 +308,6 @@ describe('Job Alert API', () => {
 
         it('should not delete a job alert if it does not belong to the authenticated candidate', async () => {
             const otherUser = await User.create({
-                username: 'anotheruser',
                 email: 'anotheruser@example.com',
                 password: 'password123',
                 role: 'candidate',

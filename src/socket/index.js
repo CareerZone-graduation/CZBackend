@@ -63,7 +63,6 @@ export const initializeSocket = (io) => {
     // Notify user is online (Optional: broadcast to all or only friends/contacts)
     io.emit('user:presence', { // Using io.emit to notify all connected clients
       userId: socket.userId,
-      username: socket.user.username, // Hoặc một tên hiển thị khác
       isOnline: true
     });
 
@@ -105,7 +104,7 @@ export const initializeSocket = (io) => {
         });
         
         // Populate thông tin người gửi để hiển thị trên client
-        const populatedMessage = await savedMessage.populate('senderId', 'username role');
+        const populatedMessage = await savedMessage.populate('senderId', 'email role');
 
         // 2. Phát sự kiện tin nhắn mới đến tất cả client trong room
         io.to(`conversation:${conversationId}`).emit('message:new', populatedMessage.toObject());
@@ -167,7 +166,6 @@ export const initializeSocket = (io) => {
       // Gửi sự kiện typing đến tất cả những người khác trong phòng chat
       socket.to(`conversation:${conversationId}`).emit('chat:typing:start', {
         userId: socket.userId,
-        username: socket.user.username
       });
     });
 
@@ -176,7 +174,6 @@ export const initializeSocket = (io) => {
       // Gửi sự kiện typing đến tất cả những người khác trong phòng chat
       socket.to(`conversation:${conversationId}`).emit('chat:typing:stop', {
         userId: socket.userId,
-        username: socket.user.username
       });
     });
 
@@ -187,7 +184,6 @@ export const initializeSocket = (io) => {
       
       socket.to(`interview:${roomId}`).emit('interview:user-joined', {
         userId: socket.userId,
-        username: socket.user.username
       });
     });
 
@@ -277,7 +273,6 @@ export const initializeSocket = (io) => {
 export const getOnlineUsers = () => {
   return Array.from(connectedUsers.values()).map(info => ({
     userId: info.user._id,
-    username: info.user.username,
     connectedAt: info.connectedAt
   }));
 };

@@ -20,7 +20,6 @@ describe('Candidate Profile Routes API', () => {
 
     // Create users
     candidateUser = await User.create({
-      username: 'testcandidate',
       email: 'candidate@example.com',
       password: 'password123',
       role: 'candidate',
@@ -28,7 +27,6 @@ describe('Candidate Profile Routes API', () => {
     });
 
     recruiterUser = await User.create({
-      username: 'testrecruiter',
       email: 'recruiter@example.com',
       password: 'password123',
       role: 'recruiter',

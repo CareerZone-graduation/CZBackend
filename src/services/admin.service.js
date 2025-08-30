@@ -91,7 +91,7 @@ export const getJobDetail = async (jobId) => {
       select: 'fullname company.name company.logo company.about company.industry verified userId',
       populate: {
         path: 'userId',
-        select: 'username email'
+        select: 'email'
       }
     })
     .lean();
@@ -138,10 +138,9 @@ export const getUsersForAdmin = async (queryParams) => {
   
   const filter = {};
   
-  // Tìm kiếm theo username, email hoặc fullname
+  // Tìm kiếm theo email hoặc fullname
   if (search) {
     const userFilter = [
-      { username: { $regex: search, $options: 'i' } },
       { email: { $regex: search, $options: 'i' } }
     ];
     
@@ -190,7 +189,7 @@ export const getUsersForAdmin = async (queryParams) => {
   
   const [users, total] = await Promise.all([
     User.find(filter)
-      .select('username email role active createdAt')
+      .select('email role active createdAt')
       .sort(sort)
       .skip(skip)
       .limit(limit)
@@ -224,7 +223,6 @@ export const getUsersForAdmin = async (queryParams) => {
     _id: user._id,
     email: user.email,
     role: user.role,
-    username: user.username,
     active: user.active,
     createdAt: user.createdAt,
     fullname: user.role === 'recruiter' 
@@ -256,7 +254,7 @@ export const updateUserStatus = async (userId, statusData) => {
     userId,
     { active: isActive },
     { new: true }
-  ).select('username email role active');
+  ).select('email role active');
   
   if (!updatedUser) {
     throw new NotFoundError('Người dùng không tồn tại.');
@@ -291,7 +289,7 @@ export const getCompaniesForAdmin = async (queryParams) => {
     RecruiterProfile.find(filter)
       .populate({
         path: 'userId',
-        select: 'username email active createdAt'
+        select: 'email active createdAt'
       })
       .select('fullname company createdAt userId')
       .sort(sort)
@@ -307,7 +305,6 @@ export const getCompaniesForAdmin = async (queryParams) => {
     recruiterInfo: {
       fullname: profile.fullname,
       userId: profile.userId._id,
-      username: profile.userId.username,
       email: profile.userId.email,
       active: profile.userId.active,
       userCreatedAt: profile.userId.createdAt
@@ -353,7 +350,7 @@ export const getCompanyDetail = async (companyId) => {
   const recruiterProfile = await RecruiterProfile.findById(companyId)
     .populate({
       path: 'userId',
-      select: 'username email active createdAt'
+      select: 'email active createdAt'
     })
     .lean();
   
@@ -367,7 +364,6 @@ export const getCompanyDetail = async (companyId) => {
     recruiterInfo: {
       fullname: recruiterProfile.fullname,
       userId: recruiterProfile.userId._id,
-      username: recruiterProfile.userId.username,
       email: recruiterProfile.userId.email,
       active: recruiterProfile.userId.active,
       userCreatedAt: recruiterProfile.userId.createdAt
@@ -418,7 +414,7 @@ export const approveCompany = async (companyId) => {
     { new: true }
   ).populate({
     path: 'userId',
-    select: 'username email active createdAt'
+    select: 'email active createdAt'
   }).lean();
   
   if (!updatedProfile) {
@@ -431,7 +427,6 @@ export const approveCompany = async (companyId) => {
     recruiterInfo: {
       fullname: updatedProfile.fullname,
       userId: updatedProfile.userId._id,
-      username: updatedProfile.userId.username,
       email: updatedProfile.userId.email,
       active: updatedProfile.userId.active,
       userCreatedAt: updatedProfile.userId.createdAt
@@ -468,7 +463,7 @@ export const rejectCompany = async (companyId) => {
     { new: true }
   ).populate({
     path: 'userId',
-    select: 'username email active createdAt'
+    select: 'email active createdAt'
   }).lean();
   
   if (!updatedProfile) {
@@ -481,7 +476,6 @@ export const rejectCompany = async (companyId) => {
     recruiterInfo: {
       fullname: updatedProfile.fullname,
       userId: updatedProfile.userId._id,
-      username: updatedProfile.userId.username,
       email: updatedProfile.userId.email,
       active: updatedProfile.userId.active,
       userCreatedAt: updatedProfile.userId.createdAt

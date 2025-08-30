@@ -10,6 +10,7 @@
     "prod": "node src/server.js",
     "worker:notification": "nodemon workers/notification.worker.js",
     "worker:matching": "nodemon workers/matching.worker.js",
+    "start:all": "npm-run-all --parallel dev worker:notification worker:matching",
     "test": "cross-env NODE_ENV=test node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --detectOpenHandles --forceExit --no-cache"
   },
   "keywords": [
@@ -66,6 +67,7 @@
     "mongodb-memory-server": "^10.1.4",
     "mongoose-erd-generator": "^0.0.5",
     "nodemon": "^3.0.2",
+    "npm-run-all": "^4.1.5",
     "supertest": "^7.1.4"
   },
   "engines": {

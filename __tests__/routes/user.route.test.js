@@ -12,7 +12,6 @@ describe('User Routes API', () => {
   beforeEach(async () => {
     // Create a user and corresponding profile
     testUser = await User.create({
-      username: 'testuser',
       email: 'testuser@example.com',
       password: 'password123',
       fullname: 'Test User',

@@ -18,13 +18,11 @@ describe('Candidate Applications Routes', () => {
 
         // Create users
         candidate = await User.create({
-            username: 'candidate.app', // Thêm username
             email: 'candidate.app@example.com',
             password: 'password123',
             role: 'candidate',
         });
         recruiter = await User.create({
-            username: 'recruiter.app', // Thêm username
             email: 'recruiter.app@example.com',
             password: 'password123',
             role: 'recruiter',

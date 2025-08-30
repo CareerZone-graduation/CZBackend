@@ -84,7 +84,7 @@ export const sendWelcomeEmail = async (user, url) => {
         to: user.email,
         subject: 'Chào mừng đến với CareerZone!',
         template: 'welcome',
-        data: { firstName: user.username || user.fullName || 'Người dùng', url },
+        data: { firstName: user.email || user.fullName || 'Người dùng', url },
     });
 };
 
@@ -93,7 +93,7 @@ export const sendPasswordResetEmail = async (user, url) => {
         to: user.email,
         subject: 'Yêu cầu đặt lại mật khẩu của bạn (hiệu lực trong 10 phút)',
         template: 'passwordReset',
-        data: { firstName: user.username || user.fullName || 'Người dùng', url },
+        data: { firstName: user.email || user.fullName || 'Người dùng', url },
     });
 };
 
@@ -102,6 +102,6 @@ export const sendVerificationEmail = async (user, url) => {
         to: user.email,
         subject: 'Xác thực địa chỉ email của bạn',
         template: 'verifyEmail',
-        data: { firstName: user.username || user.fullName || 'Người dùng', url },
+        data: { firstName: user.email || user.fullName || 'Người dùng', url },
     });
 };

@@ -31,7 +31,6 @@ describe('Admin Routes API', () => {
 
     // Create admin user
     adminUser = await User.create({
-      username: 'admin',
       email: 'admin@example.com',
       password: 'password123',
       fullname: 'Admin User',
@@ -41,7 +40,6 @@ describe('Admin Routes API', () => {
 
     // Create recruiter user
     recruiterUser = await User.create({
-      username: 'recruiter',
       email: 'recruiter@example.com',
       password: 'password123',
       fullname: 'Recruiter User',
@@ -51,7 +49,6 @@ describe('Admin Routes API', () => {
 
     // Create candidate user
     candidateUser = await User.create({
-      username: 'candidate',
       email: 'candidate@example.com',
       password: 'password123',
       fullname: 'Candidate User',
@@ -296,7 +293,6 @@ describe('Admin Routes API', () => {
 
       expect(res.statusCode).toEqual(200);
       expect(res.body.data.length).toBe(1);
-      expect(res.body.data[0].username).toBe('recruiter');
     });
 
     it('should filter users by role', async () => {

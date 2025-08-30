@@ -15,7 +15,6 @@ describe('Application Routes API', () => {
   beforeEach(async () => {
     // 1. Create Recruiter and Job
     recruiterUser = await User.create({
-      username: 'recruiter',
       email: 'recruiter@test.com',
       password: 'password123',
       fullname: 'Recruiter User',
@@ -46,7 +45,6 @@ describe('Application Routes API', () => {
 
     // 2. Create Candidate and their CVs
     candidateUser = await User.create({
-      username: 'candidate',
       email: 'candidate@test.com',
       password: 'password123',
       fullname: 'Candidate User',

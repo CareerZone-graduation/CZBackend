@@ -2,14 +2,6 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
 const userSchema = new mongoose.Schema({
-  username: {
-    type: String,
-    required: [true, 'Username is required'],
-    unique: true,
-    trim: true,
-    minlength: [1, 'Username must be at least 1 characters long'],
-    maxlength: [30, 'Username cannot exceed 30 characters']
-  },
   password: {
     type: String,
     required: false,
@@ -79,44 +71,3 @@ const User = mongoose.model('User', userSchema);
 export { User };
 export default User;
 
-
-
-// {
-//   "type": "object",
-//   "properties": {
-//     "username": {
-//       "type": "string"
-//     },
-//     "password": {
-//       "type": "string"
-//     },
-//     "email": {
-//       "type": "string"
-//     },
-//     "role": {
-//       "type": "string",
-//       "enum": [
-//         "candidate",
-//         "recruiter"
-//       ]
-//     },
-//     "active": {
-//       "type": "boolean"
-//     },
-//     "coinBalance": {
-//       "type": "number"
-//     },
-//     "createAt": {
-//       "type": "string"
-//     },
-//     "updateAt": {
-//       "type": "string"
-//     }
-//   },
-//   "required": [
-//     "username",
-//     "password",
-//     "email",
-//     "role"
-//   ]
-// }

@@ -26,7 +26,6 @@ describe('Job Routes API', () => {
 
     // 1. Tạo một recruiter user và profile
     recruiterUser = await User.create({
-      username: 'recruiter_test',
       email: 'recruiter@test.com',
       password: 'password123',
       role: 'recruiter',
@@ -61,7 +60,6 @@ describe('Job Routes API', () => {
 
     // Setup for candidate
     candidateUser = await User.create({
-      username: 'candidate_test',
       email: 'candidate@test.com',
       password: 'password123',
       role: 'candidate',
@@ -153,7 +151,7 @@ describe('Job Routes API', () => {
 
     it('should return 403 if trying to update a job not owned by the recruiter', async () => {
       // Create another recruiter and their job
-      const anotherRecruiter = await User.create({ username: 'anotherrecruiter', fullname: 'Another Recruiter', email: 'another@test.com', password: 'password123', role: 'recruiter', isEmailVerified: true });
+      const anotherRecruiter = await User.create({fullname: 'Another Recruiter', email: 'another@test.com', password: 'password123', role: 'recruiter', isEmailVerified: true });
       const anotherProfile = await RecruiterProfile.create({ userId: anotherRecruiter._id, fullname: 'Another Recruiter', company: { name: 'Another Corp' } });
       const anotherJob = await Job.create({
         title: 'Another Job',

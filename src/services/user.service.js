@@ -9,7 +9,7 @@ import { NotFoundError, BadRequestError } from '../utils/AppError.js';
 export const getUserProfile = async (userId) => {
   // Chỉ select những trường cần thiết từ User
   const user = await User.findById(userId)
-    .select('_id username email role active coinBalance isEmailVerified createdAt updatedAt')
+    .select('_id email role active coinBalance isEmailVerified createdAt updatedAt')
     .lean();
   
   if (!user) {

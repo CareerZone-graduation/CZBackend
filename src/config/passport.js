@@ -8,7 +8,7 @@ import config from './index.js';
 import logger from '../utils/logger.js';
 
 // === 1. CHIẾN LƯỢC LOCAL (EMAIL/PASSWORD) ===
-// Updated to handle login with either email or username
+// Login with email only
 passport.use('local', new LocalStrategy(
     {
         usernameField: 'email', 
@@ -18,10 +18,8 @@ passport.use('local', new LocalStrategy(
     async (req, email, password, done) => {
         logger.info(req.body, 'Local authentication attempt');
         try {
-            // The validation schema ensures either email or username is present
-            const user = await User.findOne({
-                $or: [{ email: email }]
-            }).select('+password');
+            // Find user by email only
+            const user = await User.findOne({ email: email }).select('+password');
 
             if (!user || !(await user.comparePassword(password))) {
                 return done(null, false, { message: 'Email hoặc mật khẩu không chính xác.' });

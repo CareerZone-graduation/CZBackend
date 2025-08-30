@@ -24,7 +24,6 @@ describe('Company Management Routes', () => {
 
     // Create a recruiter user
     recruiterUser = await User.create({
-      username: 'recruiter_test',
       email: 'recruiter@test.com',
       password: 'password123',
       fullname: 'Test Recruiter',
@@ -34,7 +33,6 @@ describe('Company Management Routes', () => {
 
     // Create a non-recruiter user (candidate)
     nonRecruiterUser = await User.create({
-      username: 'candidate_test',
       email: 'candidate@test.com',
       password: 'password123',
       fullname: 'Test Candidate',
@@ -318,7 +316,6 @@ describe('Company Management Routes', () => {
     it('should return 404 if recruiter has no company', async () => {
       // Create a new recruiter without company
       const newRecruiter = await User.create({
-        username: 'new_recruiter',
         email: 'newrecruiter@test.com',
         password: 'password123',
         fullname: 'New Recruiter',
@@ -473,7 +470,6 @@ describe('Company Management Routes', () => {
 
     it('should return 400 if recruiter has no company to update', async () => {
       const newRecruiter = await User.create({
-        username: 'no_company_recruiter',
         email: 'nocompany@test.com',
         password: 'password123',
         fullname: 'No Company Recruiter',
@@ -567,7 +563,6 @@ describe('Company Management Routes', () => {
 
     it('should return 404 if recruiter has no company', async () => {
       const newRecruiter = await User.create({
-        username: 'logo_no_company',
         email: 'logonocompany@test.com',
         password: 'password123',
         fullname: 'Logo No Company',

@@ -13,11 +13,6 @@ export const loginSchema = z.object({
 });
 
 export const registerSchema = z.object({
-  username: z.string()
-    .min(3, 'Tên đăng nhập phải từ 3 đến 50 ký tự')
-    .max(50, 'Tên đăng nhập phải từ 3 đến 50 ký tự')
-    .regex(/^[a-zA-Z0-9_]+$/, 'Tên đăng nhập chỉ được chứa chữ cái, số và dấu gạch dưới')
-    .trim(),
   password: z.string()
     .min(8, 'Mật khẩu phải từ 8 đến 100 ký tự')
     .max(100, 'Mật khẩu phải từ 8 đến 100 ký tự'),
