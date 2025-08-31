@@ -14,6 +14,7 @@ import app from './app.js';
 // Import cron jobs to activate them
 import './cron/interviewReminder.cron.js';
 import './cron/jobAlert.cron.js';
+import './cron/emailVerificationCleanup.cron.js';
 
 dotenv.config();
 

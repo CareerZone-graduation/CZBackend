@@ -2,6 +2,7 @@ import express from 'express';
 import passport from 'passport';
 import * as validationMiddleware from '../middleware/validation.middleware.js';
 import * as authMiddleware from '../middleware/auth.middleware.js';
+import * as rateLimitAuthMiddleware from '../middleware/rateLimitAuth.middleware.js';
 import * as authSchema from '../schemas/auth.schema.js';
 import * as authController from '../controllers/auth.controller.js';
 
@@ -33,9 +34,19 @@ router.patch('/change-password', passport.authenticate('jwt', { session: false }
 router.post('/forgot-password', validationMiddleware.validateBody(authSchema.emailSchema), authController.forgotPassword);
 router.post('/reset-password', validationMiddleware.validateBody(authSchema.resetPasswordSchema), authController.resetPassword);
 
+// Gửi lại email xác thực
+router.post('/resend-verification', 
+  rateLimitAuthMiddleware.resendVerificationEmailLimiter,
+  validationMiddleware.validateBody(authSchema.emailSchema), 
+  authController.resendVerificationEmail
+);
 
 // Các route không thay đổi
 router.post('/refresh', authController.refreshToken);
-router.post('/verify-email', validationMiddleware.validateQuery(authSchema.verifyEmailSchema), authController.verifyEmail);
+router.get('/verify-email', 
+  rateLimitAuthMiddleware.verifyEmailLimiter,
+  validationMiddleware.validateQuery(authSchema.verifyEmailSchema), 
+  authController.verifyEmail
+);
 
 export default router;

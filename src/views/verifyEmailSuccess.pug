@@ -1,0 +1,184 @@
+doctype html
+html(lang="vi")
+  head
+    meta(charset="UTF-8")
+    meta(name="viewport", content="width=device-width, initial-scale=1.0")
+    title= title
+    style.
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        margin: 0;
+        padding: 20px;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .container {
+        background: white;
+        padding: 40px;
+        border-radius: 15px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        text-align: center;
+        max-width: 500px;
+        width: 90%;
+      }
+      .success-icon {
+        width: 80px;
+        height: 80px;
+        background: #10b981;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 20px;
+        animation: bounce 1s ease-in-out;
+      }
+      .success-icon::before {
+        content: "✓";
+        color: white;
+        font-size: 40px;
+        font-weight: bold;
+      }
+      @keyframes bounce {
+        0%, 20%, 53%, 80%, 100% {
+          transform: translate3d(0,0,0);
+        }
+        40%, 43% {
+          transform: translate3d(0,-30px,0);
+        }
+        70% {
+          transform: translate3d(0,-15px,0);
+        }
+        90% {
+          transform: translate3d(0,-4px,0);
+        }
+      }
+      h1 {
+        color: #1f2937;
+        margin-bottom: 10px;
+        font-size: 28px;
+      }
+      .message {
+        color: #6b7280;
+        margin-bottom: 30px;
+        font-size: 16px;
+        line-height: 1.6;
+      }
+      .user-info {
+        background: #f8fafc;
+        border-radius: 10px;
+        padding: 25px;
+        margin: 20px 0;
+        text-align: left;
+      }
+      .user-avatar {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        margin: 0 auto 20px;
+        display: block;
+        object-fit: cover;
+        border: 4px solid #10b981;
+      }
+      .avatar-placeholder {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        margin: 0 auto 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 30px;
+        font-weight: bold;
+      }
+      .info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 0;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      .info-row:last-child {
+        border-bottom: none;
+      }
+      .info-label {
+        font-weight: 600;
+        color: #374151;
+        font-size: 14px;
+      }
+      .info-value {
+        color: #6b7280;
+        font-size: 14px;
+        text-align: right;
+        max-width: 60%;
+        word-break: break-word;
+      }
+      .role-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+      }
+      .role-candidate {
+        background: #dbeafe;
+        color: #1d4ed8;
+      }
+      .role-recruiter {
+        background: #fef3c7;
+        color: #d97706;
+      }
+      .welcome-message {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 10px;
+        margin-top: 20px;
+      }
+      .welcome-message h3 {
+        margin: 0 0 10px 0;
+        font-size: 18px;
+      }
+      .welcome-message p {
+        margin: 0;
+        font-size: 14px;
+        opacity: 0.9;
+      }
+
+  body
+    .container
+      .success-icon
+      h1= title
+      p.message= message
+      
+      .user-info
+        if user.avatar
+          img.user-avatar(src=user.avatar, alt="Avatar của " + user.fullname)
+        else
+          .avatar-placeholder= user.fullname.charAt(0).toUpperCase()
+        
+        .info-row
+          .info-label Họ và tên:
+          .info-value= user.fullname
+        
+        .info-row
+          .info-label Email:
+          .info-value= user.email
+        
+        .info-row
+          .info-label Loại tài khoản:
+          .info-value
+            span(class=user.role === 'Ứng viên' ? 'role-badge role-candidate' : 'role-badge role-recruiter')= user.role
+        
+        .info-row
+          .info-label Thành viên từ:
+          .info-value= user.memberSince
+      
+      .welcome-message
+        h3 Chào mừng bạn đến với CareerZone!
+        p Tài khoản của bạn đã được kích hoạt thành công. Bạn có thể đóng trang này và quay lại ứng dụng để bắt đầu sử dụng.

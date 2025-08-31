@@ -31,6 +31,14 @@ const userSchema = new mongoose.Schema({
   isEmailVerified: {
     type: Boolean,
     default: false,
+  },
+  emailVerificationToken: {
+    type: String,
+    default: null
+  },
+  emailVerificationExpires: {
+    type: Date,
+    default: null
   }
 }, {
   timestamps: true
@@ -38,6 +46,8 @@ const userSchema = new mongoose.Schema({
 
 // Index for better query performance
 userSchema.index({ role: 1 });
+userSchema.index({ emailVerificationToken: 1 });
+userSchema.index({ emailVerificationExpires: 1 });
 /**
  * Hash password before saving
  */

@@ -24,9 +24,9 @@ passport.use('local', new LocalStrategy(
             if (!user || !(await user.comparePassword(password))) {
                 return done(null, false, { message: 'Email hoặc mật khẩu không chính xác.' });
             }
-            if (!user.isEmailVerified) {
-                return done(null, false, { message: 'Vui lòng xác thực email trước khi đăng nhập.' });
-            }
+            // if (!user.isEmailVerified) {
+            //     return done(null, false, { message: 'Vui lòng xác thực email trước khi đăng nhập.' });
+            // }
             return done(null, user);
         } catch (error) {
             return done(error);

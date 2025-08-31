@@ -69,6 +69,8 @@ const config = {
   GROQ_API_KEY: process.env.GROQ_API_KEY,
   GROQ_MODEL: process.env.GROQ_MODEL || 'llama3-8b-8192',
 
+  // Application URLs
+  BACKEND_URL: process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`,
   // Client Configuration
   CLIENT_URL: process.env.CLIENT_URL || 'http://localhost:3000',
 

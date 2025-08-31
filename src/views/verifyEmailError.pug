@@ -1,0 +1,142 @@
+doctype html
+html(lang="vi")
+  head
+    meta(charset="UTF-8")
+    meta(name="viewport", content="width=device-width, initial-scale=1.0")
+    title= title
+    style.
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #f87171 0%, #dc2626 100%);
+        margin: 0;
+        padding: 20px;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .container {
+        background: white;
+        padding: 40px;
+        border-radius: 15px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        text-align: center;
+        max-width: 500px;
+        width: 90%;
+      }
+      .error-icon {
+        width: 80px;
+        height: 80px;
+        background: #dc2626;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 20px;
+        animation: shake 0.5s ease-in-out;
+      }
+      .error-icon::before {
+        content: "✕";
+        color: white;
+        font-size: 40px;
+        font-weight: bold;
+      }
+      @keyframes shake {
+        0%, 100% {
+          transform: translateX(0);
+        }
+        10%, 30%, 50%, 70%, 90% {
+          transform: translateX(-10px);
+        }
+        20%, 40%, 60%, 80% {
+          transform: translateX(10px);
+        }
+      }
+      h1 {
+        color: #1f2937;
+        margin-bottom: 10px;
+        font-size: 28px;
+      }
+      .message {
+        color: #6b7280;
+        margin-bottom: 30px;
+        font-size: 16px;
+        line-height: 1.6;
+      }
+      .error-details {
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 10px;
+        padding: 20px;
+        margin: 20px 0;
+        text-align: left;
+      }
+      .error-title {
+        font-weight: 600;
+        color: #dc2626;
+        margin-bottom: 10px;
+        font-size: 16px;
+      }
+      .error-description {
+        color: #7f1d1d;
+        font-size: 14px;
+        line-height: 1.5;
+        margin-bottom: 15px;
+      }
+      .help-steps {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      .help-steps li {
+        padding: 8px 0;
+        border-bottom: 1px solid #fecaca;
+        color: #7f1d1d;
+        font-size: 14px;
+      }
+      .help-steps li:last-child {
+        border-bottom: none;
+      }
+      .help-steps li::before {
+        content: "→";
+        color: #dc2626;
+        margin-right: 10px;
+        font-weight: bold;
+      }
+      .info-box {
+        background: #f0f9ff;
+        border: 1px solid #bae6fd;
+        border-radius: 10px;
+        padding: 20px;
+        margin-top: 20px;
+      }
+      .info-box h3 {
+        color: #0369a1;
+        margin: 0 0 10px 0;
+        font-size: 16px;
+      }
+      .info-box p {
+        color: #075985;
+        margin: 0;
+        font-size: 14px;
+      }
+
+  body
+    .container
+      .error-icon
+      h1= title
+      p.message= message
+      
+      .error-details
+        .error-title Có thể xảy ra các trường hợp sau:
+        .error-description Để giải quyết vấn đề này, bạn có thể thử:
+        
+        ul.help-steps
+          li Kiểm tra lại email để lấy link xác thực mới nhất
+          li Đảm bảo link chưa bị hết hạn (có hiệu lực trong 24 giờ)
+          li Thử đăng nhập lại để nhận email xác thực mới
+          li Liên hệ bộ phận hỗ trợ nếu vấn đề vẫn tiếp tục
+      
+      .info-box
+        h3 Cần hỗ trợ?
+        p Bạn có thể đóng trang này và quay lại ứng dụng để đăng ký lại hoặc liên hệ với chúng tôi để được hỗ trợ.

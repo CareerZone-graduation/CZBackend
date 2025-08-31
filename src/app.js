@@ -7,7 +7,13 @@ import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import passport from 'passport'; // Đảm bảo có import này
+import path from 'path';
+import { fileURLToPath } from 'url';
 import './config/passport.js'; // Import để cấu hình passport
+
+// Get __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // ⚙️ Configuration
 import config from './config/index.js';
@@ -37,6 +43,10 @@ import * as notFoundMiddleware from './middleware/notFound.middleware.js';
 dotenv.config();
 
 const app = express();
+
+// Cấu hình view engine (chỉ dành cho 1 số trang như xác thực email trả về HTML)
+app.set('view engine', 'pug');
+app.set('views', path.join(__dirname, 'views'));
 
 // Bảo mật
 // app.use(

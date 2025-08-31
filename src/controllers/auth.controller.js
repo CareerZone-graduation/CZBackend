@@ -158,13 +158,33 @@ export const logout = asyncHandler(async (req, res) => {
 
 export const verifyEmail = asyncHandler(async (req, res) => {
   const { token } = req.query; // Use query params for token
-  const result = await authService.verifyEmail(token);
-
-  res.json({
-    success: true,
-    message: "Email verified successfully",
-    data: result,
-  });
+  
+  try {
+    const result = await authService.verifyEmail(token);
+    
+    // Trả về view thành công với thông tin user
+    res.render('verifyEmailSuccess', {
+      title: 'Xác thực email thành công',
+      message: 'Email của bạn đã được xác thực thành công!',
+      user: {
+        fullname: result.fullname,
+        email: result.email,
+        role: result.role === 'candidate' ? 'Ứng viên' : 'Nhà tuyển dụng',
+        avatar: result.avatar,
+        memberSince: new Date(result.createdAt).toLocaleDateString('vi-VN', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        })
+      }
+    });
+  } catch (error) {
+    // Trả về view lỗi
+    res.render('verifyEmailError', {
+      title: 'Xác thực email thất bại',
+      message: error.message || 'Có lỗi xảy ra khi xác thực email',
+    });
+  }
 });
 
 
@@ -189,4 +209,13 @@ export const changePassword = asyncHandler(async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   await authService.changePassword(userId, currentPassword, newPassword);
   res.status(200).json({ success: true, message: 'Đổi mật khẩu thành công.' });
+});
+
+export const resendVerificationEmail = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  await authService.resendVerificationEmail(email);
+  res.status(200).json({
+    success: true,
+    message: 'Email xác thực đã được gửi lại. Vui lòng kiểm tra hộp thư của bạn.',
+  });
 });

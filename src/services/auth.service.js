@@ -12,7 +12,6 @@ import {
 import { CandidateProfile, RecruiterProfile } from "../models/index.js";
 import * as queueService from "./queue.service.js";
 import { ROUTING_KEYS } from "../queues/rabbitmq.js";
-import * as redisService from "./redis.service.js";
 import * as kafkaService from "./kafka.service.js";
 
 const generateTokens = (user) => {
@@ -28,10 +27,13 @@ const generateTokens = (user) => {
 
 const sendVerificationEmail = async (user, fullname) => {
   const verificationToken = crypto.randomBytes(32).toString("hex");
-  const redisKey = `verify-email:${verificationToken}`;
-  await redisService.setWithExpiry(redisKey, user._id.toString(), 24 * 60 * 60);
+  
+  // Lưu token vào database thay vì Redis
+  user.emailVerificationToken = verificationToken;
+  user.emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 giờ
+  await user.save({ validateBeforeSave: false });
 
-  const verificationUrl = `${config.CLIENT_URL}/verify-email?token=${verificationToken}`;
+  const verificationUrl = `${config.BACKEND_URL}/api/auth/verify-email?token=${verificationToken}`;
   const emailPayload = {
     to: user.email,
     subject: "Xác thực tài khoản CareerZone",
@@ -107,24 +109,23 @@ export const refreshToken = async (token) => {
 
 export const verifyEmail = async (token) => {
   console.log(`Verifying email with token: ${token}`);
-  const redisKey = `verify-email:${token}`;
-  const userId = await redisService.get(redisKey);
-  console.log(`Redis key: ${redisKey}, User ID: ${userId}`);
+  
+  // Tìm user với token và kiểm tra token chưa hết hạn
+  const user = await User.findOne({
+    emailVerificationToken: token,
+    emailVerificationExpires: { $gt: new Date() } // Token chưa hết hạn
+  });
 
-  if (!userId) {
-    throw new BadRequestError("Token không hợp lệ hoặc đã hết hạn.");
-  }
-
-  const user = await User.findById(userId);
   if (!user) {
-    throw new NotFoundError("Người dùng không tồn tại.");
+    throw new BadRequestError("Token không hợp lệ hoặc đã hết hạn.");
   }
 
   // Chỉ xử lý nếu email chưa được xác thực
   if (!user.isEmailVerified) {
     user.isEmailVerified = true;
+    user.emailVerificationToken = null; // Xóa token sau khi verify
+    user.emailVerificationExpires = null; // Xóa thời gian hết hạn
     await user.save({ validateBeforeSave: false });
-    await redisService.del(redisKey);
 
     // Nếu là candidate, gửi sự kiện sau khi xác thực thành công
     if (user.role === 'candidate') {
@@ -142,9 +143,26 @@ export const verifyEmail = async (token) => {
         });
       }
     }
+    
+    // Lấy thông tin profile để trả về
+    const profile = user.role === 'candidate' 
+      ? await CandidateProfile.findOne({ userId: user._id })
+      : await RecruiterProfile.findOne({ userId: user._id });
+    
+    return {
+      userId: user._id,
+      email: user.email,
+      role: user.role,
+      fullname: profile?.fullname || 'N/A',
+      avatar: profile?.avatar || null,
+      createdAt: user.createdAt,
+      isEmailVerified: true
+    };
   } else {
     // Nếu email đã được xác thực rồi, xóa token và báo lỗi
-    await redisService.del(redisKey);
+    user.emailVerificationToken = null;
+    user.emailVerificationExpires = null;
+    await user.save({ validateBeforeSave: false });
     throw new BadRequestError("Email này đã được xác thực từ trước.");
   }
 };
@@ -157,13 +175,23 @@ export const resendVerificationEmail = async (email) => {
   if (user.isEmailVerified) {
     throw new BadRequestError("Email này đã được xác thực.");
   }
-
   const profile =
-    user.role === "candidate"
-      ? await CandidateProfile.findOne({ userId: user._id })
-      : await RecruiterProfile.findOne({ userId: user._id });
+      user.role === "candidate"
+        ? await CandidateProfile.findOne({ userId: user._id })
+        : await RecruiterProfile.findOne({ userId: user._id });
+  // Kiểm tra xem có token cũ chưa hết hạn không
+  const now = new Date();
+  if (user.emailVerificationToken && user.emailVerificationExpires && user.emailVerificationExpires > now) {
+    await sendVerificationEmail(user, profile.fullname);
+  } else {
+    // Tạo và gửi token mới
+    user.emailVerificationToken = crypto.randomBytes(32).toString("hex");
+    user.emailVerificationExpires = new Date(Date.now() + 20 * 60 * 1000); // 20 phút
+    await user.save({ validateBeforeSave: false });
+    await sendVerificationEmail(user, profile.fullname);
+  }
 
-  await sendVerificationEmail(user, profile.fullname);
+  logger.info(`Resent verification email to ${email}`);
 };
 
 export const forgotPassword = async (email) => {
