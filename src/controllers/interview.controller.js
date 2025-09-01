@@ -85,11 +85,11 @@ export const getInterviewById = asyncHandler(async (req, res) => {
 export const rescheduleInterview = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const recruiterId = req.user._id;
-  const { scheduledTime, message } = req.body;
+  const { scheduledTime, reason } = req.body;
 
   const interview = await interviewService.rescheduleInterview(id, recruiterId, {
     scheduledTime,
-    message
+    reason
   });
 
   res.status(200).json({

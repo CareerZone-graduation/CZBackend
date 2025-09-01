@@ -47,8 +47,8 @@ export const rescheduleInterviewSchema = z.object({
     .datetime('Scheduled time must be a valid datetime')
     .transform((str) => new Date(str))
     .refine((date) => date > new Date(), 'Scheduled time must be in the future'),
-  message: z.string()
-    .max(500, 'Message cannot exceed 500 characters')
+  reason: z.string()
+    .max(500, 'Reason cannot exceed 500 characters')
     .trim()
     .optional()
 });

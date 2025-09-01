@@ -587,9 +587,11 @@ export const applyToJob = async (userId, jobId, applicationData) => {
 
       // 2. Gửi sự kiện để thông báo cho NHÀ TUYỂN DỤNG
       queueService.publishNotification(ROUTING_KEYS.NEW_APPLICATION, {
-        recruiterUserId: recruiterUserId.toString(),
-        job, // Truyền cả object job đã populate để worker không cần query lại
-        application, // Truyền object application vừa tạo
+        type: 'NEW_APPLICATION',
+        recipientId: recruiterUserId.toString(),
+        data: {
+          applicationId: application._id.toString()
+        }
       });
 
     } catch (error) {

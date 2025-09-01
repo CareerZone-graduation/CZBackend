@@ -270,7 +270,7 @@ export const getInterviewDetails = async (interviewId, userId, userRole) => {
  * @returns {Object} Cuộc phỏng vấn đã được cập nhật
  */
 export const rescheduleInterview = async (interviewId, recruiterId, data) => {
-  const { scheduledTime, message } = data;
+  const { scheduledTime, reason } = data;
 
   // Tìm cuộc phỏng vấn với thông tin đầy đủ
   const interview = await InterviewRoom.findById(interviewId)
@@ -309,7 +309,7 @@ export const rescheduleInterview = async (interviewId, recruiterId, data) => {
     action: 'RESCHEDULED',
     fromTime: oldScheduledTime,
     toTime: scheduledTime,
-    reason: message || 'Không có lý do cụ thể',
+    reason: reason || 'Không có lý do cụ thể',
     actor: recruiterId
   });
 

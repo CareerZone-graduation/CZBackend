@@ -482,29 +482,15 @@ const getEntityTypeFromActionType = (actionType) => {
  */
 export const upsertRecruiterApplicantsRollup = async (payload) => {
   try {
-    logger.info('Processing recruiter applicants rollup:', {
-      recruiterUserId: payload.recruiterUserId,
-      jobId: payload.job?._id,
-      applicationId: payload.application?._id
-    });
-    
-    const { recruiterUserId, job, application } = payload;
-    
-    // Validate input data
-    if (!recruiterUserId || !job || !application) {
-      logger.error('Missing required data in payload:', { 
-        recruiterUserId, 
-        jobId: job?._id, 
-        applicationId: application?._id 
-      });
-      throw new BadRequestError('Thiếu thông tin bắt buộc để tạo thông báo gộp.');
-    }
-
-    const aggregationKey = `job:${job._id}:applicants`;
+    const applicationId= payload.data.applicationId;
+    const application= await Application.findById(applicationId);
+    const recruiterId = payload.recipientId;
+    const jobId = application.jobId;
+    const jobTitle = application.jobSnapshot.title;
+    const aggregationKey = `job:${jobId}:applicants`;
     const now = new Date();
     const candidateProfileId = application.candidateProfileId;
     const candidateName = application.candidateName || 'Ứng viên';
-
     const newApplicant = {
       candidateProfileId,
       candidateName,
@@ -514,20 +500,18 @@ export const upsertRecruiterApplicantsRollup = async (payload) => {
     // Sử dụng findOneAndUpdate với pipeline update để thực hiện logic phức tạp trong 1 lệnh
     const updatedNotification = await Notification.findOneAndUpdate(
       {
-        userId: new mongoose.Types.ObjectId(recruiterUserId),
+        userId: new mongoose.Types.ObjectId(recruiterId),
         type: 'job_applicants_rollup',
         aggregationKey,
       },
       [ // Mở đầu pipeline
         {
           $set: {
-            title: `Có ứng viên mới cho vị trí "${job.title}"`,
+            title: `Có ứng viên mới cho vị trí "${jobTitle}"`,
             isRead: false,
             readAt: null, // Reset thời gian đọc
-            'metadata.jobId': new mongoose.Types.ObjectId(job._id),
-            'metadata.jobTitle': job.title,
-            'metadata.companyName': job.recruiterProfileId?.company?.name || 'Công ty',
-            'metadata.lastAppliedAt': now,
+            'metadata.jobId': new mongoose.Types.ObjectId(jobId),
+            'metadata.jobTitle': jobTitle,
             // Dùng $setUnion để thêm ID mới và đảm bảo không trùng lặp
             'metadata.applicantIds': {
               $setUnion: [{ $ifNull: ['$metadata.applicantIds', []] }, [new mongoose.Types.ObjectId(candidateProfileId)]]
@@ -553,10 +537,10 @@ export const upsertRecruiterApplicantsRollup = async (payload) => {
                   in: {
                      $switch: {
                         branches: [
-                           { case: { $eq: [ "$$total", 1 ] }, then: { $concat: [ { $arrayElemAt: [ "$$names", 0 ] }, ` đã nộp đơn vào vị trí "${job.title}" của bạn.` ] } },
-                           { case: { $eq: [ "$$total", 2 ] }, then: { $concat: [ { $arrayElemAt: [ "$$names", 0 ] }, ", ", { $arrayElemAt: [ "$$names", 1 ] }, ` đã nộp đơn vào vị trí "${job.title}" của bạn.` ] } }
+                           { case: { $eq: [ "$$total", 1 ] }, then: { $concat: [ { $arrayElemAt: [ "$$names", 0 ] }, ` đã nộp đơn vào vị trí "${jobTitle}" của bạn.` ] } },
+                           { case: { $eq: [ "$$total", 2 ] }, then: { $concat: [ { $arrayElemAt: [ "$$names", 0 ] }, ", ", { $arrayElemAt: [ "$$names", 1 ] }, ` đã nộp đơn vào vị trí "${jobTitle}" của bạn.` ] } }
                         ],
-                        default: { $concat: [ { $arrayElemAt: [ "$$names", 0 ] }, ", ", { $arrayElemAt: [ "$$names", 1 ] }, " và ", { $toString: { $subtract: [ "$$total", 2 ] } }, ` người khác đã nộp đơn vào vị trí "${job.title}" của bạn.` ] }
+                        default: { $concat: [ { $arrayElemAt: [ "$$names", 0 ] }, ", ", { $arrayElemAt: [ "$$names", 1 ] }, " và ", { $toString: { $subtract: [ "$$total", 2 ] } }, ` người khác đã nộp đơn vào vị trí "${jobTitle}" của bạn.` ] }
                      }
                   }
                }
@@ -566,12 +550,6 @@ export const upsertRecruiterApplicantsRollup = async (payload) => {
       ], // Kết thúc pipeline
       { upsert: true, new: true }
     ).lean();
-
-    logger.info(`Successfully upserted rollup notification for recruiter ${recruiterUserId}`, {
-      jobId: job._id,
-      totalApplicants: updatedNotification?.metadata?.totalApplicants || 1,
-      notificationId: updatedNotification?._id
-    });
     
     return updatedNotification;
   } catch (error) {

@@ -49,7 +49,6 @@ async function startWorker() {
         // === New Application - Tạo thông báo gộp cho nhà tuyển dụng ===
         case ROUTING_KEYS.NEW_APPLICATION:
           await notificationService.upsertRecruiterApplicantsRollup(payload);
-          logger.info(`👥 Recruiter rollup notification processed successfully`);
           break;
 
         // === Status Updates - Xử lý cập nhật trạng thái ứng tuyển ===
