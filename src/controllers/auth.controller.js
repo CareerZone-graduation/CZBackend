@@ -11,7 +11,7 @@ const client = new OAuth2Client(config.GOOGLE_CLIENT_ID);
 // Hàm tạo token có thể đặt ở đây hoặc trong service
 const generateTokens = (user) => {
     const payload = { id: user._id, role: user.role };
-    const accessToken = jwt.sign(payload, config.JWT_SECRET, { expiresIn: '1d' });
+    const accessToken = jwt.sign(payload, config.JWT_SECRET, { expiresIn: '9999d' });
     const refreshToken = jwt.sign(payload, config.JWT_REFRESH_SECRET, { expiresIn: '7d' });
     return { accessToken, refreshToken };
 };
