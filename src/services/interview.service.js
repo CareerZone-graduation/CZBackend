@@ -331,14 +331,11 @@ export const rescheduleInterview = async (interviewId, recruiterId, data) => {
 
   // Gửi thông báo qua RabbitMQ để worker xử lý
   queueService.publishNotification(rabbitmq.ROUTING_KEYS.INTERVIEW_RESCHEDULE, {
-    type: 'APPLICATION_UPDATE',
+    type: 'INTERVIEW_RESCHEDULE',
     recipientId: interview.candidateId._id.toString(),
     data: {
-      action: 'INTERVIEW_RESCHEDULED',
-      applicationId: interview.applicationId ? interview.applicationId._id.toString() : null,
-      jobTitle: interview.applicationId?.jobSnapshot?.title,
-      companyName: interview.applicationId?.jobSnapshot?.company,
-      scheduledTime: scheduledTime
+      interviewId: interviewId.toString(),
+      newScheduledTime: scheduledTime.toISOString()
     }
   });
 

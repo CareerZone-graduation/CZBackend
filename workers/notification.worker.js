@@ -64,6 +64,10 @@ async function startWorker() {
           break;
 
         case ROUTING_KEYS.INTERVIEW_RESCHEDULE:
+          await notificationService.createInterviewRescheduledNotification(payload.data.interviewId, payload.data.newScheduledTime);
+          logger.info(`📅 Interview rescheduled notification created successfully`);
+          break;
+
         case ROUTING_KEYS.INTERVIEW_CANCEL:
         case ROUTING_KEYS.INTERVIEW_COMPLETE:
           // Xử lý qua hàm legacy cho các loại interview khác

@@ -3,7 +3,7 @@ import { NotFoundError, BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
 import { logActivity } from './application.service.js';
-import { application } from 'express';
+import e, { application } from 'express';
 
 // =================================================================
 // Chức năng CRUD Thông báo
@@ -167,6 +167,36 @@ export const createInterviewScheduledNotification = async (applicationId, interv
     userId: new mongoose.Types.ObjectId(candidateId),
     title: "Lịch phỏng vấn đã được lên lịch",
     message: `Bạn có một lịch phỏng vấn cho vị trí "${application.jobSnapshot.title}" tại ${application.jobSnapshot.company}.`,
+    type: 'interview',
+    entity: {
+      type: "InterviewRoom",
+      id: new mongoose.Types.ObjectId(interviewId)
+    },
+    metadata: {
+      interviewId: interviewId.toString()
+    }
+  });
+
+};
+
+// createInterviewRescheduledNotification
+export const createInterviewRescheduledNotification = async (interviewId, newScheduledTime) => {
+
+  if (!interviewId || !newScheduledTime) {
+    logger.warn('INTERVIEW_RESCHEDULED payload is missing required fields.', { interviewId, newScheduledTime });
+    throw new BadRequestError('Thiếu thông tin bắt buộc để tạo thông báo.');
+  }
+
+  const interview = await InterviewRoom.findById(interviewId);
+  if (!interview) {
+    logger.warn('INTERVIEW_RESCHEDULED - Interview not found', { interviewId });
+    throw new NotFoundError('Cuộc phỏng vấn không tồn tại.');
+  }
+
+  const notification = await Notification.create({
+    userId: new mongoose.Types.ObjectId(interview.candidateId),
+    title: "Lịch phỏng vấn đã được dời",
+    message: `Lịch phỏng vấn: "${interview.roomName}" đã được dời sang ${newScheduledTime}.`,
     type: 'interview',
     entity: {
       type: "InterviewRoom",
