@@ -122,6 +122,48 @@ describe('Job Routes API', () => {
       expect(res.body.data.company.name).toBe('Test Corp');
     });
 
+    it('should return job details with isSaved=false for authenticated candidate who has not saved the job', async () => {
+      const res = await request(app)
+        .get(`/api/jobs/${testJob._id}`)
+        .set('Authorization', `Bearer ${candidateToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data._id).toBe(testJob._id.toString());
+      expect(res.body.data.title).toBe('Senior NodeJS Developer');
+      expect(res.body.data.company.name).toBe('Test Corp');
+      expect(res.body.data.isSaved).toBe(false);
+    });
+
+    it('should return job details with isSaved=true for authenticated candidate who has saved the job', async () => {
+      // Save the job first
+      await SavedJob.create({ jobId: testJob._id, candidateId: candidateUser._id });
+
+      const res = await request(app)
+        .get(`/api/jobs/${testJob._id}`)
+        .set('Authorization', `Bearer ${candidateToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data._id).toBe(testJob._id.toString());
+      expect(res.body.data.title).toBe('Senior NodeJS Developer');
+      expect(res.body.data.company.name).toBe('Test Corp');
+      expect(res.body.data.isSaved).toBe(true);
+    });
+
+    it('should return job details with isSaved=false for authenticated recruiter', async () => {
+      const res = await request(app)
+        .get(`/api/jobs/${testJob._id}`)
+        .set('Authorization', `Bearer ${recruiterToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data._id).toBe(testJob._id.toString());
+      expect(res.body.data.title).toBe('Senior NodeJS Developer');
+      expect(res.body.data.company.name).toBe('Test Corp');
+      expect(res.body.data.isSaved).toBe(false);
+    });
+
     it('should return 404 for a non-existent job ID', async () => {
       const nonExistentId = '605fe2a21c9d440000a1b2c3';
       const res = await request(app).get(`/api/jobs/${nonExistentId}`);
