@@ -54,6 +54,18 @@ export const rescheduleInterviewSchema = z.object({
 });
 
 /**
+ * Cancel interview request validation schema
+ * @typedef {Object} CancelInterviewRequest
+ * @property {string} reason - Reason for cancelling the interview (optional)
+ */
+export const cancelInterviewSchema = z.object({
+  reason: z.string()
+    .max(500, 'Reason cannot exceed 500 characters')
+    .trim()
+    .optional()
+});
+
+/**
  * Update interview status request validation schema
  * @typedef {Object} UpdateInterviewStatusRequest
  * @property {string} status - New interview status

@@ -107,8 +107,9 @@ export const rescheduleInterview = asyncHandler(async (req, res) => {
 export const cancelInterview = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const recruiterId = req.user._id;
+  const { reason } = req.body;
 
-  const interview = await interviewService.cancelInterview(id, recruiterId);
+  const interview = await interviewService.cancelInterview(id, recruiterId, { reason });
 
   res.status(200).json({
     success: true,

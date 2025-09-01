@@ -209,111 +209,32 @@ export const createInterviewRescheduledNotification = async (interviewId, newSch
 
 };
 
-/**
- * Xử lý cập nhật trạng thái ứng tuyển (đánh giá, phỏng vấn, v.v.)
- * @param {object} payload - Dữ liệu từ worker
- * @returns {Promise<Notification>} - Thông báo đã tạo
- */
-export const createApplicationUpdateNotification = async (payload) => {
-  const { recipientId, data } = payload;
-  const { action, applicationId, jobTitle, companyName } = data;
 
-  if (!recipientId || !applicationId || !action) {
-    logger.warn('APPLICATION_UPDATE payload is missing required fields.', payload);
-    throw new BadRequestError('Thiếu thông tin bắt buộc để tạo thông báo.');
+// notificationService.createInterviewCanceledNotification
+export const createInterviewCanceledNotification = async (interviewId) => {
+  const interview = await InterviewRoom.findById(interviewId);
+  if (!interview) {
+    logger.warn('INTERVIEW_CANCELED - Interview not found', { interviewId });
+    throw new NotFoundError('Cuộc phỏng vấn không tồn tại.');
   }
 
-  let title, message, metadata;
-
-  switch (action) {
-    case 'RATING_UPDATE': {
-      const { newRating } = data;
-      title = 'Cập nhật trạng thái ứng tuyển';
-      const ratingMessage = newRating === "NOT_RATED" ? "chưa được đánh giá" :
-        newRating === "NOT_SUITABLE" ? "không phù hợp" :
-        newRating === "MAYBE" ? "có thể phù hợp" :
-        newRating === "SUITABLE" ? "phù hợp" :
-        newRating === "PERFECT_MATCH" ? "rất phù hợp" : newRating;
-      message = `Nhà tuyển dụng đã đánh giá hồ sơ của bạn cho vị trí "${jobTitle}" là: ${ratingMessage}.`;
-      metadata = {
-        applicationId: applicationId.toString(),
-        jobTitle: jobTitle || 'N/A',
-        companyName: companyName || 'N/A',
-        actionType: 'RATING_UPDATE',
-        newRating
-      };
-      break;
-    }
-
-    case 'INTERVIEW_SCHEDULED': {
-      const { scheduledTime } = data;
-      const scheduledTimeFormatted = new Date(scheduledTime).toLocaleString('vi-VN', {
-        dateStyle: 'short',
-        timeStyle: 'short'
-      });
-
-      title = 'Cập nhật trạng thái ứng tuyển';
-      message = `Bạn có lịch phỏng vấn cho vị trí "${jobTitle}" tại ${companyName || 'Công ty'} vào ${scheduledTimeFormatted}. Vui lòng chuẩn bị sẵn sàng!`;
-      
-      metadata = {
-        applicationId: applicationId.toString(),
-        jobTitle: jobTitle || 'N/A',
-        companyName: companyName || 'N/A',
-        actionType: 'INTERVIEW_SCHEDULED',
-        scheduledTime: new Date(scheduledTime).toISOString()
-      };
-      break;
-    }
-
-    case 'INTERVIEW_RESCHEDULED': {
-      const { scheduledTime } = data;
-      const scheduledTimeFormatted = new Date(scheduledTime).toLocaleString('vi-VN', {
-        dateStyle: 'short',
-        timeStyle: 'short'
-      });
-
-      title = 'Cập nhật trạng thái ứng tuyển';
-      message = `Lịch phỏng vấn cho vị trí "${jobTitle}" tại ${companyName || 'Công ty'} đã được dời sang ${scheduledTimeFormatted}.`;
-
-      metadata = {
-        applicationId: applicationId.toString(),
-        jobTitle: jobTitle || 'N/A',
-        companyName: companyName || 'N/A',
-        actionType: 'INTERVIEW_RESCHEDULED',
-        scheduledTime: new Date(scheduledTime).toISOString()
-      };
-      break;
-    }
-
-    case 'INTERVIEW_CANCELLED': {
-      title = 'Cập nhật trạng thái ứng tuyển';
-      message = `Cuộc phỏng vấn cho vị trí "${jobTitle}" tại ${companyName || 'Công ty'} đã bị hủy. Vui lòng liên hệ nhà tuyển dụng để biết thêm thông tin.`;
-
-      metadata = {
-        applicationId: applicationId.toString(),
-        jobTitle: jobTitle || 'N/A',
-        companyName: companyName || 'N/A',
-        actionType: 'INTERVIEW_CANCELLED'
-      };
-      break;
-    }
-
-    default:
-      throw new BadRequestError(`Unknown application action: ${action}`);
-  }
-
-  return await Notification.create({
-    userId: new mongoose.Types.ObjectId(recipientId),
-    title,
-    message,
-    type: 'application',
+  const notification = await Notification.create({
+    userId: new mongoose.Types.ObjectId(interview.candidateId),
+    title: "Lịch phỏng vấn đã bị hủy",
+    message: `Lịch phỏng vấn: "${interview.roomName}" đã bị hủy.`,
+    type: 'interview',
     entity: {
-      type: 'Application',
-      id: applicationId,
+      type: "InterviewRoom",
+      id: new mongoose.Types.ObjectId(interviewId)
     },
-    metadata
+    metadata: {
+      interviewId: interviewId.toString()
+    }
   });
+
 };
+
+
 
 /**
  * Tạo thông báo nhắc nhở phỏng vấn.

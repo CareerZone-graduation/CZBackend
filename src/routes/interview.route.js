@@ -43,6 +43,7 @@ router.patch(
   '/:id/cancel',
   authMiddleware.recruiterOnly,
   validationMiddleware.validateParams(commonSchema.idParamSchema),
+  validationMiddleware.validateBody(interviewSchema.cancelInterviewSchema),
   interviewController.cancelInterview
 );
 

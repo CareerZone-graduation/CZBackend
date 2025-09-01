@@ -319,7 +319,6 @@ export const rescheduleInterview = async (interviewId, recruiterId, data) => {
     const application = await Application.findById(interview.applicationId);
     if (application) {
       application.activityHistory.push({
-        actor: recruiterId,
         action: 'INTERVIEW_RESCHEDULED',
         detail: "Dời lịch phỏng vấn từ " + oldScheduledTime.toLocaleString('vi-VN') + " sang " + new Date(scheduledTime).toLocaleString('vi-VN'),
         timestamp: new Date()
@@ -347,9 +346,12 @@ export const rescheduleInterview = async (interviewId, recruiterId, data) => {
  * Hủy lịch phỏng vấn
  * @param {string} interviewId - ID của cuộc phỏng vấn
  * @param {string} recruiterId - ID của recruiter
+ * @param {Object} data - Dữ liệu hủy lịch
  * @returns {Object} Cuộc phỏng vấn đã được hủy
  */
-export const cancelInterview = async (interviewId, recruiterId) => {
+export const cancelInterview = async (interviewId, recruiterId, data) => {
+  const { reason } = data;
+
   const interview = await InterviewRoom.findById(interviewId)
     .populate('candidateId', 'fullName email')
     .populate({
@@ -379,7 +381,7 @@ export const cancelInterview = async (interviewId, recruiterId) => {
   interview.changeHistory.push({
     timestamp: new Date(),
     action: 'CANCELLED',
-    reason: 'Cuộc phỏng vấn đã bị hủy bởi nhà tuyển dụng',
+    reason: reason || 'Cuộc phỏng vấn đã bị hủy bởi nhà tuyển dụng',
     actor: recruiterId
   });
   
@@ -389,9 +391,8 @@ export const cancelInterview = async (interviewId, recruiterId) => {
     const application = await Application.findById(interview.applicationId);
     if (application) {
       application.activityHistory.push({
-        actor: recruiterId,
         action: 'INTERVIEW_CANCELLED',
-        detail: 'Cuộc phỏng vấn đã bị hủy bởi nhà tuyển dụng',
+        detail: `Cuộc phỏng vấn đã bị hủy bởi nhà tuyển dụng${reason ? `. Lý do: ${reason}` : ''}`,
         timestamp: new Date()
       });
       
@@ -401,13 +402,10 @@ export const cancelInterview = async (interviewId, recruiterId) => {
 
   // Gửi thông báo qua RabbitMQ để worker xử lý
   queueService.publishNotification(rabbitmq.ROUTING_KEYS.INTERVIEW_CANCEL, {
-    type: 'APPLICATION_UPDATE',
+    type: 'INTERVIEW_CANCEL',
     recipientId: interview.candidateId._id.toString(),
     data: {
-      action: 'INTERVIEW_CANCELLED',
-      applicationId: interview.applicationId ? interview.applicationId._id.toString() : null,
-      jobTitle: interview.applicationId?.jobSnapshot?.title,
-      companyName: interview.applicationId?.jobSnapshot?.company
+      interviewId: interviewId.toString()
     }
   });
 
