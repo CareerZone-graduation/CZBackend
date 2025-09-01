@@ -59,8 +59,7 @@ async function startWorker() {
 
         // === Interview Related ===
         case ROUTING_KEYS.INTERVIEW_REMINDER:
-          // await notificationService.createInterviewReminderNotification(payload);
-          // logger.info(`⏰ Interview reminder notification created successfully`);
+          await notificationService.createInterviewReminderNotification(payload.data.interviewId);
           break;
 
         case ROUTING_KEYS.INTERVIEW_RESCHEDULE:

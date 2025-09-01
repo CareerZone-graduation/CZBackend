@@ -238,28 +238,22 @@ export const createInterviewCanceledNotification = async (interviewId) => {
 
 /**
  * Tạo thông báo nhắc nhở phỏng vấn.
- * @param {object} payload - Dữ liệu từ worker
+ * @param {object} interviewId - Dữ liệu từ worker
  * @returns {Promise<Notification>} - Thông báo đã tạo
  */
-export const createInterviewReminderNotification = async (payload) => {
-  const { recipientId, data } = payload;
-  const { interviewId, scheduledTime, minutesBefore, candidateName, recruiterName, jobTitle, companyName } = data;
-
-  if (!recipientId || !interviewId) {
-    logger.warn('INTERVIEW_REMINDER payload is missing required fields.', payload);
-    throw new BadRequestError('Thiếu thông tin bắt buộc để tạo thông báo.');
-  }
-
+export const createInterviewReminderNotification = async (interviewId) => {
+  const interview = await InterviewRoom.findById(interviewId);
+  const scheduledTime = interview.scheduledTime;
   const scheduledTimeFormatted = new Date(scheduledTime).toLocaleString('vi-VN', {
     dateStyle: 'short',
     timeStyle: 'short'
   });
 
   const title = '⏰ Nhắc nhở phỏng vấn';
-  const message = `Bạn có lịch phỏng vấn cho vị trí "${jobTitle || 'Vị trí ứng tuyển'}" tại ${companyName || 'Công ty'} vào ${scheduledTimeFormatted} (${minutesBefore || 30} phút nữa). Vui lòng chuẩn bị sẵn sàng!`;
+  const message = interview.roomName + ` sẽ bắt đầu vào ${scheduledTimeFormatted}. Vui lòng chuẩn bị sẵn sàng!`;
 
-  return await Notification.create({
-    userId: new mongoose.Types.ObjectId(recipientId),
+  const notificationForCandidate = await Notification.create({
+    userId: new mongoose.Types.ObjectId(interview.candidateId),
     title,
     message,
     type: 'interview',
@@ -268,16 +262,24 @@ export const createInterviewReminderNotification = async (payload) => {
       id: interviewId,
     },
     metadata: {
-      interviewId: interviewId.toString(),
-      jobTitle: jobTitle || 'N/A',
-      companyName: companyName || 'N/A',
-      actionType: 'REMINDER',
-      scheduledTime: new Date(scheduledTime).toISOString(),
-      minutesBefore: minutesBefore || 30,
-      recruiterName,
-      candidateName
+      interviewId: interviewId.toString()
     },
   });
+  const notificationForRecruiter = await Notification.create({
+    userId: new mongoose.Types.ObjectId(interview.recruiterId),
+    title,
+    message,
+    type: 'interview',
+    entity: {
+      type: 'InterviewRoom',
+      id: interviewId,
+    },
+    metadata: {
+      interviewId: interviewId.toString()
+    },
+  });
+  interview.isReminderSent = true;
+  await interview.save();
 };
 
 /**

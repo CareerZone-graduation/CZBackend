@@ -610,73 +610,29 @@ export const addInterviewNote = async (interviewId, recruiterId, notes) => {
  * @param {number} minutesBefore - Số phút trước khi phỏng vấn để gửi reminder
  * @returns {number} Số lượng reminder đã gửi
  */
-export const sendInterviewReminders = async (minutesBefore = 30) => {
+export const sendInterviewReminders = async (minutesBefore = 60) => {
   const now = new Date();
   const reminderTime = new Date(now.getTime() + minutesBefore * 60 * 1000);
-  const endTime = new Date(now.getTime() + (minutesBefore + 5) * 60 * 1000);
-
+  const endTime = new Date(now.getTime() + (minutesBefore + 60) * 60 * 1000);
+  console.log(`Sending interview reminders for interviews scheduled between ${reminderTime} and ${endTime}`);
   const interviews = await InterviewRoom.find({
     status: { $in: ['SCHEDULED', 'RESCHEDULED'] },
     isReminderSent: false,
     scheduledTime: { 
-      $gte: reminderTime, 
-      $lt: endTime 
-    }
-  })
-  .populate('candidateId', 'fullName email')
-  .populate('recruiterId', 'fullName email')
-  .populate({
-    path: 'applicationId',
-    select: 'jobId',
-    populate: {
-      path: 'jobId',
-      select: 'title company',
-      populate: {
-        path: 'company',
-        select: 'companyName'
-      }
+      $gte: reminderTime.toISOString(), 
+      $lt: endTime.toISOString() 
     }
   });
 
   let sentCount = 0;
 
   for (const interview of interviews) {
-    try {
-      const jobTitle = interview.applicationId?.jobId?.title || 'Vị trí ứng tuyển';
-      const companyName = interview.applicationId?.jobId?.company?.companyName || 'Công ty';
-      
-      // Gửi reminder cho candidate qua RabbitMQ
+    try {    
+      // Gửi reminder cho candidate/recruiter qua RabbitMQ (ko cần chỉ định recipientId vì đã có trong model)
       queueService.publishNotification(rabbitmq.ROUTING_KEYS.INTERVIEW_REMINDER, {
         type: 'INTERVIEW_REMINDER',
-        recipientId: interview.candidateId._id.toString(),
         data: {
-          interviewId: interview._id.toString(),
-          roomName: interview.roomName,
-          scheduledTime: interview.scheduledTime,
-          minutesBefore,
-          candidateName: interview.candidateId.fullName,
-          candidateEmail: interview.candidateId.email,
-          recruiterName: interview.recruiterId.fullName,
-          jobTitle,
-          companyName
-        }
-      });
-
-      // Gửi reminder cho recruiter qua RabbitMQ (nếu cần)
-      queueService.publishNotification(rabbitmq.ROUTING_KEYS.INTERVIEW_REMINDER, {
-        type: 'INTERVIEW_REMINDER',
-        recipientId: interview.recruiterId._id.toString(),
-        data: {
-          interviewId: interview._id.toString(),
-          roomName: interview.roomName,
-          scheduledTime: interview.scheduledTime,
-          minutesBefore,
-          candidateName: interview.candidateId.fullName,
-          recruiterName: interview.recruiterId.fullName,
-          recruiterEmail: interview.recruiterId.email,
-          jobTitle,
-          companyName,
-          isForRecruiter: true
+          interviewId: interview._id.toString()
         }
       });
 
