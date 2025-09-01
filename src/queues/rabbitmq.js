@@ -26,7 +26,7 @@ const DLX = 'notifications_dlx';
  * Cấu trúc 'notification.<loại_thông_báo>' giúp dễ dàng lọc theo mẫu, ví dụ 'notification.*'.
  */
 export const ROUTING_KEYS = {
-  STATUS_UPDATE: 'notification.status_update', // Dành cho cập nhật trạng thái đơn ứng tuyển
+  STATUS_UPDATE: 'notification.status_update', // Dành cho cập nhật trạng thái đơn ứng tuyển (bao gồm đã nộp đơn thành công, nhà tuyển dụng đánh giá ứng viên, lên lịch phỏng vấn)
   INTERVIEW_REMINDER: 'notification.interview_reminder', // Dành cho nhắc lịch phỏng vấn
   INTERVIEW_RESCHEDULE: 'notification.interview_reschedule', // Dành cho dời lịch phỏng vấn
   INTERVIEW_CANCEL: 'notification.interview_cancel', // Dành cho hủy lịch phỏng vấn

@@ -247,12 +247,10 @@ export const updateCandidateRating = async (applicationId, recruiterId, rating) 
               rating === "MAYBE" ? "có thể phù hợp" :
               rating === "SUITABLE" ? "phù hợp" :
               rating === "PERFECT_MATCH" ? "rất phù hợp" : rating;
-  if (application.status === 'PENDING' || application.status === 'REVIEWING') {
+  if (application.status === 'PENDING') {
     application.status = 'REVIEWING';
-    application.lastStatusUpdateAt = new Date();
-    console.log("Logging RATING_UPDATE with status change "+ratingMessage);
-    logActivity(application, 'RATING_UPDATE', `Đã đánh giá đơn ứng tuyển là: ${ratingMessage}`);
   }
+  logActivity(application, 'RATING_UPDATE', `Đã đánh giá đơn ứng tuyển là: ${ratingMessage}`);
   
   application.candidateRating = rating;
   await application.save();
@@ -309,9 +307,12 @@ export const updateApplicationNotes = async (applicationId, recruiterId, notes) 
   }
 
 
-  logActivity(application, recruiterId, 'NOTES_UPDATE', "Ghi chú cập nhật: " + notes);
+  logActivity(application, 'NOTES_UPDATE', "Ghi chú cập nhật: " + notes);
 
   application.notes = notes;
+  if (application.status === 'PENDING') {
+    application.status = 'REVIEWING';
+  }
   await application.save();
 
   return application;
@@ -375,23 +376,20 @@ export const scheduleInterview = async (applicationId, recruiterId, scheduledTim
   application.lastStatusUpdateAt = new Date();
 
   // Ghi log cho việc lên lịch và việc đổi trạng thái
-  logActivity(application, recruiterId, 'INTERVIEW_SCHEDULED', 
+  logActivity(application, 'INTERVIEW_SCHEDULED', 
     "Lên lịch phỏng vấn vào " + new Date(scheduledTime).toLocaleString('vi-VN'),
   );
   
   await application.save();
 
-  // 6. Gửi thông báo (tùy chọn, có thể tách ra event)
+  // Gửi thông báo
   // Gửi cho ứng viên
   queueService.publishNotification(rabbitmq.ROUTING_KEYS.STATUS_UPDATE, {
-    type: 'APPLICATION_UPDATE',
+    type: 'INTERVIEW_SCHEDULED',
     recipientId: candidateProfile.userId.toString(),
     data: {
-      action: 'INTERVIEW_SCHEDULED',
       applicationId: application._id.toString(),
-      jobTitle: job.title,
-      companyName: job.companyName,
-      scheduledTime: scheduledTime
+      interviewId: newInterview._id.toString(),
     },
   });
 

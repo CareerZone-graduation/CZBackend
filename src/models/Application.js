@@ -7,9 +7,10 @@ const activityLogSchema = new mongoose.Schema({
     enum: [
       'APPLICATION_SUBMITTED',
       'RATING_UPDATE',
-      'STATUS_CHANGE',
       'NOTES_UPDATE',
       'INTERVIEW_SCHEDULED',
+      
+      'STATUS_CHANGE',
       'INTERVIEW_RESCHEDULED',
       'INTERVIEW_CANCELLED',
       'INTERVIEW_COMPLETED',

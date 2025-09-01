@@ -3,6 +3,7 @@ import { NotFoundError, BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
 import { logActivity } from './application.service.js';
+import { application } from 'express';
 
 // =================================================================
 // Chức năng CRUD Thông báo
@@ -78,96 +79,7 @@ export const getUnreadNotificationCount = async (userId) => {
   return count;
 };
 
-/**
- * Enhance metadata based on notification type and entityId
- * @param {string} type - Notification type
- * @param {object} baseMetadata - Base metadata
- * @param {string} entityId - Related entity ID
- * @returns {Promise<object>} - Enhanced metadata
- */
-const enhanceMetadata = async (type, baseMetadata, entityId) => {
-  try {
-    let enhancedMetadata = { ...baseMetadata };
 
-    switch (type) {
-      case 'application':
-        if (entityId) {
-          const application = await Application.findById(entityId)
-            .populate('jobId', 'title company')
-            .lean();
-          
-          if (application) {
-            enhancedMetadata = {
-              ...enhancedMetadata,
-              applicationId: application._id.toString(),
-              jobId: application.jobId._id.toString(),
-              jobTitle: application.jobSnapshot?.title || application.jobId?.title || 'N/A',
-              companyName: application.jobSnapshot?.company?.name || application.jobId?.company?.name || 'N/A',
-              companyLogo: application.jobSnapshot?.company?.logo || application.jobId?.company?.logo
-            };
-          }
-        }
-        break;
-
-      case 'interview':
-        if (entityId) {
-          const interview = await InterviewRoom.findById(entityId)
-            .populate({
-              path: 'applicationId',
-              populate: {
-                path: 'jobId',
-                select: 'title company'
-              }
-            })
-            .lean();
-          
-          if (interview) {
-            enhancedMetadata = {
-              ...enhancedMetadata,
-              interviewId: interview._id.toString(),
-              applicationId: interview.applicationId?._id?.toString(),
-              jobTitle: interview.applicationId?.jobSnapshot?.title || interview.applicationId?.jobId?.title || 'N/A',
-              companyName: interview.applicationId?.jobSnapshot?.company?.name || interview.applicationId?.jobId?.company?.name || 'N/A',
-              scheduledTime: interview.scheduledTime?.toISOString()
-            };
-          }
-        }
-        break;
-
-      case 'job_alert':
-        // Job alert metadata is usually provided by the caller
-        break;
-
-      default:
-        // Keep base metadata as is
-        break;
-    }
-
-    return enhancedMetadata;
-  } catch (error) {
-    logger.warn('Failed to enhance metadata:', error);
-    return baseMetadata; // Return base metadata if enhancement fails
-  }
-};
-
-/**
- * Helper function to determine entity type from notification type
- * @param {string} notificationType - The type of notification
- * @returns {string} - The entity type
- */
-const getEntityTypeFromNotificationType = (notificationType) => {
-  const typeMapping = {
-    'application': 'Application',
-    'application_submitted': 'Application',
-    'interview': 'InterviewRoom',
-    'job_alert': 'Job',
-    'recommendation': 'Job',
-    'profile_view': 'RecruiterProfile',
-    'system': 'System'
-  };
-  
-  return typeMapping[notificationType] || 'System';
-};
 
 
 // =================================================================
@@ -243,6 +155,29 @@ export const createRatingUpdateNotification = async (applicationId, newRating) =
     }
   });
 }
+
+
+export const createInterviewScheduledNotification = async (applicationId, interviewId) => {
+  const application = await Application.findById(applicationId);
+  const interview = await InterviewRoom.findById(interviewId);
+  const candidateProfileId = application.candidateProfileId;
+  const candidateId = await CandidateProfile.findById(candidateProfileId).select('userId').userId;
+
+  const notification = await Notification.create({
+    userId: new mongoose.Types.ObjectId(candidateId),
+    title: "Lịch phỏng vấn đã được lên lịch",
+    message: `Bạn có một lịch phỏng vấn cho vị trí "${application.jobSnapshot.title}" tại ${application.jobSnapshot.company}.`,
+    type: 'interview',
+    entity: {
+      type: "InterviewRoom",
+      id: new mongoose.Types.ObjectId(interviewId)
+    },
+    metadata: {
+      interviewId: interviewId.toString()
+    }
+  });
+
+};
 
 /**
  * Xử lý cập nhật trạng thái ứng tuyển (đánh giá, phỏng vấn, v.v.)

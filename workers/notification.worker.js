@@ -97,7 +97,6 @@ async function startWorker() {
       logger.info(`✅ Message processed successfully`, {
         routingKey,
         processingTimeMs: processingTime,
-        messageId: msg.properties.messageId
       });
 
     } catch (error) {
@@ -142,10 +141,11 @@ async function handleStatusUpdate(payload) {
       await notificationService.createRatingUpdateNotification(applicationId, newRating);
       break;
 
-    case 'APPLICATION_UPDATE':
+    case 'INTERVIEW_SCHEDULED':
+      const interviewId = payload.data.interviewId;
       // Cập nhật trạng thái ứng tuyển (rating, interview schedule, etc.)
-      await notificationService.createApplicationUpdateNotification(payload);
-      logger.info(`📋 Application update notification created`);
+      await notificationService.createInterviewScheduledNotification(applicationId, interviewId);
+      logger.info(`📋 Interview scheduled notification created`);
       break;
     
     case 'PROFILE_VIEW':
