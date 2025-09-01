@@ -34,7 +34,6 @@ async function startWorker() {
       routingKey = msg.fields.routingKey;
       
       logger.info(`📨 Received task from [${routingKey}]`, { 
-        messageId: msg.properties.messageId,
         payloadType: payload.type,
         timestamp: new Date().toISOString()
       });
@@ -130,13 +129,19 @@ async function startWorker() {
  * @param {Object} payload - Message payload
  */
 async function handleStatusUpdate(payload) {
+  const applicationId = payload.data.applicationId;
   switch (payload.type) {
     case 'APPLICATION_SUBMITTED':
       // Tạo thông báo xác nhận cho ứng viên
-      const applicationId = payload.data.applicationId;
       await notificationService.createApplicationSubmittedNotification(applicationId);
       break;
     
+    case 'RATING_UPDATE':
+      // Cập nhật đánh giá ứng viên
+      const newRating = payload.data.newRating;
+      await notificationService.createRatingUpdateNotification(applicationId, newRating);
+      break;
+
     case 'APPLICATION_UPDATE':
       // Cập nhật trạng thái ứng tuyển (rating, interview schedule, etc.)
       await notificationService.createApplicationUpdateNotification(payload);

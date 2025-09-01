@@ -1,4 +1,3 @@
-import { log } from 'winston';
 import { Notification, Application, User, Job, InterviewRoom, CandidateProfile } from '../models/index.js';
 import { NotFoundError, BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
@@ -220,6 +219,30 @@ export const createApplicationSubmittedNotification = async (applicationId) => {
     });
 
 };
+
+export const createRatingUpdateNotification = async (applicationId, newRating) => {
+  const application = await Application.findById(applicationId);
+  const candidateProfileId = application.candidateProfileId;
+  const candidateId = await CandidateProfile.findById(candidateProfileId).select('userId').userId;
+  const ratingMessage = newRating === "NOT_RATED" ? "chưa được đánh giá" :
+        newRating === "NOT_SUITABLE" ? "không phù hợp" :
+        newRating === "MAYBE" ? "có thể phù hợp" :
+        newRating === "SUITABLE" ? "phù hợp" :
+        newRating === "PERFECT_MATCH" ? "rất phù hợp" : newRating;
+  const notification = await Notification.create({
+    userId: new mongoose.Types.ObjectId(candidateId),
+    title: "Cập nhật trạng thái đơn ứng tuyển",
+    message: `Nhà tuyển dụng đã đánh giá hồ sơ của bạn cho vị trí "${application.jobSnapshot.title}" tại ${application.jobSnapshot.company} là: ${ratingMessage}.`,
+    type: 'application',
+    entity: {
+      type: "Application",
+      id: new mongoose.Types.ObjectId(applicationId)
+    },
+    metadata: {
+      applicationId: applicationId.toString(),
+    }
+  });
+}
 
 /**
  * Xử lý cập nhật trạng thái ứng tuyển (đánh giá, phỏng vấn, v.v.)

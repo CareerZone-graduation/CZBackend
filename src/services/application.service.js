@@ -251,7 +251,7 @@ export const updateCandidateRating = async (applicationId, recruiterId, rating) 
     application.status = 'REVIEWING';
     application.lastStatusUpdateAt = new Date();
     console.log("Logging RATING_UPDATE with status change "+ratingMessage);
-    logActivity(application, recruiterId, 'RATING_UPDATE', `Đã đánh giá ứng viên là: ${ratingMessage}`);
+    logActivity(application, 'RATING_UPDATE', `Đã đánh giá đơn ứng tuyển là: ${ratingMessage}`);
   }
   
   application.candidateRating = rating;
@@ -261,13 +261,10 @@ export const updateCandidateRating = async (applicationId, recruiterId, rating) 
   const candidateProfile = await CandidateProfile.findById(application.candidateProfileId).select('userId');
   if (candidateProfile) {
     queueService.publishNotification(rabbitmq.ROUTING_KEYS.STATUS_UPDATE, {
-      type: 'APPLICATION_UPDATE',
+      type: 'RATING_UPDATE',
       recipientId: candidateProfile.userId.toString(),
       data: {
-        action: 'RATING_UPDATE',
         applicationId: application._id.toString(),
-        jobTitle: application.jobSnapshot.title,
-        companyName: application.jobSnapshot.company,
         newRating: rating,
       }
     });
