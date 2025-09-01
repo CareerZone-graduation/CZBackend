@@ -1,25 +1,20 @@
-import { Notification, Application, User, Job, InterviewRoom } from '../models/index.js';
+import { log } from 'winston';
+import { Notification, Application, User, Job, InterviewRoom, CandidateProfile } from '../models/index.js';
 import { NotFoundError, BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
+import { logActivity } from './application.service.js';
 
 // =================================================================
-// Chức năng CRUD Thông báo (Phần tôi vừa thêm)
+// Chức năng CRUD Thông báo
 // =================================================================
 
-/**
- * Get notifications for a user with pagination and filtering
- * @param {string} userId - The ID of the user
- * @param {object} options - Query options (page, limit, type, isRead, search)
- * @returns {Promise<object>} - A promise that resolves to an object containing notifications and pagination metadata
- */
+
 export const getNotifications = async (userId, options = {}) => {
   const page = parseInt(options.page, 10) || 1;
   const limit = Math.min(parseInt(options.limit, 10) || 10, 50); // Giới hạn tối đa 50
   const skip = (page - 1) * limit;
-
   const query = { userId };
-
   // Filter by read status
   if (options.isRead !== undefined) {
     query.isRead = options.isRead === 'true' || options.isRead === true;
@@ -46,12 +41,6 @@ export const getNotifications = async (userId, options = {}) => {
   };
 };
 
-/**
- * Mark a specific notification as read
- * @param {string} userId - The ID of the user
- * @param {string} notificationId - The ID of the notification
- * @returns {Promise<Notification>} - A promise that resolves to the updated notification
- */
 export const markNotificationAsRead = async (userId, notificationId) => {
   const notification = await Notification.findOneAndUpdate(
     { _id: notificationId, userId },
@@ -69,11 +58,6 @@ export const markNotificationAsRead = async (userId, notificationId) => {
   return notification;
 };
 
-/**
- * Mark all unread notifications as read for a user
- * @param {string} userId - The ID of the user
- * @returns {Promise<object>} - A promise that resolves to the result of the update operation
- */
 export const markAllNotificationsAsRead = async (userId) => {
   const result = await Notification.updateMany(
     { userId, isRead: false },
@@ -86,11 +70,6 @@ export const markAllNotificationsAsRead = async (userId) => {
   return result;
 };
 
-/**
- * Get unread notification count for a user
- * @param {string} userId - The ID of the user
- * @returns {Promise<number>} - A promise that resolves to the count of unread notifications
- */
 export const getUnreadNotificationCount = async (userId) => {
   const count = await Notification.countDocuments({ 
     userId, 
@@ -98,47 +77,6 @@ export const getUnreadNotificationCount = async (userId) => {
   });
   
   return count;
-};
-
-/**
- * Create a notification with enhanced metadata
- * @param {object} notificationData - The notification data
- * @returns {Promise<Notification>} - A promise that resolves to the created notification
- */
-export const createNotificationWithMetadata = async (notificationData) => {
-  try {
-    const {
-      userId,
-      title,
-      message,
-      type,
-      entityId = null,
-      metadata = {}
-    } = notificationData;
-
-    // Validate required fields
-    if (!userId || !title || !message || !type) {
-      throw new BadRequestError('Thiếu thông tin bắt buộc để tạo thông báo.');
-    }
-
-    const notification = await Notification.create({
-      userId: new mongoose.Types.ObjectId(userId),
-      title,
-      message,
-      type,
-      entity: entityId ? {
-        type: getEntityTypeFromNotificationType(type),
-        id: new mongoose.Types.ObjectId(entityId)
-      } : undefined,
-      metadata: await enhanceMetadata(type, metadata, entityId)
-    });
-
-    logger.info(`Successfully created notification for user ${userId}: ${title}`);
-    return notification;
-  } catch (error) {
-    logger.error('Failed to create notification:', error);
-    throw error;
-  }
 };
 
 /**
@@ -221,6 +159,7 @@ const enhanceMetadata = async (type, baseMetadata, entityId) => {
 const getEntityTypeFromNotificationType = (notificationType) => {
   const typeMapping = {
     'application': 'Application',
+    'application_submitted': 'Application',
     'interview': 'InterviewRoom',
     'job_alert': 'Job',
     'recommendation': 'Job',
@@ -253,259 +192,320 @@ const getStatusMessage = (status, jobTitle) => {
   }
 };
 
+// =================================================================
+// Các Hàm Logic Nghiệp Vụ Cốt Lõi (Pure Business Logic Functions)
+// =================================================================
+
 /**
- * Xử lý logic cho một thông báo nhận được từ queue.
- * @param {object} payload - Dữ liệu của message.
+ * Tạo thông báo xác nhận cho ứng viên khi nộp đơn thành công.
  */
-export const processNotification = async (payload) => {
-  logger.info('Processing notification:', payload);
+export const createApplicationSubmittedNotification = async (applicationId) => {
 
-  switch (payload.type) {
-    case 'APPLICATION_UPDATE': {
-      const { recipientId, data } = payload;
-      const { action, applicationId, jobTitle, companyName } = data;
-
-      if (!recipientId || !applicationId || !action) {
-        logger.warn('APPLICATION_UPDATE payload is missing required fields.', payload);
-        return;
+    // lấy userId từ applicationId
+    const application = await Application.findById(applicationId);
+    const candidateProfileId = application.candidateProfileId;
+    const candidateId = await CandidateProfile.findById(candidateProfileId).select('userId').userId;
+    const notification = await Notification.create({
+      userId: new mongoose.Types.ObjectId(candidateId),
+      title:"Nộp đơn thành công",
+      message: `Bạn đã nộp đơn thành công vào vị trí "${application.jobSnapshot.title}" tại ${application.jobSnapshot.company}.`,
+      type: 'application',
+      entity: {
+        type: "Application",
+        id: new mongoose.Types.ObjectId(applicationId)
+      },
+      metadata: {
+        applicationId: applicationId.toString(),
       }
+    });
 
-      let title, message, metadata;
+};
 
-      switch (action) {
-        case 'RATING_UPDATE': {
-          const { newRating } = data;
-          title = 'Cập nhật trạng thái ứng tuyển';
-          const ratingMessage = newRating === "NOT_RATED" ? "chưa được đánh giá" :
-            newRating === "NOT_SUITABLE" ? "không phù hợp" :
-            newRating === "MAYBE" ? "có thể phù hợp" :
-            newRating === "SUITABLE" ? "phù hợp" :
-            newRating === "PERFECT_MATCH" ? "rất phù hợp" : newRating;
-          message = `Nhà tuyển dụng đã đánh giá hồ sơ của bạn cho vị trí "${jobTitle}" là: ${ratingMessage}.`;
-          metadata = {
-            applicationId: applicationId.toString(),
-            jobTitle: jobTitle || 'N/A',
-            companyName: companyName || 'N/A',
-            actionType: 'RATING_UPDATE',
-            newRating
-          };
-          break;
-        }
+/**
+ * Xử lý cập nhật trạng thái ứng tuyển (đánh giá, phỏng vấn, v.v.)
+ * @param {object} payload - Dữ liệu từ worker
+ * @returns {Promise<Notification>} - Thông báo đã tạo
+ */
+export const createApplicationUpdateNotification = async (payload) => {
+  const { recipientId, data } = payload;
+  const { action, applicationId, jobTitle, companyName } = data;
 
-        case 'INTERVIEW_SCHEDULED': {
-          const { scheduledTime } = data;
-          const scheduledTimeFormatted = new Date(scheduledTime).toLocaleString('vi-VN', {
-            dateStyle: 'short',
-            timeStyle: 'short'
-          });
+  if (!recipientId || !applicationId || !action) {
+    logger.warn('APPLICATION_UPDATE payload is missing required fields.', payload);
+    throw new BadRequestError('Thiếu thông tin bắt buộc để tạo thông báo.');
+  }
 
-          title = 'Cập nhật trạng thái ứng tuyển';
-          message = `Bạn có lịch phỏng vấn cho vị trí "${jobTitle}" tại ${companyName || 'Công ty'} vào ${scheduledTimeFormatted}. Vui lòng chuẩn bị sẵn sàng!`;
-          
-          metadata = {
-            applicationId: applicationId.toString(),
-            jobTitle: jobTitle || 'N/A',
-            companyName: companyName || 'N/A',
-            actionType: 'INTERVIEW_SCHEDULED',
-            scheduledTime: new Date(scheduledTime).toISOString()
-          };
-          break;
-        }
+  let title, message, metadata;
 
-        case 'INTERVIEW_RESCHEDULED': {
-          const { scheduledTime } = data;
-          const scheduledTimeFormatted = new Date(scheduledTime).toLocaleString('vi-VN', {
-            dateStyle: 'short',
-            timeStyle: 'short'
-          });
-
-          title = 'Cập nhật trạng thái ứng tuyển';
-          message = `Lịch phỏng vấn cho vị trí "${jobTitle}" tại ${companyName || 'Công ty'} đã được dời sang ${scheduledTimeFormatted}.`;
-
-          metadata = {
-            applicationId: applicationId.toString(),
-            jobTitle: jobTitle || 'N/A',
-            companyName: companyName || 'N/A',
-            actionType: 'INTERVIEW_RESCHEDULED',
-            scheduledTime: new Date(scheduledTime).toISOString()
-          };
-          break;
-        }
-
-        case 'INTERVIEW_CANCELLED': {
-          title = 'Cập nhật trạng thái ứng tuyển';
-          message = `Cuộc phỏng vấn cho vị trí "${jobTitle}" tại ${companyName || 'Công ty'} đã bị hủy. Vui lòng liên hệ nhà tuyển dụng để biết thêm thông tin.`;
-
-          metadata = {
-            applicationId: applicationId.toString(),
-            jobTitle: jobTitle || 'N/A',
-            companyName: companyName || 'N/A',
-            actionType: 'INTERVIEW_CANCELLED'
-          };
-          break;
-        }
-
-        default: {
-          break;
-        }
-      }
-
-      await Notification.create({
-        userId: new mongoose.Types.ObjectId(recipientId),
-        title,
-        message,
-        type: 'application',
-        entity: {
-          type: 'Application',
-          id: applicationId,
-        },
-        metadata
-      });
-
-      logger.info(`Successfully created application ${action} notification for user ${recipientId}, application ${applicationId}`);
+  switch (action) {
+    case 'RATING_UPDATE': {
+      const { newRating } = data;
+      title = 'Cập nhật trạng thái ứng tuyển';
+      const ratingMessage = newRating === "NOT_RATED" ? "chưa được đánh giá" :
+        newRating === "NOT_SUITABLE" ? "không phù hợp" :
+        newRating === "MAYBE" ? "có thể phù hợp" :
+        newRating === "SUITABLE" ? "phù hợp" :
+        newRating === "PERFECT_MATCH" ? "rất phù hợp" : newRating;
+      message = `Nhà tuyển dụng đã đánh giá hồ sơ của bạn cho vị trí "${jobTitle}" là: ${ratingMessage}.`;
+      metadata = {
+        applicationId: applicationId.toString(),
+        jobTitle: jobTitle || 'N/A',
+        companyName: companyName || 'N/A',
+        actionType: 'RATING_UPDATE',
+        newRating
+      };
       break;
     }
 
-    case 'INTERVIEW_REMINDER': {
-      const { recipientId, data } = payload;
-      const { interviewId, scheduledTime, minutesBefore, candidateName, recruiterName, jobTitle, companyName } = data;
-
-      if (!recipientId || !interviewId) {
-        logger.warn('INTERVIEW_REMINDER payload is missing required fields.', payload);
-        return;
-      }
-
+    case 'INTERVIEW_SCHEDULED': {
+      const { scheduledTime } = data;
       const scheduledTimeFormatted = new Date(scheduledTime).toLocaleString('vi-VN', {
         dateStyle: 'short',
         timeStyle: 'short'
       });
 
-      const title = '⏰ Nhắc nhở phỏng vấn';
-      const notificationMessage = `Bạn có lịch phỏng vấn cho vị trí "${jobTitle || 'Vị trí ứng tuyển'}" tại ${companyName || 'Công ty'} vào ${scheduledTimeFormatted} (${minutesBefore || 30} phút nữa). Vui lòng chuẩn bị sẵn sàng!`;
-
-      await Notification.create({
-        userId: new mongoose.Types.ObjectId(recipientId),
-        title,
-        message: notificationMessage,
-        type: 'interview',
-        entity: {
-          type: 'InterviewRoom',
-          id: interviewId,
-        },
-        metadata: {
-          interviewId: interviewId.toString(),
-          jobTitle: jobTitle || 'N/A',
-          companyName: companyName || 'N/A',
-          actionType: 'REMINDER',
-          scheduledTime: new Date(scheduledTime).toISOString(),
-          minutesBefore: minutesBefore || 30,
-          recruiterName,
-          candidateName
-        },
-      });
-
-      logger.info(`Successfully created interview reminder notification for user ${recipientId}, interview ${interviewId}`);
+      title = 'Cập nhật trạng thái ứng tuyển';
+      message = `Bạn có lịch phỏng vấn cho vị trí "${jobTitle}" tại ${companyName || 'Công ty'} vào ${scheduledTimeFormatted}. Vui lòng chuẩn bị sẵn sàng!`;
+      
+      metadata = {
+        applicationId: applicationId.toString(),
+        jobTitle: jobTitle || 'N/A',
+        companyName: companyName || 'N/A',
+        actionType: 'INTERVIEW_SCHEDULED',
+        scheduledTime: new Date(scheduledTime).toISOString()
+      };
       break;
     }
 
-    case 'PROFILE_VIEW': {
-      const { recipientId, data } = payload;
-      const { recruiterProfileId, companyId, companyName, companyLogo } = data;
-
-      if (!recipientId || !recruiterProfileId) {
-        logger.warn('PROFILE_VIEW payload is missing required fields.', payload);
-        return;
-      }
-
-      const title = '👀 Hồ sơ của bạn đã được xem';
-      const notificationMessage = `Nhà tuyển dụng từ ${companyName || 'Một công ty'} vừa xem hồ sơ của bạn.`;
-
-      await Notification.create({
-        userId: new mongoose.Types.ObjectId(recipientId),
-        title,
-        message: notificationMessage,
-        type: 'profile_view',
-        entity: {
-          type: 'RecruiterProfile',
-          id: recruiterProfileId,
-        },
-        metadata: {
-          recruiterProfileId: recruiterProfileId.toString(),
-          companyId: companyId?.toString(),
-          companyName: companyName || 'N/A',
-          companyLogo
-        },
+    case 'INTERVIEW_RESCHEDULED': {
+      const { scheduledTime } = data;
+      const scheduledTimeFormatted = new Date(scheduledTime).toLocaleString('vi-VN', {
+        dateStyle: 'short',
+        timeStyle: 'short'
       });
 
-      logger.info(`Successfully created profile view notification for user ${recipientId}`);
+      title = 'Cập nhật trạng thái ứng tuyển';
+      message = `Lịch phỏng vấn cho vị trí "${jobTitle}" tại ${companyName || 'Công ty'} đã được dời sang ${scheduledTimeFormatted}.`;
+
+      metadata = {
+        applicationId: applicationId.toString(),
+        jobTitle: jobTitle || 'N/A',
+        companyName: companyName || 'N/A',
+        actionType: 'INTERVIEW_RESCHEDULED',
+        scheduledTime: new Date(scheduledTime).toISOString()
+      };
       break;
     }
 
-    case 'JOB_RECOMMENDATION': {
-      const { recipientId, data } = payload;
-      const { reason, source, jobIds } = data;
+    case 'INTERVIEW_CANCELLED': {
+      title = 'Cập nhật trạng thái ứng tuyển';
+      message = `Cuộc phỏng vấn cho vị trí "${jobTitle}" tại ${companyName || 'Công ty'} đã bị hủy. Vui lòng liên hệ nhà tuyển dụng để biết thêm thông tin.`;
 
-      if (!recipientId || !jobIds || jobIds.length === 0) {
-        logger.warn('JOB_RECOMMENDATION payload is missing required fields.', payload);
-        return;
-      }
-
-      const title = '🎯 Gợi ý việc làm phù hợp';
-      const notificationMessage = `Chúng tôi đã tìm thấy ${jobIds.length} công việc phù hợp với bạn. ${reason || ''}`;
-
-      await Notification.create({
-        userId: new mongoose.Types.ObjectId(recipientId),
-        title,
-        message: notificationMessage,
-        type: 'recommendation',
-        metadata: {
-          reason: reason || 'Dựa trên hồ sơ và sở thích của bạn',
-          source: source || 'AI_MATCHING',
-          jobIds: jobIds.map(id => id.toString())
-        },
-      });
-
-      logger.info(`Successfully created job recommendation notification for user ${recipientId}`);
-      break;
-    }
-
-    case 'SYSTEM_NOTIFICATION': {
-      const { recipientId, data } = payload;
-      const { actionType, entityId, entityTitle, link, icon, actionText, customTitle, customMessage } = data;
-
-      if (!recipientId) {
-        logger.warn('SYSTEM_NOTIFICATION payload is missing recipientId.', payload);
-        return;
-      }
-
-      const title = customTitle || getSystemNotificationTitle(actionType);
-      const message = customMessage || getSystemNotificationMessage(actionType, entityTitle);
-
-      await Notification.create({
-        userId: new mongoose.Types.ObjectId(recipientId),
-        title,
-        message,
-        type: 'system',
-        entity: entityId ? {
-          type: getEntityTypeFromActionType(actionType),
-          id: entityId,
-        } : undefined,
-        metadata: {
-          actionType,
-          entityId: entityId?.toString(),
-          entityTitle,
-          link,
-          icon: icon || 'info',
-          actionText
-        },
-      });
-
-      logger.info(`Successfully created system notification for user ${recipientId}`);
+      metadata = {
+        applicationId: applicationId.toString(),
+        jobTitle: jobTitle || 'N/A',
+        companyName: companyName || 'N/A',
+        actionType: 'INTERVIEW_CANCELLED'
+      };
       break;
     }
 
     default:
-      logger.warn('Unknown notification type:', payload.type);
+      throw new BadRequestError(`Unknown application action: ${action}`);
+  }
+
+  return await Notification.create({
+    userId: new mongoose.Types.ObjectId(recipientId),
+    title,
+    message,
+    type: 'application',
+    entity: {
+      type: 'Application',
+      id: applicationId,
+    },
+    metadata
+  });
+};
+
+/**
+ * Tạo thông báo nhắc nhở phỏng vấn.
+ * @param {object} payload - Dữ liệu từ worker
+ * @returns {Promise<Notification>} - Thông báo đã tạo
+ */
+export const createInterviewReminderNotification = async (payload) => {
+  const { recipientId, data } = payload;
+  const { interviewId, scheduledTime, minutesBefore, candidateName, recruiterName, jobTitle, companyName } = data;
+
+  if (!recipientId || !interviewId) {
+    logger.warn('INTERVIEW_REMINDER payload is missing required fields.', payload);
+    throw new BadRequestError('Thiếu thông tin bắt buộc để tạo thông báo.');
+  }
+
+  const scheduledTimeFormatted = new Date(scheduledTime).toLocaleString('vi-VN', {
+    dateStyle: 'short',
+    timeStyle: 'short'
+  });
+
+  const title = '⏰ Nhắc nhở phỏng vấn';
+  const message = `Bạn có lịch phỏng vấn cho vị trí "${jobTitle || 'Vị trí ứng tuyển'}" tại ${companyName || 'Công ty'} vào ${scheduledTimeFormatted} (${minutesBefore || 30} phút nữa). Vui lòng chuẩn bị sẵn sàng!`;
+
+  return await Notification.create({
+    userId: new mongoose.Types.ObjectId(recipientId),
+    title,
+    message,
+    type: 'interview',
+    entity: {
+      type: 'InterviewRoom',
+      id: interviewId,
+    },
+    metadata: {
+      interviewId: interviewId.toString(),
+      jobTitle: jobTitle || 'N/A',
+      companyName: companyName || 'N/A',
+      actionType: 'REMINDER',
+      scheduledTime: new Date(scheduledTime).toISOString(),
+      minutesBefore: minutesBefore || 30,
+      recruiterName,
+      candidateName
+    },
+  });
+};
+
+/**
+ * Tạo thông báo khi hồ sơ được xem.
+ * @param {object} payload - Dữ liệu từ worker
+ * @returns {Promise<Notification>} - Thông báo đã tạo
+ */
+export const createProfileViewNotification = async (payload) => {
+  const { recipientId, data } = payload;
+  const { recruiterProfileId, companyId, companyName, companyLogo } = data;
+
+  if (!recipientId || !recruiterProfileId) {
+    logger.warn('PROFILE_VIEW payload is missing required fields.', payload);
+    throw new BadRequestError('Thiếu thông tin bắt buộc để tạo thông báo.');
+  }
+
+  const title = '👀 Hồ sơ của bạn đã được xem';
+  const message = `Nhà tuyển dụng từ ${companyName || 'Một công ty'} vừa xem hồ sơ của bạn.`;
+
+  return await Notification.create({
+    userId: new mongoose.Types.ObjectId(recipientId),
+    title,
+    message,
+    type: 'profile_view',
+    entity: {
+      type: 'RecruiterProfile',
+      id: recruiterProfileId,
+    },
+    metadata: {
+      recruiterProfileId: recruiterProfileId.toString(),
+      companyId: companyId?.toString(),
+      companyName: companyName || 'N/A',
+      companyLogo
+    },
+  });
+};
+
+/**
+ * Tạo thông báo gợi ý việc làm.
+ * @param {object} payload - Dữ liệu từ worker
+ * @returns {Promise<Notification>} - Thông báo đã tạo
+ */
+export const createJobRecommendationNotification = async (payload) => {
+  const { recipientId, data } = payload;
+  const { reason, source, jobIds } = data;
+
+  if (!recipientId || !jobIds || jobIds.length === 0) {
+    logger.warn('JOB_RECOMMENDATION payload is missing required fields.', payload);
+    throw new BadRequestError('Thiếu thông tin bắt buộc để tạo thông báo.');
+  }
+
+  const title = '🎯 Gợi ý việc làm phù hợp';
+  const message = `Chúng tôi đã tìm thấy ${jobIds.length} công việc phù hợp với bạn. ${reason || ''}`;
+
+  return await Notification.create({
+    userId: new mongoose.Types.ObjectId(recipientId),
+    title,
+    message,
+    type: 'recommendation',
+    metadata: {
+      reason: reason || 'Dựa trên hồ sơ và sở thích của bạn',
+      source: source || 'AI_MATCHING',
+      jobIds: jobIds.map(id => id.toString())
+    },
+  });
+};
+
+/**
+ * Tạo thông báo hệ thống.
+ * @param {object} payload - Dữ liệu từ worker
+ * @returns {Promise<Notification>} - Thông báo đã tạo
+ */
+export const createSystemNotification = async (payload) => {
+  const { recipientId, data } = payload;
+  const { actionType, entityId, entityTitle, link, icon, actionText, customTitle, customMessage } = data;
+
+  if (!recipientId) {
+    logger.warn('SYSTEM_NOTIFICATION payload is missing recipientId.', payload);
+    throw new BadRequestError('Thiếu thông tin bắt buộc để tạo thông báo.');
+  }
+
+  const title = customTitle || getSystemNotificationTitle(actionType);
+  const message = customMessage || getSystemNotificationMessage(actionType, entityTitle);
+
+  return await Notification.create({
+    userId: new mongoose.Types.ObjectId(recipientId),
+    title,
+    message,
+    type: 'system',
+    entity: entityId ? {
+      type: getEntityTypeFromActionType(actionType),
+      id: entityId,
+    } : undefined,
+    metadata: {
+      actionType,
+      entityId: entityId?.toString(),
+      entityTitle,
+      link,
+      icon: icon || 'info',
+      actionText
+    },
+  });
+};
+
+/**
+ * Hàm wrapper để xử lý backward compatibility với logic cũ.
+ * Worker sẽ gọi hàm này cho các message với format cũ.
+ * @param {object} payload - Dữ liệu message theo format cũ
+ * @returns {Promise<Notification>} - Thông báo đã tạo
+ */
+export const processLegacyNotification = async (payload) => {
+  logger.info('Processing legacy notification:', payload);
+
+  try {
+    switch (payload.type) {
+      case 'APPLICATION_UPDATE':
+        return await createApplicationUpdateNotification(payload);
+      
+      case 'INTERVIEW_REMINDER':
+        return await createInterviewReminderNotification(payload);
+      
+      case 'PROFILE_VIEW':
+        return await createProfileViewNotification(payload);
+      
+      case 'JOB_RECOMMENDATION':
+        return await createJobRecommendationNotification(payload);
+      
+      case 'SYSTEM_NOTIFICATION':
+        return await createSystemNotification(payload);
+      
+      default:
+        logger.warn('Unknown legacy notification type:', payload.type);
+        throw new BadRequestError(`Unknown notification type: ${payload.type}`);
+    }
+  } catch (error) {
+    logger.error('Error processing legacy notification:', error);
+    throw error;
   }
 };
 
@@ -556,4 +556,115 @@ const getEntityTypeFromActionType = (actionType) => {
   };
   
   return typeMapping[actionType] || 'System';
+};
+
+// =================================================================
+// Chức năng Thông báo Gộp nhóm cho Nhà tuyển dụng
+// =================================================================
+
+/**
+ * Upsert thông báo gộp cho nhà tuyển dụng khi có ứng viên mới.
+ * Sử dụng pipeline update của MongoDB để đảm bảo tính nguyên tử và hiệu suất.
+ * Đây là pure business logic function, được gọi từ worker.
+ * @param {object} payload - Dữ liệu từ RabbitMQ { recruiterUserId, job, application }.
+ * @returns {Promise<Notification>} - Thông báo đã upsert
+ */
+export const upsertRecruiterApplicantsRollup = async (payload) => {
+  try {
+    logger.info('Processing recruiter applicants rollup:', {
+      recruiterUserId: payload.recruiterUserId,
+      jobId: payload.job?._id,
+      applicationId: payload.application?._id
+    });
+    
+    const { recruiterUserId, job, application } = payload;
+    
+    // Validate input data
+    if (!recruiterUserId || !job || !application) {
+      logger.error('Missing required data in payload:', { 
+        recruiterUserId, 
+        jobId: job?._id, 
+        applicationId: application?._id 
+      });
+      throw new BadRequestError('Thiếu thông tin bắt buộc để tạo thông báo gộp.');
+    }
+
+    const aggregationKey = `job:${job._id}:applicants`;
+    const now = new Date();
+    const candidateProfileId = application.candidateProfileId;
+    const candidateName = application.candidateName || 'Ứng viên';
+
+    const newApplicant = {
+      candidateProfileId,
+      candidateName,
+      appliedAt: now,
+    };
+
+    // Sử dụng findOneAndUpdate với pipeline update để thực hiện logic phức tạp trong 1 lệnh
+    const updatedNotification = await Notification.findOneAndUpdate(
+      {
+        userId: new mongoose.Types.ObjectId(recruiterUserId),
+        type: 'job_applicants_rollup',
+        aggregationKey,
+      },
+      [ // Mở đầu pipeline
+        {
+          $set: {
+            title: `Có ứng viên mới cho vị trí "${job.title}"`,
+            isRead: false,
+            readAt: null, // Reset thời gian đọc
+            'metadata.jobId': new mongoose.Types.ObjectId(job._id),
+            'metadata.jobTitle': job.title,
+            'metadata.companyName': job.recruiterProfileId?.company?.name || 'Công ty',
+            'metadata.lastAppliedAt': now,
+            // Dùng $setUnion để thêm ID mới và đảm bảo không trùng lặp
+            'metadata.applicantIds': {
+              $setUnion: [{ $ifNull: ['$metadata.applicantIds', []] }, [new mongoose.Types.ObjectId(candidateProfileId)]]
+            },
+            // Thêm ứng viên mới vào đầu danh sách và chỉ giữ lại 2 người gần nhất
+            'metadata.latestApplicants': {
+              $slice: [
+                { $concatArrays: [[newApplicant], { $ifNull: ['$metadata.latestApplicants', []] }] },
+                2
+              ]
+            }
+          }
+        },
+        { // Giai đoạn 2: Cập nhật tổng số và message dựa trên dữ liệu đã cập nhật ở trên
+          $set: {
+            'metadata.totalApplicants': { $size: '$metadata.applicantIds' },
+            message: { // Logic tạo message động ngay trong query
+               $let: {
+                  vars: {
+                     total: { $size: '$metadata.applicantIds' },
+                     names: { $map: { input: '$metadata.latestApplicants', as: 'applicant', in: '$$applicant.candidateName' } }
+                  },
+                  in: {
+                     $switch: {
+                        branches: [
+                           { case: { $eq: [ "$$total", 1 ] }, then: { $concat: [ { $arrayElemAt: [ "$$names", 0 ] }, ` đã nộp đơn vào vị trí "${job.title}" của bạn.` ] } },
+                           { case: { $eq: [ "$$total", 2 ] }, then: { $concat: [ { $arrayElemAt: [ "$$names", 0 ] }, ", ", { $arrayElemAt: [ "$$names", 1 ] }, ` đã nộp đơn vào vị trí "${job.title}" của bạn.` ] } }
+                        ],
+                        default: { $concat: [ { $arrayElemAt: [ "$$names", 0 ] }, ", ", { $arrayElemAt: [ "$$names", 1 ] }, " và ", { $toString: { $subtract: [ "$$total", 2 ] } }, ` người khác đã nộp đơn vào vị trí "${job.title}" của bạn.` ] }
+                     }
+                  }
+               }
+            }
+          }
+        }
+      ], // Kết thúc pipeline
+      { upsert: true, new: true }
+    ).lean();
+
+    logger.info(`Successfully upserted rollup notification for recruiter ${recruiterUserId}`, {
+      jobId: job._id,
+      totalApplicants: updatedNotification?.metadata?.totalApplicants || 1,
+      notificationId: updatedNotification?._id
+    });
+    
+    return updatedNotification;
+  } catch (error) {
+    logger.error('Error in upsertRecruiterApplicantsRollup:', error);
+    throw error;
+  }
 };

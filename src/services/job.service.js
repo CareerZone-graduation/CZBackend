@@ -9,9 +9,12 @@ import {
   User,
 } from '../models/index.js';
 import * as kafkaService from './kafka.service.js';
+import * as queueService from './queue.service.js';
+import { ROUTING_KEYS } from '../queues/rabbitmq.js';
 import { NotFoundError, UnauthorizedError, BadRequestError, ForbiddenError } from '../utils/AppError.js';
 import * as uploadService from './upload.service.js';
 import logger from '../utils/logger.js';
+import { logActivity } from './application.service.js';
 
 /**
  * Tìm CandidateProfile từ userId và kiểm tra sự tồn tại
@@ -471,7 +474,7 @@ export const applyToJob = async (userId, jobId, applicationData) => {
   }
 
   // 2. Tìm tin tuyển dụng
-  const job = await Job.findById(jobId).populate('recruiterProfileId', 'company');
+  const job = await Job.findById(jobId).populate('recruiterProfileId', 'company userId');
   if (!job || job.status !== 'ACTIVE') {
     throw new BadRequestError('Tin tuyển dụng không tồn tại hoặc đã hết hạn.');
   }
@@ -533,7 +536,7 @@ export const applyToJob = async (userId, jobId, applicationData) => {
     }
 
     // 6. Tạo bản ghi ứng tuyển (Application)
-     const application = await Application.create({
+    const application = await Application.create({
       jobId,
       candidateProfileId: candidateProfile._id,
       coverLetter,
@@ -555,6 +558,7 @@ export const applyToJob = async (userId, jobId, applicationData) => {
         logo: job.recruiterProfileId.company.logo,
       },
     });
+    logActivity(application, 'APPLICATION_SUBMITTED', 'Ứng viên đã nộp đơn');
 
     // Gửi sự kiện APPLY_JOB
     kafkaService.sendUserInteraction({
@@ -564,6 +568,38 @@ export const applyToJob = async (userId, jobId, applicationData) => {
         timestamp: new Date().toISOString(),
         details: { weight: 5 }
     });
+
+    // --- BẮT ĐẦU GỬI SỰ KIỆN THÔNG BÁO ---
+    try {
+      const recruiterUserId = job.recruiterProfileId.userId;
+
+      // 1. Gửi sự kiện để thông báo cho ỨNG VIÊN
+      queueService.publishNotification(ROUTING_KEYS.STATUS_UPDATE, {
+        type: 'APPLICATION_SUBMITTED', // Type để worker nhận diện
+        recipientId: userId.toString(),
+        data: {
+          applicationId: application._id.toString(),
+          // jobId: job._id.toString(),
+          // jobTitle: job.title,
+          // companyName: job.recruiterProfileId.company.name,
+        }
+      });
+
+      // 2. Gửi sự kiện để thông báo cho NHÀ TUYỂN DỤNG
+      queueService.publishNotification(ROUTING_KEYS.NEW_APPLICATION, {
+        recruiterUserId: recruiterUserId.toString(),
+        job, // Truyền cả object job đã populate để worker không cần query lại
+        application, // Truyền object application vừa tạo
+      });
+
+    } catch (error) {
+      logger.error('Failed to queue notifications after application', { error, applicationId: application._id });
+      // Quan trọng: Không re-throw lỗi để không làm hỏng response của người dùng
+    }
+    // --- KẾT THÚC GỬI SỰ KIỆN ---
+
+    return application;
+
   } catch (error) {
     logger.error(`Lỗi khi nộp đơn: ${error.message}`, { 
       userId, jobId, cvId, cvTemplateId, error 

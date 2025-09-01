@@ -20,10 +20,9 @@ import * as rabbitmq from '../queues/rabbitmq.js';
  * Ghi lại một hành động vào lịch sử của đơn ứng tuyển.
  * Hàm này không tự save, việc save sẽ do hàm gọi nó quyết định.
  */
-const logActivity = (application, recruiterId, action, detail) => {
-  console.log("Logging activity: ", { recruiterId, action, detail });
+export const logActivity = (application, action, detail) => {
+  console.log("Logging activity: ", {action, detail });
   application.activityHistory.push({
-    actor: recruiterId,
     action,
     detail,
     timestamp: new Date()
@@ -261,7 +260,7 @@ export const updateCandidateRating = async (applicationId, recruiterId, rating) 
   // gửi thông báo vào queue
   const candidateProfile = await CandidateProfile.findById(application.candidateProfileId).select('userId');
   if (candidateProfile) {
-    queueService.publishNotification(rabbitmq.ROUTING_KEYS.RATING_UPDATE, {
+    queueService.publishNotification(rabbitmq.ROUTING_KEYS.STATUS_UPDATE, {
       type: 'APPLICATION_UPDATE',
       recipientId: candidateProfile.userId.toString(),
       data: {
@@ -394,7 +393,7 @@ export const scheduleInterview = async (applicationId, recruiterId, scheduledTim
       action: 'INTERVIEW_SCHEDULED',
       applicationId: application._id.toString(),
       jobTitle: job.title,
-      companyName: job.companyName, // Giả sử có trường này trong model Job
+      companyName: job.companyName,
       scheduledTime: scheduledTime
     },
   });

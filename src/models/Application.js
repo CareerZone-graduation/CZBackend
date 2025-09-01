@@ -2,14 +2,10 @@ import mongoose from 'mongoose';
 
 // ĐỊNH NGHĨA SCHEMA CHO MỘT MỤC LỊCH SỬ HOẠT ĐỘNG
 const activityLogSchema = new mongoose.Schema({
-  actor: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User', // Tham chiếu đến User của Recruiter
-    required: true
-  },
   action: {
     type: String,
     enum: [
+      'APPLICATION_SUBMITTED',
       'STATUS_CHANGE',
       'RATING_UPDATE', 
       'NOTES_UPDATE',
