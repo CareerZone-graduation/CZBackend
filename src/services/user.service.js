@@ -56,3 +56,16 @@ export const changePassword = async (userId, currentPassword, newPassword) => {
     user.password = newPassword;
     await user.save();
 };
+
+/**
+ * Get user coin balance by user ID.
+ * @param {string} userId - The ID of the user.
+ * @returns {Promise<number>} The user's coin balance.
+ */
+export const getCoinBalance = async (userId) => {
+  const user = await User.findById(userId).select('coinBalance').lean();
+  if (!user) {
+    throw new NotFoundError('Không tìm thấy người dùng.');
+  }
+  return user.coinBalance;
+};

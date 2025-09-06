@@ -68,15 +68,20 @@ app.set('views', path.join(__dirname, 'views'));
 // );
 
 // CORS
-app.use(
-    cors({
-        origin: [config.CLIENT_URL,"http://localhost:3001","http://localhost:3000","http://localhost:3002", "http://localhost:3003"],
-        credentials: true,
-        methods: ['GET', 'POST','PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
-        allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    }),
-);
+// app.use(
+//     cors({
+//         origin: [config.CLIENT_URL,"http://localhost:3001","http://localhost:3000","http://localhost:3002", "http://localhost:3003","http://*.ngrok-free.app"],
+//         credentials: true,
+//         methods: ['GET', 'POST','PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
+//         allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+//     }),
+// );
+app.use(cors({
+  origin: true,       // cho phép tất cả origin hợp lệ
+  credentials: true   // cho phép cookie, auth header
+}));
 
+app.options("*", cors()); // xử lý preflight
 // Khác
 const shouldCompress = (req, res) => {
   if (req.noCompression) {

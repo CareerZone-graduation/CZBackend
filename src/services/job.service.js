@@ -318,8 +318,9 @@ export const getJobById = async (jobId, userId = null) => {
     const job = jobDoc.toObject();
     logger.info(job);
 
-    // Kiểm tra xem user có phải là candidate và job có được lưu không
+    // Kiểm tra xem user có phải là candidate và job có được lưu/apply không
     let isSaved = false;
+    let isApplied = false;
     if (userId) {
       // Gửi sự kiện xem việc làm
       kafkaService.sendUserInteraction({
@@ -330,19 +331,27 @@ export const getJobById = async (jobId, userId = null) => {
         details: { weight: 1 }
       });
 
-      // Kiểm tra xem user có phải là candidate và đã lưu job này không
+      // Kiểm tra xem user có phải là candidate và đã lưu/apply job này không
       try {
         const candidateProfile = await CandidateProfile.findOne({ userId });
         if (candidateProfile) {
+          // Kiểm tra saved job
           const savedJob = await SavedJob.findOne({
             candidateId: userId,
             jobId
           });
           isSaved = !!savedJob;
+
+          // Kiểm tra đã apply job chưa
+          const application = await Application.findOne({
+            candidateProfileId: candidateProfile._id,
+            jobId
+          });
+          isApplied = !!application;
         }
       } catch (error) {
-        // Nếu có lỗi khi kiểm tra, isSaved vẫn là false
-        logger.warn('Error checking saved job status', { userId, jobId, error: error.message });
+        // Nếu có lỗi khi kiểm tra, isSaved và isApplied vẫn là false
+        logger.warn('Error checking saved/applied job status', { userId, jobId, error: error.message });
       }
     }
 
@@ -371,7 +380,8 @@ export const getJobById = async (jobId, userId = null) => {
         logo: job.recruiterProfileId.company.logo,
         _id: job.recruiterProfileId.company._id
       },
-      isSaved
+      isSaved,
+      isApplied
 
     };
 };

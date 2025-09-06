@@ -14,4 +14,7 @@ router.route('/me')
 router.route('/change-password')
     .put(jwtAuth, userController.changePassword);
 
+router.route('/me/coins')
+    .get(jwtAuth, userController.getCoinBalance);
+
 export default router;

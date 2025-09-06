@@ -45,13 +45,22 @@ export const handleZaloPayRedirect = asyncHandler(async (req, res) => {
     const { apptransid, status } = req.query;
     console.log('ZaloPay redirect data:', req.query);
     console.log('Handling ZaloPay redirect for apptransid:', apptransid, 'with status:', status);
-    await paymentService.handleZaloPayCallback(apptransid, status);
+    const resp=await paymentService.handleZaloPayCallback(apptransid, status);
+    const role=resp.role;
     if (status === '1') {
         // Thanh toán thành công
+        if (role.role==='candidate'){
+            res.header('Location', 'http://localhost:3001'+`/payment/success`);
+        }
+        else
         res.header('Location', config.CLIENT_URL+`/payment/success`);
         res.status(302).end();
     } else {
         // Thanh toán thất bại
+        if (role.role==='candidate'){
+            res.header('Location', 'http://localhost:3001'+`/payment/failure`);
+        }
+        else
         res.header('Location', config.CLIENT_URL+`/payment/failure`);
         res.status(302).end();
     }

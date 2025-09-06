@@ -30,7 +30,8 @@ export const createZaloPayOrder = async (userId, coins) => {
         transactionCode: appTransId,
         status: 'PENDING',
     });
-
+    // lấy ra role từ userId
+    const role= await User.findById(userId).select('role');
     const embed_data = JSON.stringify({
         redirecturl: zalopay.redirect_url,
     });
@@ -151,10 +152,11 @@ export const handleZaloPayCallback = async (apptransid, status) => {
     //     result.return_message = 'error';
     //     return result;
     // }
+    let recharge;
     if (status === '1') {
         // Handle success case
         logger.info(`ZaloPay callback: Transaction ${apptransid} completed successfully.`);
-        const recharge = await CoinRecharge.findOneAndUpdate({ transactionCode: apptransid }, { status: 'SUCCESS' });
+        recharge = await CoinRecharge.findOneAndUpdate({ transactionCode: apptransid }, { status: 'SUCCESS' });
         // cộng xu cho user
         await User.findByIdAndUpdate(recharge.userId, {
             $inc: { coinBalance: recharge.coinAmount },
@@ -164,4 +166,6 @@ export const handleZaloPayCallback = async (apptransid, status) => {
         logger.warn(`ZaloPay callback: Transaction ${apptransid} failed with status ${status}.`);
         await CoinRecharge.findOneAndUpdate({ transactionCode: apptransid }, { status: 'FAILED' });
     }
+    const role= await User.findById(recharge.userId).select('role');
+    return {role: role}
 };

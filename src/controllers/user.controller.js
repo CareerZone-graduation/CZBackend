@@ -18,6 +18,23 @@ export const getMe = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+* Get the coin balance of the currently logged-in user.
+* @route GET /api/users/me/coins
+* @access Private
+*/
+export const getCoinBalance = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  const coinBalance = await userService.getCoinBalance(userId);
+  res.status(200).json({
+      success: true,
+      message: 'Lấy số dư xu thành công.',
+      data: {
+          coins: coinBalance,
+      },
+  });
+});
+
 
 /**
  * Change the password of the currently logged-in user.
