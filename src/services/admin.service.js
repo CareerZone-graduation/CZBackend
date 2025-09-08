@@ -386,6 +386,49 @@ export const getCompanyDetail = async (companyId) => {
   if (!recruiterProfile) {
     throw new NotFoundError('Hồ sơ nhà tuyển dụng không tồn tại.');
   }
+
+  // Lấy thống kê tin tuyển dụng
+  const [totalJobs, recruitingJobs, pendingJobs, expiredJobs] = await Promise.all([
+    Job.countDocuments({ recruiterProfileId: companyId }),
+    Job.countDocuments({ recruiterProfileId: companyId, status: 'ACTIVE', approved: true }),
+    Job.countDocuments({ recruiterProfileId: companyId, approved: false }),
+    Job.countDocuments({ recruiterProfileId: companyId, status: 'EXPIRED' })
+  ]);
+
+  // Lấy danh sách các job của công ty để thống kê đơn ứng tuyển
+  const companyJobs = await Job.find({ recruiterProfileId: companyId }).select('_id').lean();
+  const companyJobIds = companyJobs.map(job => job._id);
+
+  // Lấy thống kê đơn ứng tuyển và thống kê giao dịch
+  const [applicationStats, rechargeStats] = await Promise.all([
+    Application.aggregate([
+      { $match: { jobId: { $in: companyJobIds } } },
+      {
+        $group: {
+          _id: null,
+          totalApplications: { $sum: 1 },
+          pending: { $sum: { $cond: [{ $in: ['$status', ['PENDING', 'REVIEWING']] }, 1, 0] } },
+          accepted: { $sum: { $cond: [{ $eq: ['$status', 'ACCEPTED'] }, 1, 0] } },
+          rejected: { $sum: { $cond: [{ $eq: ['$status', 'REJECTED'] }, 1, 0] } }
+        }
+      }
+    ]),
+    CoinRecharge.aggregate([
+      { $match: { userId: recruiterProfile.userId._id, status: 'SUCCESS' } },
+      {
+        $group: {
+          _id: null,
+          totalAmountPaid: { $sum: '$amountPaid' },
+          totalCoinsRecharged: { $sum: '$coinAmount' },
+          rechargeCount: { $sum: 1 },
+          lastRechargeDate: { $max: '$createdAt' }
+        }
+      }
+    ])
+  ]);
+
+  const appStats = applicationStats[0] || { totalApplications: 0, pending: 0, accepted: 0, rejected: 0 };
+  const rechargeSummary = rechargeStats[0] || { totalAmountPaid: 0, totalCoinsRecharged: 0, rechargeCount: 0, lastRechargeDate: null };
   
   // Trả về cấu trúc chi tiết đầy đủ
   return {
@@ -416,6 +459,24 @@ export const getCompanyDetail = async (companyId) => {
         phone: recruiterProfile.company?.contactInfo?.phone || null
       },
       verified: recruiterProfile.company?.verified || false
+    },
+    jobStats: {
+      totalJobs,
+      recruitingJobs,
+      pendingJobs,
+      expiredJobs
+    },
+    applicationStats: {
+      total: appStats.totalApplications,
+      pending: appStats.pending,
+      accepted: appStats.accepted,
+      rejected: appStats.rejected
+    },
+    rechargeStats: {
+      totalAmountPaid: rechargeSummary.totalAmountPaid,
+      totalCoinsRecharged: rechargeSummary.totalCoinsRecharged,
+      rechargeCount: rechargeSummary.rechargeCount,
+      lastRechargeDate: rechargeSummary.lastRechargeDate
     },
     profileCreatedAt: recruiterProfile.createdAt,
     profileUpdatedAt: recruiterProfile.updatedAt
