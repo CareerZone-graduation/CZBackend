@@ -266,37 +266,63 @@ export const updateUserStatus = async (userId, statusData) => {
 // === QUẢN LÝ CÔNG TY ===
 
 export const getCompaniesForAdmin = async (queryParams) => {
-  const { page = 1, limit = 10, search, status, sort = '-createdAt' } = queryParams;
-  
+  const { page = 1, limit = 10, search, status, industry, sort = 'createdAt_desc' } = queryParams;
+
   const filter = {};
-  
+
   if (search) {
     const searchFilter = [
       { 'company.name': { $regex: search, $options: 'i' } },
-      { fullname: { $regex: search, $options: 'i' } }
+      { fullname: { $regex: search, $options: 'i' } },
     ];
     filter.$or = searchFilter;
   }
-  
-  // Lọc theo trạng thái
+
   if (status) {
     filter['company.status'] = status;
   }
-  
+
+  if (industry) {
+    filter['company.industry'] = industry;
+  }
+
+  const sortOptions = {};
+  switch (sort) {
+    case 'name_asc':
+      sortOptions['company.name'] = 1;
+      break;
+    case 'name_desc':
+      sortOptions['company.name'] = -1;
+      break;
+    case 'createdAt_asc':
+      sortOptions.createdAt = 1;
+      break;
+    case 'updatedAt_asc':
+      sortOptions.updatedAt = 1;
+      break;
+    case 'updatedAt_desc':
+      sortOptions.updatedAt = -1;
+      break;
+    case 'createdAt_desc':
+    default:
+      sortOptions.createdAt = -1;
+      break;
+  }
+
   const skip = (page - 1) * limit;
-  
+
   const [recruiterProfiles, total] = await Promise.all([
     RecruiterProfile.find(filter)
       .populate({
         path: 'userId',
-        select: 'email active createdAt'
+        select: 'email active createdAt',
       })
-      .select('fullname company createdAt userId')
-      .sort(sort)
+      .select('fullname company createdAt updatedAt userId')
+      .sort(sortOptions)
       .skip(skip)
       .limit(limit)
       .lean(),
-    RecruiterProfile.countDocuments(filter)
+    RecruiterProfile.countDocuments(filter),
   ]);
   
   // Tạo cấu trúc response cố định cho hồ sơ nhà tuyển dụng
@@ -331,7 +357,8 @@ export const getCompaniesForAdmin = async (queryParams) => {
       status: profile.company?.status || 'pending',
       rejectReason: profile.company?.rejectReason || null
     },
-    profileCreatedAt: profile.createdAt
+    profileCreatedAt: profile.createdAt,
+    profileUpdatedAt: profile.updatedAt
   }));
   
   const totalPages = Math.ceil(total / limit);

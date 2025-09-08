@@ -27,13 +27,48 @@ export const adminUsersQuerySchema = z.object({
   role: z.enum(['candidate', 'recruiter']).optional(),
   sort: z.string().optional().default('-createdAt'),
 });
-
 export const adminCompaniesQuerySchema = z.object({
   page: z.string().optional(),
   limit: z.string().optional(),
   search: z.string().optional(),
   status: z.enum(['pending', 'approved', 'rejected']).optional(),
-  sort: z.string().optional().default('-createdAt'),
+  industry: z.enum([
+    'Công nghệ thông tin',
+    'Tài chính',
+    'Y tế',
+    'Giáo dục',
+    'Sản xuất',
+    'Bán lẻ',
+    'Xây dựng',
+    'Du lịch',
+    'Nông nghiệp',
+    'Truyền thông',
+    'Vận tải',
+    'Bất động sản',
+    'Dịch vụ',
+    'Khởi nghiệp',
+    'Nhà hàng - Khách sạn',
+    'Bảo hiểm',
+    'Logistics',
+    'Năng lượng',
+    'Viễn thông',
+    'Dược phẩm',
+    'Hóa chất',
+    'Ô tô - Xe máy',
+    'Thực phẩm - Đồ uống',
+    'Thời trang - Mỹ phẩm',
+    'Thể thao - Giải trí',
+    'Công nghiệp nặng',
+    'Công nghiệp điện tử',
+    'Công nghiệp cơ khí',
+    'Công nghiệp dệt may',
+    'Đa lĩnh vực',
+    'Khác'
+  ]).optional(),
+  sort: z
+    .enum(['name_asc', 'name_desc', 'createdAt_asc', 'createdAt_desc', 'updatedAt_asc', 'updatedAt_desc'])
+    .optional()
+    .default('createdAt_desc'),
 });
 
 export const userStatusSchema = z.object({
