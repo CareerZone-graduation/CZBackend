@@ -7,18 +7,16 @@ import { ROUTING_KEYS } from '../queues/rabbitmq.js';
 // === QUẢN LÝ TIN TUYỂN DỤNG ===
 
 export const getJobsForAdmin = async (queryParams) => {
-  const { page = 1, limit = 10, search, company, status, sort = '-createdAt' } = queryParams;
-  
+  const { page = 1, limit = 10, search, company, status, sort = 'createdAt_desc' } = queryParams;
+
   const filter = {};
-  
-  // Tìm kiếm theo title hoặc công ty
+
+  // Search by title or company name
   if (search) {
-    // Nếu có search, tìm trong cả title và company name
     const searchFilter = [
       { title: { $regex: search, $options: 'i' } }
     ];
     
-    // Tìm RecruiterProfile có company name khớp
     const matchingCompanies = await RecruiterProfile.find({
       'company.name': { $regex: search, $options: 'i' }
     }).select('_id');
@@ -31,8 +29,8 @@ export const getJobsForAdmin = async (queryParams) => {
     
     filter.$or = searchFilter;
   }
-  
-  // Lọc theo công ty cụ thể (nếu có)
+
+  // Filter by a specific company
   if (company) {
     const companyProfiles = await RecruiterProfile.find({
       'company.name': { $regex: company, $options: 'i' }
@@ -41,22 +39,37 @@ export const getJobsForAdmin = async (queryParams) => {
     if (companyProfiles.length > 0) {
       filter.recruiterProfileId = { $in: companyProfiles.map(c => c._id) };
     } else {
-      // Nếu không tìm thấy công ty nào, trả về empty result
+      // If no company is found, return an empty result
       return {
-        meta: { currentPage: page, totalPages: 0, total: 0, hasNextPage: false, hasPrevPage: false },
+        meta: { currentPage: page, totalPages: 0, totalItems: 0, limit: limit },
         data: []
       };
     }
   }
-  
-  if (status === 'pending') {
-    filter.approved = false;
-  } else if (status === 'approved') {
-    filter.approved = true;
+  if (status) {
+    filter.status = status;
   }
-  
+
+
+  const sortOptions = {};
+  switch (sort) {
+    case 'title_asc':
+      sortOptions.title = 1;
+      break;
+    case 'title_desc':
+      sortOptions.title = -1;
+      break;
+    case 'createdAt_asc':
+      sortOptions.createdAt = 1;
+      break;
+    case 'createdAt_desc':
+    default:
+      sortOptions.createdAt = -1;
+      break;
+  }
+
   const skip = (page - 1) * limit;
-  
+
   const [jobs, total] = await Promise.all([
     Job.find(filter)
       .populate({
@@ -64,15 +77,15 @@ export const getJobsForAdmin = async (queryParams) => {
         select: 'company.name company.logo'
       })
       .select('title description approved status createdAt recruiterProfileId')
-      .sort(sort)
+      .sort(sortOptions)
       .skip(skip)
       .limit(limit)
       .lean(),
     Job.countDocuments(filter)
   ]);
-  
+
   const totalPages = Math.ceil(total / limit);
-  
+
   return {
     meta: {
       currentPage: page,
@@ -85,22 +98,58 @@ export const getJobsForAdmin = async (queryParams) => {
 };
 
 export const getJobDetail = async (jobId) => {
-  const job = await Job.findById(jobId)
-    .populate({
-      path: 'recruiterProfileId',
-      select: 'fullname company.name company.logo company.about company.industry verified userId',
-      populate: {
-        path: 'userId',
-        select: 'email'
+  const jobObjectId = new mongoose.Types.ObjectId(jobId);
+
+  const [job, applicationStats] = await Promise.all([
+    Job.findById(jobObjectId)
+      .populate({
+        path: 'recruiterProfileId',
+        select: 'fullname company.name company.logo company.about company.industry verified userId',
+        populate: {
+          path: 'userId',
+          select: 'email'
+        }
+      })
+      .lean(),
+    Application.aggregate([
+      { $match: { jobId: jobObjectId } },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          pending: { $sum: { $cond: [{ $eq: ['$status', 'PENDING'] }, 1, 0] } },
+          reviewing: { $sum: { $cond: [{ $eq: ['$status', 'REVIEWING'] }, 1, 0] } },
+          scheduled_interview: { $sum: { $cond: [{ $eq: ['$status', 'SCHEDULED_INTERVIEW'] }, 1, 0] } },
+          interviewed: { $sum: { $cond: [{ $eq: ['$status', 'INTERVIEWED'] }, 1, 0] } },
+          accepted: { $sum: { $cond: [{ $eq: ['$status', 'ACCEPTED'] }, 1, 0] } },
+          rejected: { $sum: { $cond: [{ $eq: ['$status', 'REJECTED'] }, 1, 0] } },
+          withdrawn: { $sum: { $cond: [{ $eq: ['$status', 'WITHDRAWN'] }, 1, 0] } },
+        }
       }
-    })
-    .lean();
-  
+    ])
+  ]);
+
   if (!job) {
     throw new NotFoundError('Tin tuyển dụng không tồn tại.');
   }
-  
-  return job;
+
+  const stats = applicationStats[0] || {
+    total: 0,
+    pending: 0,
+    reviewing: 0,
+    scheduled_interview: 0,
+    interviewed: 0,
+    accepted: 0,
+    rejected: 0,
+    withdrawn: 0
+  };
+
+  return {
+    ...job,
+    analytics: {
+      applicationStats: stats
+        }
+  };
 };
 
 export const approveJob = async (jobId) => {
@@ -449,11 +498,11 @@ export const getCompanyDetail = async (companyId) => {
       businessRegistrationUrl: recruiterProfile.company?.businessRegistrationUrl || null,
       size: recruiterProfile.company?.size || null,
       website: recruiterProfile.company?.website || null,
-      address: {
-        street: recruiterProfile.company?.address?.street || null,
-        city: recruiterProfile.company?.address?.city || null,
-        country: recruiterProfile.company?.address?.country || null
+      location:{
+        province: recruiterProfile.company?.location?.province || null,
+        ward: recruiterProfile.company?.location?.ward || null
       },
+      address: recruiterProfile.company?.address || null,
       contactInfo: {
         email: recruiterProfile.company?.contactInfo?.email || null,
         phone: recruiterProfile.company?.contactInfo?.phone || null

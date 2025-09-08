@@ -15,8 +15,11 @@ export const adminJobsQuerySchema = z.object({
   limit: z.string().optional(),
   search: z.string().optional(),
   company: z.string().optional(),
-  status: z.enum(['pending', 'approved']).optional(),
-  sort: z.string().optional().default('-createdAt'),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'EXPIRED']).optional(),
+  sort: z
+    .enum(['title_asc', 'title_desc', 'createdAt_asc', 'createdAt_desc'])
+    .optional()
+    .default('createdAt_desc'),
 });
 
 export const adminUsersQuerySchema = z.object({
