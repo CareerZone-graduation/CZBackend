@@ -1,58 +1,41 @@
 import { z } from 'zod';
 
-
-// Schema cho việc thay đổi trạng thái người dùng
-export const userStatusSchema = z.object({
-  status: z.enum(['active', 'banned'])
+export const rejectCompanySchema = z.object({
+  rejectReason: z.string().min(1, 'Lý do từ chối không được để trống'),
 });
 
-// Schema cho việc xác thực công ty
-export const companyVerificationSchema = z.object({
-  verified: z.boolean()
+export const idParamsSchema = z.object({
+  id: z.string().refine((val) => /^[0-9a-fA-F]{24}$/.test(val), {
+    message: 'ID không hợp lệ',
+  }),
 });
 
-// Schema cho company approval/rejection
-export const companyApprovalSchema = z.object({
-  action: z.enum(['approve', 'reject'])
-});
-
-// Schema cho query parameters jobs
 export const adminJobsQuerySchema = z.object({
-  page: z.coerce.number().min(1).optional().default(1),
-  limit: z.coerce.number().min(1).max(100).optional().default(10),
+  page: z.string().optional(),
+  limit: z.string().optional(),
   search: z.string().optional(),
   company: z.string().optional(),
   status: z.enum(['pending', 'approved']).optional(),
-  sort: z.string().optional().default('-createdAt')
+  sort: z.string().optional().default('-createdAt'),
 });
 
-// Schema cho query parameters users
 export const adminUsersQuerySchema = z.object({
-  page: z.coerce.number().min(1).optional().default(1),
-  limit: z.coerce.number().min(1).max(100).optional().default(10),
+  page: z.string().optional(),
+  limit: z.string().optional(),
   search: z.string().optional(),
   status: z.enum(['active', 'banned']).optional(),
   role: z.enum(['candidate', 'recruiter']).optional(),
-  sort: z.string().optional().default('-createdAt')
+  sort: z.string().optional().default('-createdAt'),
 });
 
-// Schema cho query parameters companies
 export const adminCompaniesQuerySchema = z.object({
-  page: z.coerce.number().min(1).optional().default(1),
-  limit: z.coerce.number().min(1).max(100).optional().default(10),
+  page: z.string().optional(),
+  limit: z.string().optional(),
   search: z.string().optional(),
-  verified: z.enum(['true', 'false']).optional(),
-  sort: z.string().optional().default('-createdAt')
+  status: z.enum(['pending', 'approved', 'rejected']).optional(),
+  sort: z.string().optional().default('-createdAt'),
 });
 
-// Schema cho params validation
-export const idParamsSchema = z.object({
-  id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID không đúng định dạng MongoDB ObjectId')
-});
-
-// Schema cho thống kê
-export const statsQuerySchema = z.object({
-  startDate: z.string().datetime().optional(),
-  endDate: z.string().datetime().optional(),
-  period: z.enum(['day', 'week', 'month', 'year']).optional().default('month')
+export const userStatusSchema = z.object({
+  status: z.enum(['active', 'banned']),
 });

@@ -87,7 +87,7 @@ export const approveCompany = asyncHandler(async (req, res) => {
 });
 
 export const rejectCompany = asyncHandler(async (req, res) => {
-  const data = await adminService.rejectCompany(req.params.id);
+  const data = await adminService.rejectCompany(req.params.id, req.body);
   res.json({
     success: true,
     message: 'Từ chối công ty thành công.',
@@ -106,11 +106,3 @@ export const getStats = asyncHandler(async (req, res) => {
 });
 
 
-export const verifyCompany = asyncHandler(async (req, res) => {
-  const data = await adminService.verifyCompany(req.params.id, req.body);
-  res.json({
-    success: true,
-    message: 'Xác thực công ty thành công.',
-    data
-  });
-});

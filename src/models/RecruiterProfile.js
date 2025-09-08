@@ -107,6 +107,15 @@ const companyInfoSchema = new mongoose.Schema({
   verified: {
     type: Boolean,
     default: false
+  },
+  status: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'pending'
+  },
+  rejectReason: {
+    type: String,
+    trim: true,
   }
 }, { _id: true, timestamps: true });
 

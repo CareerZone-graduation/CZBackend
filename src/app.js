@@ -35,6 +35,7 @@ import paymentRoutes from './routes/payment.route.js';
 import chatRoutes from './routes/chat.route.js';
 import adminRoutes from './routes/admin.route.js';
 import interviewRoutes from './routes/interview.route.js';
+import analyticsRoutes from './routes/analytics.route.js'; // [MỚI] Import route mới
 
 // 🚧 Middlewares
 import * as errorMiddleware from './middleware/error.middleware.js';
@@ -124,6 +125,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/interviews', interviewRoutes);
+app.use('/api/analytics', analyticsRoutes); // [MỚI] Thêm route mới vào app
 
 // 404 & error
 app.use(notFoundMiddleware.notFound);

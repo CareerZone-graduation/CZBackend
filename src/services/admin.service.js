@@ -266,7 +266,7 @@ export const updateUserStatus = async (userId, statusData) => {
 // === QUẢN LÝ CÔNG TY ===
 
 export const getCompaniesForAdmin = async (queryParams) => {
-  const { page = 1, limit = 10, search, verified, sort = '-createdAt' } = queryParams;
+  const { page = 1, limit = 10, search, status, sort = '-createdAt' } = queryParams;
   
   const filter = {};
   
@@ -278,9 +278,9 @@ export const getCompaniesForAdmin = async (queryParams) => {
     filter.$or = searchFilter;
   }
   
-  // Lọc theo trạng thái xác thực
-  if (verified !== undefined) {
-    filter['company.verified'] = verified === 'true';
+  // Lọc theo trạng thái
+  if (status) {
+    filter['company.status'] = status;
   }
   
   const skip = (page - 1) * limit;
@@ -327,7 +327,9 @@ export const getCompaniesForAdmin = async (queryParams) => {
         email: profile.company?.contactInfo?.email || null,
         phone: profile.company?.contactInfo?.phone || null
       },
-      verified: profile.company?.verified || false
+      verified: profile.company?.verified || false,
+      status: profile.company?.status || 'pending',
+      rejectReason: profile.company?.rejectReason || null
     },
     profileCreatedAt: profile.createdAt
   }));
@@ -393,34 +395,24 @@ export const getCompanyDetail = async (companyId) => {
   };
 };
 
-export const verifyCompany = async (companyId, verificationData) => {
-  const updatedCompany = await RecruiterProfile.findByIdAndUpdate(
-    companyId,
-    { verified: verificationData.verified },
-    { new: true }
-  ).select('company.name company.logo verified');
-  
-  if (!updatedCompany) {
-    throw new NotFoundError('Công ty không tồn tại.');
-  }
-  
-  return updatedCompany;
-};
-
 export const approveCompany = async (companyId) => {
   const updatedProfile = await RecruiterProfile.findByIdAndUpdate(
     companyId,
-    { 'company.verified': true },
+    {
+      'company.status': 'approved',
+      'company.verified': true,
+      'company.rejectReason': null
+    },
     { new: true }
   ).populate({
     path: 'userId',
     select: 'email active createdAt'
   }).lean();
-  
+
   if (!updatedProfile) {
     throw new NotFoundError('Hồ sơ nhà tuyển dụng không tồn tại.');
   }
-  
+
   // Trả về cấu trúc cố định đầy đủ
   return {
     _id: updatedProfile._id,
@@ -449,27 +441,33 @@ export const approveCompany = async (companyId) => {
         email: updatedProfile.company?.contactInfo?.email || null,
         phone: updatedProfile.company?.contactInfo?.phone || null
       },
-      verified: updatedProfile.company?.verified || false
+      verified: updatedProfile.company?.verified || false,
+      status: updatedProfile.company?.status,
+      rejectReason: updatedProfile.company?.rejectReason
     },
     profileCreatedAt: updatedProfile.createdAt,
     profileUpdatedAt: updatedProfile.updatedAt
   };
 };
 
-export const rejectCompany = async (companyId) => {
+export const rejectCompany = async (companyId, { rejectReason }) => {
   const updatedProfile = await RecruiterProfile.findByIdAndUpdate(
     companyId,
-    { 'company.verified': false },
+    {
+      'company.status': 'rejected',
+      'company.verified': false,
+      'company.rejectReason': rejectReason
+    },
     { new: true }
   ).populate({
     path: 'userId',
     select: 'email active createdAt'
   }).lean();
-  
+
   if (!updatedProfile) {
     throw new NotFoundError('Hồ sơ nhà tuyển dụng không tồn tại.');
   }
-  
+
   // Trả về cấu trúc cố định đầy đủ
   return {
     _id: updatedProfile._id,
@@ -498,7 +496,9 @@ export const rejectCompany = async (companyId) => {
         email: updatedProfile.company?.contactInfo?.email || null,
         phone: updatedProfile.company?.contactInfo?.phone || null
       },
-      verified: updatedProfile.company?.verified || false
+      verified: updatedProfile.company?.verified || false,
+      status: updatedProfile.company?.status,
+      rejectReason: updatedProfile.company?.rejectReason
     },
     profileCreatedAt: updatedProfile.createdAt,
     profileUpdatedAt: updatedProfile.updatedAt

@@ -82,6 +82,7 @@ router
   .route('/companies/:id/reject')
   .patch(
     validationMiddleware.validateParams(adminSchema.idParamsSchema),
+    validationMiddleware.validateBody(adminSchema.rejectCompanySchema),
     adminController.rejectCompany
   );
 
