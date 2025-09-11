@@ -150,19 +150,18 @@ export const getUserGrowth = async (queryParams) => {
   const { period, granularity } = queryParams;
   const { startDate, endDate } = getDateRange(period);
 
-  let format;
-  switch (granularity) {
-    case "weekly":
-      format = "%Y-%U"; // Year-Week
-      break;
-    case "monthly":
-      format = "%Y-%m"; // Year-Month
-      break;
-    case "daily":
-    default:
-      format = "%Y-%m-%d"; // Year-Month-Day
-      break;
-  }
+  // --- THAY ĐỔI: Sử dụng $dateTrunc để chuẩn hóa ngày ---
+  const dateGroupingExpression = {
+    $dateToString: {
+      format: '%Y-%m-%d', // Luôn trả về định dạng YYYY-MM-DD
+      date: {
+        $dateTrunc: {
+          date: '$createdAt',
+          unit: granularity === 'weekly' ? 'week' : (granularity === 'monthly' ? 'month' : 'day'),
+        },
+      },
+    },
+  };
 
   // Lấy dữ liệu user từ DB
   const userData = await User.aggregate([
@@ -175,7 +174,7 @@ export const getUserGrowth = async (queryParams) => {
     {
       $group: {
         _id: {
-          date: { $dateToString: { format, date: "$createdAt" } },
+          date: dateGroupingExpression,
           role: "$role",
         },
         count: { $sum: 1 },
@@ -240,39 +239,55 @@ export const getUserGrowth = async (queryParams) => {
     { $sort: { date: 1 } },
   ]);
 
-  // --- Xử lý đặc biệt: Tạo dữ liệu đầy đủ cho tất cả các ngày (chỉ áp dụng cho daily) ---
-  if (granularity === 'daily') {
-    // Tạo danh sách tất cả các ngày trong khoảng thời gian
-    const allDates = [];
-    let currentDate = new Date(startDate);
+  // --- Logic hợp nhất dữ liệu để lấp đầy các ngày/tuần/tháng còn thiếu ---
+  let completeData = [];
+  let allDates = [];
+  const formatDateString = (date) => date.toISOString().split('T')[0];
+
+  let currentDate = new Date(startDate);
+  while (currentDate <= endDate) {
+    let key;
+    if (granularity === 'daily') {
+        key = formatDateString(currentDate);
+    } else if (granularity === 'weekly') {
+        // Lấy ngày đầu tuần (Chủ Nhật)
+        const dayOfWeek = currentDate.getDay();
+        const firstDayOfWeek = new Date(currentDate);
+        firstDayOfWeek.setDate(currentDate.getDate() - dayOfWeek); // Tuần bắt đầu từ Chủ Nhật
+        key = formatDateString(firstDayOfWeek);
+    } else { // monthly
+        // QUAN TRỌNG: Lấy ngày 01 của tháng (giống như $dateTrunc)
+        key = formatDateString(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1));
+    }
     
-    // Hàm format ngày thành chuỗi YYYY-MM-DD
-    const formatDateString = (date) => date.toISOString().split('T')[0];
-    
-    while (currentDate <= endDate) {
-      allDates.push(formatDateString(currentDate));
-      currentDate.setDate(currentDate.getDate() + 1);
+    if (!allDates.includes(key)) {
+        allDates.push(key);
     }
 
-    // Hợp nhất dữ liệu để lấp đầy các ngày còn thiếu
-    const completeData = allDates.map(dateStr => {
-      const foundData = userData.find(u => u.date === dateStr);
-      if (foundData) {
-        return foundData;
-      }
-      return {
-        date: dateStr,
-        users: 0,
-        job_seekers: 0,
-        recruiters: 0
-      };
-    });
-
-    return completeData;
+    if (granularity === 'daily') {
+        currentDate.setDate(currentDate.getDate() + 1);
+    } else if (granularity === 'weekly') {
+        currentDate.setDate(currentDate.getDate() + 7);
+    } else { // monthly
+        currentDate.setMonth(currentDate.getMonth() + 1);
+    }
   }
 
-  // Đối với weekly hoặc monthly, trả về dữ liệu gốc
-  return userData;
+  // Hợp nhất dữ liệu để lấp đầy các ngày còn thiếu
+  completeData = allDates.map(dateStr => {
+    const foundData = userData.find(u => u.date === dateStr);
+    if (foundData) {
+      return foundData;
+    }
+    return {
+      date: dateStr,
+      users: 0,
+      job_seekers: 0,
+      recruiters: 0
+    };
+  });
+
+  return completeData;
 };
 
 /**
@@ -283,20 +298,23 @@ export const getRevenueTrends = async (queryParams) => {
   const { period, granularity } = queryParams;
   const { startDate, endDate } = getDateRange(period);
 
-  // Xác định định dạng ngày tháng cho việc nhóm dữ liệu (daily, weekly, monthly)
-  let format;
-  switch (granularity) {
-    case "weekly":
-      format = "%Y-%U"; // Nhóm theo Năm-Tuần
-      break;
-    case "monthly":
-      format = "%Y-%m"; // Nhóm theo Năm-Tháng
-      break;
-    case "daily":
-    default:
-      format = "%Y-%m-%d"; // Nhóm theo Năm-Tháng-Ngày
-      break;
-  }
+  // --- THAY ĐỔI LỚN BẮT ĐẦU TỪ ĐÂY ---
+  // Thay vì chỉ dùng format string, ta dùng $dateTrunc để chuẩn hóa ngày
+  const dateGroupingExpression = {
+    $dateToString: {
+      format: '%Y-%m-%d', // Luôn trả về định dạng YYYY-MM-DD
+      date: {
+        $dateTrunc: {
+          date: '$createdAt',
+          unit: granularity === 'weekly' ? 'week' : (granularity === 'monthly' ? 'month' : 'day'),
+          // 'week' sẽ lấy ngày đầu tuần (thường là Chủ Nhật hoặc Thứ Hai tùy cấu hình)
+          // 'month' sẽ lấy ngày 01 của tháng
+          // 'day' sẽ giữ nguyên ngày
+        },
+      },
+    },
+  };
+  // --- KẾT THÚC THAY ĐỔI ---
 
   // --- Thực hiện các truy vấn tổng hợp song song ---
   const [revenueTrendsData, jobPostings, applications] = await Promise.all([
@@ -305,7 +323,7 @@ export const getRevenueTrends = async (queryParams) => {
       { $match: { status: "SUCCESS", createdAt: { $gte: startDate, $lte: endDate } } },
       {
         $group: {
-          _id: { $dateToString: { format, date: "$createdAt" } }, // Nhóm theo ngày/tuần/tháng
+          _id: dateGroupingExpression, // <-- Sử dụng biểu thức mới
           revenue: { $sum: "$amountPaid" }, // Tính tổng doanh thu
         },
       },
@@ -318,7 +336,7 @@ export const getRevenueTrends = async (queryParams) => {
         { $match: { createdAt: { $gte: startDate, $lte: endDate } } },
         {
             $group: {
-                _id: { $dateToString: { format, date: '$createdAt' } },
+                _id: dateGroupingExpression, // <-- Sử dụng biểu thức mới
                 job_postings: { $sum: 1 } // Đếm số lượng
             }
         },
@@ -330,7 +348,7 @@ export const getRevenueTrends = async (queryParams) => {
         { $match: { createdAt: { $gte: startDate, $lte: endDate } } },
         {
             $group: {
-                _id: { $dateToString: { format, date: '$createdAt' } },
+                _id: dateGroupingExpression, // <-- Sử dụng biểu thức mới
                 applications: { $sum: 1 } // Đếm số lượng
             }
         },
@@ -338,53 +356,55 @@ export const getRevenueTrends = async (queryParams) => {
     ])
   ]);
 
-  // --- Xử lý đặc biệt: Tạo dữ liệu đầy đủ cho tất cả các ngày ---
+  // --- Logic hợp nhất dữ liệu để lấp đầy các ngày/tuần/tháng còn thiếu ---
+  // Logic này vẫn cần thiết để đảm bảo biểu đồ không bị "đứt gãy"
   let mergedData = [];
-  
-  if (granularity === 'daily') {
-    // Tạo danh sách tất cả các ngày trong khoảng thời gian
-    const allDates = [];
-    let currentDate = new Date(startDate);
+  let allDates = [];
+  const formatDateString = (date) => date.toISOString().split('T')[0];
+
+  let currentDate = new Date(startDate);
+  while (currentDate <= endDate) {
+    let key;
+    if (granularity === 'daily') {
+        key = formatDateString(currentDate);
+    } else if (granularity === 'weekly') {
+        // Lấy ngày đầu tuần (Chủ Nhật)
+        const dayOfWeek = currentDate.getDay();
+        const firstDayOfWeek = new Date(currentDate);
+        firstDayOfWeek.setDate(currentDate.getDate() - dayOfWeek); // Tuần bắt đầu từ Chủ Nhật
+        key = formatDateString(firstDayOfWeek);
+    } else { // monthly
+        // QUAN TRỌNG: Lấy ngày 01 của tháng (giống như $dateTrunc)
+        key = formatDateString(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1));
+    }
     
-    // Hàm format ngày thành chuỗi YYYY-MM-DD
-    const formatDateString = (date) => date.toISOString().split('T')[0];
-    
-    while (currentDate <= endDate) {
-      allDates.push(formatDateString(currentDate));
-      currentDate.setDate(currentDate.getDate() + 1);
+    if (!allDates.includes(key)) {
+        allDates.push(key);
     }
 
-    // Hợp nhất dữ liệu để lấp đầy các ngày còn thiếu
-    mergedData = allDates.map(dateStr => {
-      // Tìm dữ liệu doanh thu tương ứng với ngày
+    if (granularity === 'daily') {
+        currentDate.setDate(currentDate.getDate() + 1);
+    } else if (granularity === 'weekly') {
+        currentDate.setDate(currentDate.getDate() + 7);
+    } else { // monthly
+        currentDate.setMonth(currentDate.getMonth() + 1);
+    }
+  }
+  
+
+  mergedData = allDates.map(dateStr => {
       const revenue = revenueTrendsData.find(rt => rt.date === dateStr);
-      // Tìm dữ liệu job và application tương ứng với ngày
       const jobs = jobPostings.find(jp => jp._id === dateStr);
       const apps = applications.find(ap => ap._id === dateStr);
       
       return {
         date: dateStr,
         revenue: revenue ? revenue.revenue : 0,
-        job_postings: jobs ? jobs.job_postings : 0, 
-        applications: apps ? apps.applications : 0 
+        job_postings: jobs ? jobs.job_postings : 0,
+        applications: apps ? apps.applications : 0
       };
-    });
-  } else {
-    // Đối với weekly hoặc monthly, sử dụng logic cũ
-    // Có thể mở rộng logic tương tự cho weekly/monthly nếu cần
-    mergedData = revenueTrendsData.map(rt => {
-      // Tìm dữ liệu job và application tương ứng với ngày của doanh thu
-      const jobs = jobPostings.find(jp => jp._id === rt.date);
-      const apps = applications.find(ap => ap._id === rt.date);
-      return {
-          date: rt.date,
-          revenue: rt.revenue,
-          job_postings: jobs ? jobs.job_postings : 0, 
-          applications: apps ? apps.applications : 0 
-      };
-    });
-  }
-
+  });
+  
   return mergedData;
 };
 
@@ -503,21 +523,19 @@ export const getCompanyStats = async () => {
 export const getTransactionAnalytics = async (queryParams) => {
   const { period, granularity } = queryParams;
   const { startDate, endDate } = getDateRange(period);
-
+  console.log("Calculating transaction analytics from", startDate, "to", endDate, "with granularity", granularity);
   // Xác định định dạng ngày tháng cho việc nhóm dữ liệu
-  let format;
-  switch (granularity) {
-    case 'weekly':
-      format = '%Y-%U'; // Year-Week
-      break;
-    case 'monthly':
-      format = '%Y-%m'; // Year-Month  
-      break;
-    case 'daily':
-    default:
-      format = '%Y-%m-%d'; // Year-Month-Day
-      break;
-  }
+  const dateGroupingExpression = {
+    $dateToString: {
+      format: '%Y-%m-%d', // Luôn trả về định dạng YYYY-MM-DD
+      date: {
+        $dateTrunc: {
+          date: '$createdAt',
+          unit: granularity === 'weekly' ? 'week' : (granularity === 'monthly' ? 'month' : 'day'),
+        },
+      },
+    },
+  };
 
   // --- Thực hiện các truy vấn song song (bỏ revenueOverTime ra để xử lý riêng) ---
   const [
@@ -533,7 +551,7 @@ export const getTransactionAnalytics = async (queryParams) => {
       { $match: { status: 'SUCCESS', createdAt: { $gte: startDate, $lte: endDate } } },
       {
         $group: {
-          _id: { $dateToString: { format, date: '$createdAt' } },
+          _id: dateGroupingExpression,
           revenue: { $sum: '$amountPaid' },
           transactionCount: { $sum: 1 }
         }
@@ -728,6 +746,7 @@ export const getTransactionAnalytics = async (queryParams) => {
     ])
   ]);
 
+  console.log("Raw revenue by payment method:", rawRevenueByPaymentMethod); // Debug log
   // --- Xử lý đặc biệt: Hợp nhất dữ liệu để đảm bảo đủ các phương thức thanh toán ---
   const revenueByPaymentMethod = ALL_PAYMENT_METHODS.map(methodName => {
     const foundData = rawRevenueByPaymentMethod.find(item => item.name === methodName);
@@ -747,39 +766,70 @@ export const getTransactionAnalytics = async (queryParams) => {
     name: TRANSACTION_STATUS_LABELS[item.name] || item.name
   }));
 
-  // --- BƯỚC XỬ LÝ ĐẶC BIỆT: Tạo dữ liệu đầy đủ cho tất cả các ngày ---
-  let revenueOverTime = [];
-  
-  if (granularity === 'daily') {
-    // Tạo danh sách tất cả các ngày trong khoảng thời gian
-    const allDates = [];
-    let currentDate = new Date(startDate);
-    
-    // Hàm format ngày thành chuỗi YYYY-MM-DD
-    const formatDateString = (date) => date.toISOString().split('T')[0];
-    
-    while (currentDate <= endDate) {
-      allDates.push(formatDateString(currentDate));
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
+let revenueOverTime = [];
+let allDates = [];
+const formatDateString = (date) => {
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0'); // getMonth() là 0-indexed, nên cần +1
+  const day = date.getDate().toString().padStart(2, '0');
 
-    // Hợp nhất dữ liệu để lấp đầy các ngày còn thiếu
-    revenueOverTime = allDates.map(dateStr => {
-      const foundData = transactionData.find(t => t.date === dateStr);
-      if (foundData) {
-        return foundData;
-      }
-      return {
-        date: dateStr,
-        revenue: 0,
-        transactionCount: 0
-      };
-    });
-  } else {
-    // Đối với weekly hoặc monthly, sử dụng dữ liệu gốc
-    // Có thể mở rộng logic tương tự cho weekly/monthly nếu cần
-    revenueOverTime = transactionData;
+  return `${year}-${month}-${day}`;
+};
+let currentDate = new Date(startDate);
+
+while (currentDate <= endDate) {
+  let key;
+  if (granularity === 'daily') {
+      key = formatDateString(currentDate);
+  } else if (granularity === 'weekly') {
+      const dayOfWeek = currentDate.getDay();
+      const firstDayOfWeek = new Date(currentDate);
+      firstDayOfWeek.setDate(currentDate.getDate() - dayOfWeek);
+      key = formatDateString(firstDayOfWeek);
+  } else { // monthly
+      // ĐẢM BẢO DÙNG DÒNG NÀY ĐỂ TẠO NGÀY ĐẦU THÁNG
+      key = formatDateString(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1));
+      console.log("Monthly key generated:", key); // Debug log
   }
+
+  if (!allDates.includes(key)) {
+      allDates.push(key);
+  }
+
+  // Tăng ngày cho vòng lặp tiếp theo
+  if (granularity === 'daily') {
+      currentDate.setDate(currentDate.getDate() + 1);
+  } else if (granularity === 'weekly') {
+      currentDate.setDate(currentDate.getDate() + 7);
+  } else { // monthly
+      currentDate.setMonth(currentDate.getMonth() + 1);
+  }
+}
+  // Hợp nhất dữ liệu để lấp đầy các ngày còn thiếu
+  revenueOverTime = allDates.map(dateStr => {
+    const foundData = transactionData.find(t => t.date === dateStr);
+    if (foundData) {
+      return foundData;
+    }
+    return {
+      date: dateStr,
+      revenue: 0,
+      transactionCount: 0
+    };
+  });
+
+  // Hợp nhất dữ liệu để lấp đầy các ngày còn thiếu
+  revenueOverTime = allDates.map(dateStr => {
+    const foundData = transactionData.find(t => t.date === dateStr);
+    if (foundData) {
+      return foundData;
+    }
+    return {
+      date: dateStr,
+      revenue: 0,
+      transactionCount: 0
+    };
+  });
 
   // Xử lý dữ liệu KPI
   const metrics = kpiMetrics[0] || {
