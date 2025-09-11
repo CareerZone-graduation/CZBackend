@@ -8,6 +8,7 @@ import {
   CoinRecharge,
 } from "../models/index.js";
 import { NotFoundError } from "../utils/AppError.js";
+import { ALL_PAYMENT_METHODS, TRANSACTION_STATUS_LABELS } from "../constants/index.js";
 import mongoose from "mongoose";
 
 // Helper function to calculate date ranges
@@ -163,7 +164,8 @@ export const getUserGrowth = async (queryParams) => {
       break;
   }
 
-  const results = await User.aggregate([
+  // Lấy dữ liệu user từ DB
+  const userData = await User.aggregate([
     {
       $match: {
         createdAt: { $gte: startDate, $lte: endDate },
@@ -237,7 +239,40 @@ export const getUserGrowth = async (queryParams) => {
     },
     { $sort: { date: 1 } },
   ]);
-  return results;
+
+  // --- Xử lý đặc biệt: Tạo dữ liệu đầy đủ cho tất cả các ngày (chỉ áp dụng cho daily) ---
+  if (granularity === 'daily') {
+    // Tạo danh sách tất cả các ngày trong khoảng thời gian
+    const allDates = [];
+    let currentDate = new Date(startDate);
+    
+    // Hàm format ngày thành chuỗi YYYY-MM-DD
+    const formatDateString = (date) => date.toISOString().split('T')[0];
+    
+    while (currentDate <= endDate) {
+      allDates.push(formatDateString(currentDate));
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    // Hợp nhất dữ liệu để lấp đầy các ngày còn thiếu
+    const completeData = allDates.map(dateStr => {
+      const foundData = userData.find(u => u.date === dateStr);
+      if (foundData) {
+        return foundData;
+      }
+      return {
+        date: dateStr,
+        users: 0,
+        job_seekers: 0,
+        recruiters: 0
+      };
+    });
+
+    return completeData;
+  }
+
+  // Đối với weekly hoặc monthly, trả về dữ liệu gốc
+  return userData;
 };
 
 /**
@@ -264,8 +299,8 @@ export const getRevenueTrends = async (queryParams) => {
   }
 
   // --- Thực hiện các truy vấn tổng hợp song song ---
-  const [revenueTrends, jobPostings, applications] = await Promise.all([
-    // 1. Lấy dữ liệu doanh thu
+  const [revenueTrendsData, jobPostings, applications] = await Promise.all([
+    // 1. Lấy dữ liệu doanh thu thực tế từ DB
     CoinRecharge.aggregate([
       { $match: { status: "SUCCESS", createdAt: { $gte: startDate, $lte: endDate } } },
       {
@@ -303,19 +338,52 @@ export const getRevenueTrends = async (queryParams) => {
     ])
   ]);
 
-  // --- Gộp dữ liệu từ 3 truy vấn trên ---
-  // Mục đích: Tạo ra một mảng duy nhất chứa tất cả thông tin theo từng ngày/tuần/tháng
-  const mergedData = revenueTrends.map(rt => {
+  // --- Xử lý đặc biệt: Tạo dữ liệu đầy đủ cho tất cả các ngày ---
+  let mergedData = [];
+  
+  if (granularity === 'daily') {
+    // Tạo danh sách tất cả các ngày trong khoảng thời gian
+    const allDates = [];
+    let currentDate = new Date(startDate);
+    
+    // Hàm format ngày thành chuỗi YYYY-MM-DD
+    const formatDateString = (date) => date.toISOString().split('T')[0];
+    
+    while (currentDate <= endDate) {
+      allDates.push(formatDateString(currentDate));
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    // Hợp nhất dữ liệu để lấp đầy các ngày còn thiếu
+    mergedData = allDates.map(dateStr => {
+      // Tìm dữ liệu doanh thu tương ứng với ngày
+      const revenue = revenueTrendsData.find(rt => rt.date === dateStr);
+      // Tìm dữ liệu job và application tương ứng với ngày
+      const jobs = jobPostings.find(jp => jp._id === dateStr);
+      const apps = applications.find(ap => ap._id === dateStr);
+      
+      return {
+        date: dateStr,
+        revenue: revenue ? revenue.revenue : 0,
+        job_postings: jobs ? jobs.job_postings : 0, 
+        applications: apps ? apps.applications : 0 
+      };
+    });
+  } else {
+    // Đối với weekly hoặc monthly, sử dụng logic cũ
+    // Có thể mở rộng logic tương tự cho weekly/monthly nếu cần
+    mergedData = revenueTrendsData.map(rt => {
       // Tìm dữ liệu job và application tương ứng với ngày của doanh thu
       const jobs = jobPostings.find(jp => jp._id === rt.date);
       const apps = applications.find(ap => ap._id === rt.date);
       return {
           date: rt.date,
           revenue: rt.revenue,
-          job_postings: jobs ? jobs.job_postings : 0, // Nếu không có thì trả về 0
-          applications: apps ? apps.applications : 0 // Nếu không có thì trả về 0
+          job_postings: jobs ? jobs.job_postings : 0, 
+          applications: apps ? apps.applications : 0 
       };
-  });
+    });
+  }
 
   return mergedData;
 };
@@ -451,16 +519,16 @@ export const getTransactionAnalytics = async (queryParams) => {
       break;
   }
 
-  // --- Thực hiện các truy vấn song song ---
+  // --- Thực hiện các truy vấn song song (bỏ revenueOverTime ra để xử lý riêng) ---
   const [
-    revenueOverTime,
+    transactionData,
     revenueByRole,
-    revenueByPaymentMethod,
+    rawRevenueByPaymentMethod,
     transactionStatusBreakdown,
     kpiMetrics,
     topSpendingUsers
   ] = await Promise.all([
-    // 1. Doanh thu theo thời gian
+    // 1. Doanh thu theo thời gian - lấy dữ liệu thực tế từ DB
     CoinRecharge.aggregate([
       { $match: { status: 'SUCCESS', createdAt: { $gte: startDate, $lte: endDate } } },
       {
@@ -511,7 +579,7 @@ export const getTransactionAnalytics = async (queryParams) => {
       }
     ]),
 
-    // 3. Cơ cấu doanh thu theo phương thức thanh toán
+    // 3. Cơ cấu doanh thu theo phương thức thanh toán - lấy dữ liệu thô từ DB
     CoinRecharge.aggregate([
       { $match: { status: 'SUCCESS', createdAt: { $gte: startDate, $lte: endDate } } },
       {
@@ -544,16 +612,7 @@ export const getTransactionAnalytics = async (queryParams) => {
       {
         $project: {
           _id: 0,
-          name: {
-            $switch: {
-              branches: [
-                { case: { $eq: ['$_id', 'SUCCESS'] }, then: 'Thành công' },
-                { case: { $eq: ['$_id', 'PENDING'] }, then: 'Đang xử lý' },
-                { case: { $eq: ['$_id', 'FAILED'] }, then: 'Thất bại' }
-              ],
-              default: 'Khác'
-            }
-          },
+          name: '$_id', // Sẽ được xử lý sau để hiển thị tên tiếng Việt
           value: '$count'
         }
       }
@@ -669,6 +728,59 @@ export const getTransactionAnalytics = async (queryParams) => {
     ])
   ]);
 
+  // --- Xử lý đặc biệt: Hợp nhất dữ liệu để đảm bảo đủ các phương thức thanh toán ---
+  const revenueByPaymentMethod = ALL_PAYMENT_METHODS.map(methodName => {
+    const foundData = rawRevenueByPaymentMethod.find(item => item.name === methodName);
+    if (foundData) {
+      return foundData;
+    }
+    return {
+      name: methodName,
+      value: 0, // Giá trị doanh thu là 0
+      transactionCount: 0
+    };
+  });
+
+  // --- Xử lý tên hiển thị cho trạng thái giao dịch ---
+  const processedTransactionStatusBreakdown = transactionStatusBreakdown.map(item => ({
+    ...item,
+    name: TRANSACTION_STATUS_LABELS[item.name] || item.name
+  }));
+
+  // --- BƯỚC XỬ LÝ ĐẶC BIỆT: Tạo dữ liệu đầy đủ cho tất cả các ngày ---
+  let revenueOverTime = [];
+  
+  if (granularity === 'daily') {
+    // Tạo danh sách tất cả các ngày trong khoảng thời gian
+    const allDates = [];
+    let currentDate = new Date(startDate);
+    
+    // Hàm format ngày thành chuỗi YYYY-MM-DD
+    const formatDateString = (date) => date.toISOString().split('T')[0];
+    
+    while (currentDate <= endDate) {
+      allDates.push(formatDateString(currentDate));
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    // Hợp nhất dữ liệu để lấp đầy các ngày còn thiếu
+    revenueOverTime = allDates.map(dateStr => {
+      const foundData = transactionData.find(t => t.date === dateStr);
+      if (foundData) {
+        return foundData;
+      }
+      return {
+        date: dateStr,
+        revenue: 0,
+        transactionCount: 0
+      };
+    });
+  } else {
+    // Đối với weekly hoặc monthly, sử dụng dữ liệu gốc
+    // Có thể mở rộng logic tương tự cho weekly/monthly nếu cần
+    revenueOverTime = transactionData;
+  }
+
   // Xử lý dữ liệu KPI
   const metrics = kpiMetrics[0] || {
     totalRevenue: 0,
@@ -694,10 +806,10 @@ export const getTransactionAnalytics = async (queryParams) => {
 
   // Cấu trúc dữ liệu trả về
   const data = {
-    revenueOverTime,
+    revenueOverTime, // Sử dụng dữ liệu đã được hợp nhất
     revenueByRole,
-    revenueByPaymentMethod,
-    transactionStatusBreakdown,
+    revenueByPaymentMethod, // Sử dụng dữ liệu đã được làm đầy
+    transactionStatusBreakdown: processedTransactionStatusBreakdown, // Sử dụng dữ liệu đã xử lý tên hiển thị
     topSpendingUsers
   };
 
