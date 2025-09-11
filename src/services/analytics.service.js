@@ -879,3 +879,121 @@ export const getTopSpendingUsers = async (queryParams) => {
 
   return topUsers;
 };
+
+// [MỚI] Lấy danh sách tất cả giao dịch cho admin
+export const getAllTransactions = async (queryParams) => {
+  const { page, limit, search, status, paymentMethod, startDate, endDate, sort } = queryParams;
+
+  const matchStage = {};
+
+  // Lọc theo trạng thái
+  if (status) {
+    matchStage.status = status;
+  }
+  // Lọc theo phương thức thanh toán
+  if (paymentMethod) {
+    matchStage.paymentMethod = paymentMethod;
+  }
+  // Lọc theo khoảng thời gian
+  if (startDate && endDate) {
+    matchStage.createdAt = { $gte: startDate, $lte: endDate };
+  }
+
+  const lookupStage = [
+    // Join với collection 'users' để lấy thông tin người dùng
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'userId',
+        foreignField: '_id',
+        as: 'user'
+      }
+    },
+    { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
+    // Join với 'recruiterprofiles' và 'candidateprofiles' để lấy fullname
+    {
+      $lookup: {
+        from: 'recruiterprofiles',
+        localField: 'userId',
+        foreignField: 'userId',
+        as: 'recruiterProfile'
+      }
+    },
+    {
+      $lookup: {
+        from: 'candidateprofiles',
+        localField: 'userId',
+        foreignField: 'userId',
+        as: 'candidateProfile'
+      }
+    },
+    { $unwind: { path: '$recruiterProfile', preserveNullAndEmptyArrays: true } },
+    { $unwind: { path: '$candidateProfile', preserveNullAndEmptyArrays: true } },
+  ];
+
+  // Lọc theo từ khóa tìm kiếm (sau khi đã join)
+  if (search) {
+    const searchRegex = new RegExp(search, 'i');
+    matchStage.$or = [
+      { transactionCode: searchRegex },
+      { 'user.email': searchRegex },
+      { 'recruiterProfile.fullname': searchRegex },
+      { 'candidateProfile.fullname': searchRegex }
+    ];
+  }
+  
+  const sortStage = {};
+  if (sort) {
+      const [field, order] = sort.startsWith('-') ? [sort.substring(1), -1] : [sort, 1];
+      sortStage[field] = order;
+  } else {
+      sortStage.createdAt = -1;
+  }
+
+  const pipeline = [
+    { $match: matchStage },
+    ...lookupStage,
+    {
+        $project: {
+            _id: 1,
+            transactionCode: 1,
+            amountPaid: 1,
+            coinAmount: 1,
+            status: 1,
+            paymentMethod: 1,
+            createdAt: 1,
+            user: {
+                _id: '$user._id',
+                email: '$user.email',
+                fullname: { $ifNull: ['$recruiterProfile.fullname', '$candidateProfile.fullname'] }
+            }
+        }
+    },
+    {
+        $facet: {
+            data: [
+                { $sort: sortStage },
+                { $skip: (page - 1) * limit },
+                { $limit: limit }
+            ],
+            meta: [
+                { $count: 'totalItems' }
+            ]
+        }
+    }
+  ];
+
+  const result = await CoinRecharge.aggregate(pipeline);
+  const data = result[0].data;
+  const totalItems = result[0].meta[0]?.totalItems || 0;
+  
+  return {
+      data,
+      meta: {
+          currentPage: page,
+          limit,
+          totalItems,
+          totalPages: Math.ceil(totalItems / limit)
+      }
+  };
+};

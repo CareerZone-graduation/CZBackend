@@ -38,15 +38,10 @@ const coinRechargeSchema = new mongoose.Schema({
     },
     default: 'PENDING'
   },
-  // Adding fields to store gateway-specific info without altering original structure much
-  gatewayResponse: {
-      type: String,
-      default: null,
+  metadata: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null,
   },
-  gatewayTransactionToken: {
-      type: String,
-      default: null,
-  }
 }, {
   timestamps: true
 });

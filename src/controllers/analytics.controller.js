@@ -57,3 +57,13 @@ export const getTopSpendingUsers = asyncHandler(async (req, res) => {
     data
   });
 });
+
+// [MỚI]
+export const getAllTransactions = asyncHandler(async (req, res) => {
+  const result = await analyticsService.getAllTransactions(req.query);
+  res.json({
+    success: true,
+    message: 'Lấy danh sách giao dịch thành công.',
+    ...result // Trả về { data, meta }
+  });
+});

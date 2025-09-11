@@ -49,4 +49,11 @@ router.get(
   analyticsController.getTopSpendingUsers
 );
 
+// [MỚI] Lấy danh sách giao dịch với bộ lọc và phân trang
+router.get(
+  '/transactions',
+  validationMiddleware.validateQuery(analyticsSchema.transactionListSchema),
+  analyticsController.getAllTransactions
+);
+
 export default router;

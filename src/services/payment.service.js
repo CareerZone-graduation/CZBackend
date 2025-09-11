@@ -64,15 +64,14 @@ export const createZaloPayOrder = async (userId, coins) => {
             logger.error('ZaloPay order creation failed:', zaloPayResponse);
             await CoinRecharge.findByIdAndUpdate(newRecharge._id, {
                 status: 'FAILED',
-                gatewayResponse: JSON.stringify(zaloPayResponse),
+                metadata: JSON.stringify(zaloPayResponse),
             });
             throw new BadRequestError(`Lỗi từ ZaloPay: ${zaloPayResponse.return_message}`);
         }
 
         // Update the record with gateway-specific tokens
         await CoinRecharge.findByIdAndUpdate(newRecharge._id, {
-            gatewayTransactionToken: zaloPayResponse.zp_trans_token,
-            gatewayResponse: JSON.stringify(zaloPayResponse),
+            metadata: JSON.stringify(zaloPayResponse),
         });
 
         return zaloPayResponse;
@@ -124,7 +123,6 @@ export const handleZaloPayCallback = async (apptransid, status) => {
     //         return result;
     //     }
 
-    //     recharge.gatewayResponse = JSON.stringify(dataJSON);
 
     //     // status = 1 means success
     //     if (status === 1) {
