@@ -655,7 +655,10 @@ export const getAdminStats = async () => {
     totalApplications,
     verifiedCompanies,
     unverifiedCompanies,
-    pendingCompanies
+    pendingCompanies,
+    // --- BỔ SUNG CÁC TRUY VẤN MỚI ---
+    recruitersWithoutCompany, // Đếm NTD chưa có thông tin công ty
+    bannedUsers             // Đếm tài khoản bị khóa
   ] = await Promise.all([
     User.countDocuments(),
     User.countDocuments({ role: 'candidate' }),
@@ -667,9 +670,11 @@ export const getAdminStats = async () => {
     RecruiterProfile.countDocuments({ 'company.verified': true }),
     RecruiterProfile.countDocuments({ 'company.verified': false }),
     RecruiterProfile.countDocuments({ 
-      'company.verified': false, 
-      'company.name': { $exists: true, $ne: null } 
-    })
+      'company.status': 'pending'
+    }),
+    // --- LOGIC MỚI ---
+    RecruiterProfile.countDocuments({ 'company.name': { $exists: false } }),
+    User.countDocuments({ active: false })
   ]);
   
   return {
@@ -681,7 +686,9 @@ export const getAdminStats = async () => {
     users: {
       candidates: totalCandidates,
       recruiters: totalRecruiters,
-      total: totalUsers
+      total: totalUsers,
+      // --- DỮ LIỆU MỚI ---
+      banned: bannedUsers 
     },
     jobs: {
       pending: pendingJobs,
@@ -692,7 +699,9 @@ export const getAdminStats = async () => {
       verified: verifiedCompanies,
       unverified: unverifiedCompanies,
       pending: pendingCompanies,
-      total: verifiedCompanies + unverifiedCompanies
+      total: verifiedCompanies + unverifiedCompanies,
+      // --- DỮ LIỆU MỚI ---
+      recruitersWithoutCompany: recruitersWithoutCompany 
     }
   };
 };

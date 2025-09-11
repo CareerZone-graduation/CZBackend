@@ -30,3 +30,30 @@ export const getCompanyStats = asyncHandler(async (req, res) => {
   const data = await analyticsService.getCompanyStats();
   res.json({ success: true, data });
 });
+
+export const getTransactionTrends = asyncHandler(async (req, res) => {
+  const data = await analyticsService.getTransactionAnalytics(req.query);
+  res.json({
+    success: true,
+    message: 'Lấy dữ liệu phân tích giao dịch thành công',
+    ...data // Spread để trải phẳng { meta, data } từ service
+  });
+});
+
+export const getTransactionToday = asyncHandler(async (req, res) => {
+  const data = await analyticsService.getTransactionTodayStats();
+  res.json({
+    success: true,
+    message: 'Lấy thống kê giao dịch hôm nay thành công',
+    data
+  });
+});
+
+export const getTopSpendingUsers = asyncHandler(async (req, res) => {
+  const data = await analyticsService.getTopSpendingUsers(req.query);
+  res.json({
+    success: true,
+    message: 'Lấy danh sách người dùng chi tiêu nhiều nhất thành công',
+    data
+  });
+});

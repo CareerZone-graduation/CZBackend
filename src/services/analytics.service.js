@@ -427,3 +427,455 @@ export const getCompanyStats = async () => {
 
   return stats[0];
 };
+
+/**
+ * GET /api/analytics/transaction-trends  
+ * Phân tích chi tiết về giao dịch - dành riêng cho trang quản lý giao dịch
+ */
+export const getTransactionAnalytics = async (queryParams) => {
+  const { period, granularity } = queryParams;
+  const { startDate, endDate } = getDateRange(period);
+
+  // Xác định định dạng ngày tháng cho việc nhóm dữ liệu
+  let format;
+  switch (granularity) {
+    case 'weekly':
+      format = '%Y-%U'; // Year-Week
+      break;
+    case 'monthly':
+      format = '%Y-%m'; // Year-Month  
+      break;
+    case 'daily':
+    default:
+      format = '%Y-%m-%d'; // Year-Month-Day
+      break;
+  }
+
+  // --- Thực hiện các truy vấn song song ---
+  const [
+    revenueOverTime,
+    revenueByRole,
+    revenueByPaymentMethod,
+    transactionStatusBreakdown,
+    kpiMetrics,
+    topSpendingUsers
+  ] = await Promise.all([
+    // 1. Doanh thu theo thời gian
+    CoinRecharge.aggregate([
+      { $match: { status: 'SUCCESS', createdAt: { $gte: startDate, $lte: endDate } } },
+      {
+        $group: {
+          _id: { $dateToString: { format, date: '$createdAt' } },
+          revenue: { $sum: '$amountPaid' },
+          transactionCount: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: 1 } },
+      { $project: { _id: 0, date: '$_id', revenue: 1, transactionCount: 1 } }
+    ]),
+
+    // 2. Cơ cấu doanh thu theo vai trò người dùng
+    CoinRecharge.aggregate([
+      { $match: { status: 'SUCCESS', createdAt: { $gte: startDate, $lte: endDate } } },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'userId',
+          foreignField: '_id',
+          as: 'user'
+        }
+      },
+      { $unwind: '$user' },
+      {
+        $group: {
+          _id: '$user.role',
+          totalRevenue: { $sum: '$amountPaid' },
+          transactionCount: { $sum: 1 }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          name: {
+            $switch: {
+              branches: [
+                { case: { $eq: ['$_id', 'candidate'] }, then: 'Ứng viên' },
+                { case: { $eq: ['$_id', 'recruiter'] }, then: 'Nhà tuyển dụng' }
+              ],
+              default: 'Khác'
+            }
+          },
+          value: '$totalRevenue',
+          transactionCount: '$transactionCount'
+        }
+      }
+    ]),
+
+    // 3. Cơ cấu doanh thu theo phương thức thanh toán
+    CoinRecharge.aggregate([
+      { $match: { status: 'SUCCESS', createdAt: { $gte: startDate, $lte: endDate } } },
+      {
+        $group: {
+          _id: '$paymentMethod',
+          totalRevenue: { $sum: '$amountPaid' },
+          transactionCount: { $sum: 1 }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          name: '$_id',
+          value: '$totalRevenue',
+          transactionCount: '$transactionCount'
+        }
+      },
+      { $sort: { value: -1 } }
+    ]),
+
+    // 4. Phân bố trạng thái giao dịch
+    CoinRecharge.aggregate([
+      { $match: { createdAt: { $gte: startDate, $lte: endDate } } },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          name: {
+            $switch: {
+              branches: [
+                { case: { $eq: ['$_id', 'SUCCESS'] }, then: 'Thành công' },
+                { case: { $eq: ['$_id', 'PENDING'] }, then: 'Đang xử lý' },
+                { case: { $eq: ['$_id', 'FAILED'] }, then: 'Thất bại' }
+              ],
+              default: 'Khác'
+            }
+          },
+          value: '$count'
+        }
+      }
+    ]),
+
+    // 5. Các chỉ số KPI quan trọng
+    CoinRecharge.aggregate([
+      { $match: { createdAt: { $gte: startDate, $lte: endDate } } },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: {
+            $sum: {
+              $cond: [{ $eq: ['$status', 'SUCCESS'] }, '$amountPaid', 0]
+            }
+          },
+          totalTransactions: { $sum: 1 },
+          successfulTransactions: {
+            $sum: {
+              $cond: [{ $eq: ['$status', 'SUCCESS'] }, 1, 0]
+            }
+          },
+          failedTransactions: {
+            $sum: {
+              $cond: [{ $eq: ['$status', 'FAILED'] }, 1, 0]
+            }
+          },
+          pendingTransactions: {
+            $sum: {
+              $cond: [{ $eq: ['$status', 'PENDING'] }, 1, 0]
+            }
+          },
+          totalCoinsRecharged: {
+            $sum: {
+              $cond: [{ $eq: ['$status', 'SUCCESS'] }, '$coinAmount', 0]
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          totalRevenue: 1,
+          totalTransactions: 1,
+          successfulTransactions: 1,
+          failedTransactions: 1,
+          pendingTransactions: 1,
+          totalCoinsRecharged: 1,
+          averageTransactionValue: {
+            $cond: [
+              { $gt: ['$successfulTransactions', 0] },
+              { $divide: ['$totalRevenue', '$successfulTransactions'] },
+              0
+            ]
+          },
+          successRate: {
+            $cond: [
+              { $gt: ['$totalTransactions', 0] },
+              {
+                $multiply: [
+                  { $divide: ['$successfulTransactions', '$totalTransactions'] },
+                  100
+                ]
+              },
+              0
+            ]
+          }
+        }
+      }
+    ]),
+
+    // 6. Top 5 người dùng chi tiêu nhiều nhất
+    CoinRecharge.aggregate([
+      { $match: { status: 'SUCCESS', createdAt: { $gte: startDate, $lte: endDate } } },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'userId',
+          foreignField: '_id',
+          as: 'user'
+        }
+      },
+      { $unwind: '$user' },
+      {
+        $group: {
+          _id: '$userId',
+          totalSpent: { $sum: '$amountPaid' },
+          transactionCount: { $sum: 1 },
+          userEmail: { $first: '$user.email' },
+          userRole: { $first: '$user.role' }
+        }
+      },
+      { $sort: { totalSpent: -1 } },
+      { $limit: 5 },
+      {
+        $project: {
+          _id: 0,
+          userId: '$_id',
+          email: '$userEmail',
+          role: {
+            $switch: {
+              branches: [
+                { case: { $eq: ['$userRole', 'candidate'] }, then: 'Ứng viên' },
+                { case: { $eq: ['$userRole', 'recruiter'] }, then: 'Nhà tuyển dụng' }
+              ],
+              default: 'Khác'
+            }
+          },
+          totalSpent: '$totalSpent',
+          transactionCount: '$transactionCount'
+        }
+      }
+    ])
+  ]);
+
+  // Xử lý dữ liệu KPI
+  const metrics = kpiMetrics[0] || {
+    totalRevenue: 0,
+    totalTransactions: 0,
+    successfulTransactions: 0,
+    failedTransactions: 0,
+    pendingTransactions: 0,
+    totalCoinsRecharged: 0,
+    averageTransactionValue: 0,
+    successRate: 0
+  };
+
+  // Cấu trúc dữ liệu meta cho phân trang (mặc dù không cần thiết ở đây)
+  const meta = {
+    period,
+    granularity,
+    dateRange: {
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString()
+    },
+    summary: metrics
+  };
+
+  // Cấu trúc dữ liệu trả về
+  const data = {
+    revenueOverTime,
+    revenueByRole,
+    revenueByPaymentMethod,
+    transactionStatusBreakdown,
+    topSpendingUsers
+  };
+
+  // Trả về cấu trúc { meta, data } như quy định
+  return { meta, data };
+};
+
+/**
+ * GET /api/analytics/transaction-today
+ * Thống kê giao dịch trong ngày hiện tại - Real-time data
+ */
+export const getTransactionTodayStats = async () => {
+  // Lấy thời gian đầu ngày và cuối ngày hôm nay
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+
+  const stats = await CoinRecharge.aggregate([
+    { $match: { createdAt: { $gte: todayStart, $lte: todayEnd } } },
+    {
+      $group: {
+        _id: null,
+        // Doanh thu hôm nay (chỉ tính giao dịch thành công)
+        todayRevenue: {
+          $sum: {
+            $cond: [{ $eq: ['$status', 'SUCCESS'] }, '$amountPaid', 0]
+          }
+        },
+        // Tổng số giao dịch hôm nay
+        totalTransactions: { $sum: 1 },
+        // Số giao dịch thành công
+        successfulTransactions: {
+          $sum: {
+            $cond: [{ $eq: ['$status', 'SUCCESS'] }, 1, 0]
+          }
+        },
+        // Số giao dịch đang xử lý
+        pendingTransactions: {
+          $sum: {
+            $cond: [{ $eq: ['$status', 'PENDING'] }, 1, 0]
+          }
+        },
+        // Số giao dịch thất bại
+        failedTransactions: {
+          $sum: {
+            $cond: [{ $eq: ['$status', 'FAILED'] }, 1, 0]
+          }
+        },
+        // Tổng số xu được nạp thành công
+        totalCoinsRecharged: {
+          $sum: {
+            $cond: [{ $eq: ['$status', 'SUCCESS'] }, '$coinAmount', 0]
+          }
+        }
+      }
+    },
+    {
+      $project: {
+        _id: 0,
+        todayRevenue: 1,
+        totalTransactions: 1,
+        successfulTransactions: 1,
+        pendingTransactions: 1,
+        failedTransactions: 1,
+        totalCoinsRecharged: 1,
+        // Tính giá trị giao dịch trung bình
+        averageTransactionValue: {
+          $cond: [
+            { $gt: ['$successfulTransactions', 0] },
+            { $divide: ['$todayRevenue', '$successfulTransactions'] },
+            0
+          ]
+        },
+        // Tỷ lệ thành công
+        successRate: {
+          $cond: [
+            { $gt: ['$totalTransactions', 0] },
+            {
+              $round: [
+                {
+                  $multiply: [
+                    { $divide: ['$successfulTransactions', '$totalTransactions'] },
+                    100
+                  ]
+                },
+                2
+              ]
+            },
+            0
+          ]
+        }
+      }
+    }
+  ]);
+
+  // Nếu không có giao dịch nào hôm nay, trả về dữ liệu mặc định
+  if (stats.length === 0) {
+    return {
+      todayRevenue: 0,
+      totalTransactions: 0,
+      successfulTransactions: 0,
+      pendingTransactions: 0,
+      failedTransactions: 0,
+      totalCoinsRecharged: 0,
+      averageTransactionValue: 0,
+      successRate: 0,
+      date: todayStart.toISOString().split('T')[0] // Format: YYYY-MM-DD
+    };
+  }
+
+  return {
+    ...stats[0],
+    date: todayStart.toISOString().split('T')[0] // Format: YYYY-MM-DD
+  };
+};
+
+/**
+ * GET /api/analytics/top-spending-users
+ * Danh sách người dùng chi tiêu nhiều nhất trong khoảng thời gian
+ */
+export const getTopSpendingUsers = async (queryParams) => {
+  const { period = '30d' } = queryParams;
+  const { startDate, endDate } = getDateRange(period);
+
+  const topUsers = await CoinRecharge.aggregate([
+    { $match: { status: 'SUCCESS', createdAt: { $gte: startDate, $lte: endDate } } },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'userId',
+        foreignField: '_id',
+        as: 'user'
+      }
+    },
+    { $unwind: '$user' },
+    {
+      $group: {
+        _id: '$userId',
+        totalSpent: { $sum: '$amountPaid' },
+        transactionCount: { $sum: 1 },
+        totalCoinsRecharged: { $sum: '$coinAmount' },
+        userEmail: { $first: '$user.email' },
+        userRole: { $first: '$user.role' },
+        userActive: { $first: '$user.active' },
+        firstTransaction: { $min: '$createdAt' },
+        lastTransaction: { $max: '$createdAt' }
+      }
+    },
+    { $sort: { totalSpent: -1 } },
+    { $limit: 10 }, // Lấy top 10 thay vì 5
+    {
+      $project: {
+        _id: 0,
+        userId: '$_id',
+        email: '$userEmail',
+        role: {
+          $switch: {
+            branches: [
+              { case: { $eq: ['$userRole', 'candidate'] }, then: 'Ứng viên' },
+              { case: { $eq: ['$userRole', 'recruiter'] }, then: 'Nhà tuyển dụng' }
+            ],
+            default: 'Khác'
+          }
+        },
+        isActive: '$userActive',
+        totalSpent: '$totalSpent',
+        transactionCount: '$transactionCount',
+        totalCoinsRecharged: '$totalCoinsRecharged',
+        averageTransactionValue: {
+          $round: [{ $divide: ['$totalSpent', '$transactionCount'] }, 2]
+        },
+        firstTransaction: '$firstTransaction',
+        lastTransaction: '$lastTransaction'
+      }
+    }
+  ]);
+
+  return topUsers;
+};

@@ -6,3 +6,9 @@ export const timeSeriesSchema = z.object({
   period: z.enum(['7d', '30d', '90d', '1y']).default('30d'),
   granularity: z.enum(['daily', 'weekly', 'monthly']).default('daily'),
 });
+
+// Schema cho transaction analytics query
+export const transactionAnalyticsSchema = z.object({
+  period: z.enum(['7d', '30d', '90d', '1y']).default('30d'),
+  granularity: z.enum(['daily', 'weekly', 'monthly']).default('daily'),
+});

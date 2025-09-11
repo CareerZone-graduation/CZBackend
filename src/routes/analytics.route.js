@@ -30,5 +30,23 @@ router.get('/user-demographics', analyticsController.getUserDemographics);
 
 router.get('/job-categories', analyticsController.getJobCategories);
 
-export default router;
 router.get('/company-stats', analyticsController.getCompanyStats);
+
+// Transaction Analytics - API cho phân tích giao dịch
+router.get(
+  '/transaction-trends',
+  validationMiddleware.validateQuery(analyticsSchema.transactionAnalyticsSchema),
+  analyticsController.getTransactionTrends
+);
+
+// Transaction Today Stats - Thống kê giao dịch hôm nay
+router.get('/transaction-today', analyticsController.getTransactionToday);
+
+// Top Spending Users - Danh sách người dùng chi tiêu nhiều nhất
+router.get(
+  '/top-spending-users',
+  validationMiddleware.validateQuery(analyticsSchema.transactionAnalyticsSchema),
+  analyticsController.getTopSpendingUsers
+);
+
+export default router;
