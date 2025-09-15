@@ -51,8 +51,32 @@ export const createJob = async (userId, jobData) => {
     throw new BadRequestError('Nhà tuyển dụng phải liên kết với một công ty để đăng tin.');
   }
 
+  // Xử lý trường hợp sử dụng địa chỉ công ty
+  let finalJobData = { ...jobData };
+  
+  if (jobData.useCompanyAddress) {
+    if (!recruiterProfile.company.location || !recruiterProfile.company.address) {
+      throw new BadRequestError('Thông tin địa chỉ công ty chưa đầy đủ. Vui lòng cập nhật thông tin công ty trước.');
+    }
+    
+    // Copy location từ company
+    finalJobData.location = { ...recruiterProfile.company.location };
+    finalJobData.address = recruiterProfile.company.address;
+    
+    // // Kiểm tra và sửa coordinates nếu không đầy đủ
+    // if (finalJobData.location.coordinates && 
+    //     (!finalJobData.location.coordinates.coordinates || 
+    //      finalJobData.location.coordinates.coordinates.length !== 2)) {
+    //   // Nếu coordinates không đầy đủ, tạo tọa độ mặc định
+    //   finalJobData.location.coordinates = {
+    //     type: 'Point',
+    //     coordinates: [106.6297, 10.8231] // Tọa độ mặc định (TP.HCM)
+    //   };
+    // }
+  }
+
   const newJob = await Job.create({
-    ...jobData,
+    ...finalJobData,
     recruiterProfileId: recruiterProfile._id,
   });
 
@@ -406,7 +430,31 @@ export const updateJob = async (jobId, userId, updateData) => {
     throw new ForbiddenError('Bạn không có quyền cập nhật tin tuyển dụng này.');
   }
 
-  Object.assign(job, updateData);
+  // Xử lý trường hợp sử dụng địa chỉ công ty
+  let finalUpdateData = { ...updateData };
+  
+  if (updateData.useCompanyAddress) {
+    if (!recruiterProfile.company.location || !recruiterProfile.company.address) {
+      throw new BadRequestError('Thông tin địa chỉ công ty chưa đầy đủ. Vui lòng cập nhật thông tin công ty trước.');
+    }
+    
+    // Copy location từ company
+    finalUpdateData.location = { ...recruiterProfile.company.location };
+    finalUpdateData.address = recruiterProfile.company.address;
+    
+    // Kiểm tra và sửa coordinates nếu không đầy đủ
+    if (finalUpdateData.location.coordinates && 
+        (!finalUpdateData.location.coordinates.coordinates || 
+         finalUpdateData.location.coordinates.coordinates.length !== 2)) {
+      // Nếu coordinates không đầy đủ, tạo tọa độ mặc định
+      finalUpdateData.location.coordinates = {
+        type: 'Point',
+        coordinates: [106.6297, 10.8231] // Tọa độ mặc định (TP.HCM)
+      };
+    }
+  }
+
+  Object.assign(job, finalUpdateData);
   await job.save();
 
   return job;

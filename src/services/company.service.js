@@ -98,6 +98,24 @@ export const getMyCompany = async (recruiterUserId) => {
 };
 
 /**
+ * Get my company address for the logged-in recruiter.
+ * @param {string} recruiterUserId - The ID of the recruiter user.
+ * @returns {Promise<object>} The company address object containing location and address fields.
+ */
+export const getMyCompanyAddress = async (recruiterUserId) => {
+  const recruiterProfile = await getRecruiterProfile(recruiterUserId);
+  
+  if (!recruiterProfile.company || !recruiterProfile.company.name) {
+    throw new NotFoundError('Nhà tuyển dụng này chưa cập nhật thông tin công ty.');
+  }
+
+  return {
+    location: recruiterProfile.company.location,
+    address: recruiterProfile.company.address
+  };
+};
+
+/**
  * Update the company logo for the logged-in recruiter.
  * @param {string} recruiterUserId - The ID of the recruiter user.
  * @param {object} file - The uploaded file object.

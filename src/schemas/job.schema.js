@@ -17,6 +17,12 @@ const locationSchema = z.object({
   province: z.enum(provinceNames, { required_error: 'Tỉnh/Thành phố là bắt buộc' }),
   district: z.string({ required_error: 'Quận/Huyện là bắt buộc' }),
   commune: z.string({ required_error: 'Phường/Xã là bắt buộc' }),
+  coordinates: z.object({
+    type: z.literal('Point').default('Point'),
+    coordinates: z.array(z.number()).length(2, 'Coordinates phải có đúng 2 số [longitude, latitude]')
+      .refine(coords => coords[0] >= -180 && coords[0] <= 180, 'Longitude phải trong khoảng -180 đến 180')
+      .refine(coords => coords[1] >= -90 && coords[1] <= 90, 'Latitude phải trong khoảng -90 đến 90')
+  }).optional()
 });
 
 export const createJobSchema = z.object({
@@ -24,8 +30,9 @@ export const createJobSchema = z.object({
   description: z.string().trim().min(20, 'Mô tả phải có ít nhất 20 ký tự').max(5000),
   requirements: z.string().trim().min(10, 'Yêu cầu phải có ít nhất 10 ký tự').max(2000),
   benefits: z.string().trim().min(10, 'Quyền lợi phải có ít nhất 10 ký tự').max(2000),
-  location: locationSchema,
-  address: z.string().trim().min(1, 'Địa chỉ chi tiết là bắt buộc').max(200),
+  location: locationSchema.optional(),
+  address: z.string().trim().min(1, 'Địa chỉ chi tiết là bắt buộc').max(200).optional(),
+  useCompanyAddress: z.boolean().optional(),
   type: z.enum(jobTypeEnum),
   workType: z.enum(workTypeEnum),
   minSalary: z.coerce.number().min(0, 'Mức lương không thể là số âm').optional(),
@@ -39,24 +46,36 @@ export const createJobSchema = z.object({
   message: 'Lương tối đa phải lớn hơn hoặc bằng lương tối thiểu',
   path: ['maxSalary'],
 })
-  .refine(data => {
-    const provinceData = locationMap.get(data.location.province);
-    if (!provinceData) return false;
-    return provinceData.districts.some(d => d.name === data.location.district);
-  }, {
-    message: 'Quận/Huyện không thuộc Tỉnh/Thành phố đã chọn.',
-    path: ['location', 'district'],
-  })
-  .refine(data => {
-    const provinceData = locationMap.get(data.location.province);
-    // The district is already validated to be in the province by the previous refine.
-    const districtData = provinceData.districts.find(d => d.name === data.location.district);
-    if (!districtData || !districtData.communes) return false; // Commune list must exist
-    return districtData.communes.includes(data.location.commune);
-  }, {
-    message: 'Phường/Xã không thuộc Quận/Huyện đã chọn.',
-    path: ['location', 'commune'],
-  });
+.refine(data => {
+  // Nếu không sử dụng địa chỉ công ty, thì location và address phải có
+  if (!data.useCompanyAddress) {
+    return data.location && data.address;
+  }
+  return true;
+}, {
+  message: 'Vui lòng cung cấp địa chỉ hoặc chọn sử dụng địa chỉ công ty',
+  path: ['location'],
+})
+.refine(data => {
+  if (!data.location) return true;
+  const provinceData = locationMap.get(data.location.province);
+  if (!provinceData) return false;
+  return provinceData.districts.some(d => d.name === data.location.district);
+}, {
+  message: 'Quận/Huyện không thuộc Tỉnh/Thành phố đã chọn.',
+  path: ['location', 'district'],
+})
+.refine(data => {
+  if (!data.location) return true;
+  const provinceData = locationMap.get(data.location.province);
+  // The district is already validated to be in the province by the previous refine.
+  const districtData = provinceData.districts.find(d => d.name === data.location.district);
+  if (!districtData || !districtData.communes) return false; // Commune list must exist
+  return districtData.communes.includes(data.location.commune);
+}, {
+  message: 'Phường/Xã không thuộc Quận/Huyện đã chọn.',
+  path: ['location', 'commune'],
+});
 
 export const updateJobSchema = z.object({
   title: z.string().trim().min(5, 'Tiêu đề phải có ít nhất 5 ký tự').max(200).optional(),
@@ -65,6 +84,7 @@ export const updateJobSchema = z.object({
   benefits: z.string().trim().min(10, 'Quyền lợi phải có ít nhất 10 ký tự').max(2000).optional(),
   location: locationSchema.optional(),
   address: z.string().trim().min(1, 'Địa chỉ chi tiết là bắt buộc').max(200).optional(),
+  useCompanyAddress: z.boolean().optional(),
   type: z.enum(jobTypeEnum).optional(),
   workType: z.enum(workTypeEnum).optional(),
   minSalary: z.coerce.number().min(0, 'Mức lương không thể là số âm').optional(),
@@ -79,27 +99,27 @@ export const updateJobSchema = z.object({
     message: 'Lương tối đa phải lớn hơn hoặc bằng lương tối thiểu',
     path: ['maxSalary'],
 })
-  .refine(data => {
-    if (!data.location) return true;
-    const provinceData = locationMap.get(data.location.province);
-    if (!provinceData) return false;
-    return provinceData.districts.some(d => d.name === data.location.district);
-  }, {
-    message: 'Quận/Huyện không thuộc Tỉnh/Thành phố đã chọn.',
-    path: ['location', 'district'],
-  })
-  .refine(data => {
-    if (!data.location) return true;
-    // If location is provided, all fields are required by locationSchema.
-    // The previous refine validates the district.
-    const provinceData = locationMap.get(data.location.province);
-    const districtData = provinceData.districts.find(d => d.name === data.location.district);
-    if (!districtData || !districtData.communes) return false;
-    return districtData.communes.includes(data.location.commune);
-  }, {
-    message: 'Phường/Xã không thuộc Quận/Huyện đã chọn.',
-    path: ['location', 'commune'],
-  });
+.refine(data => {
+  if (!data.location) return true;
+  const provinceData = locationMap.get(data.location.province);
+  if (!provinceData) return false;
+  return provinceData.districts.some(d => d.name === data.location.district);
+}, {
+  message: 'Quận/Huyện không thuộc Tỉnh/Thành phố đã chọn.',
+  path: ['location', 'district'],
+})
+.refine(data => {
+  if (!data.location) return true;
+  // If location is provided, all fields are required by locationSchema.
+  // The previous refine validates the district.
+  const provinceData = locationMap.get(data.location.province);
+  const districtData = provinceData.districts.find(d => d.name === data.location.district);
+  if (!districtData || !districtData.communes) return false;
+  return districtData.communes.includes(data.location.commune);
+}, {
+  message: 'Phường/Xã không thuộc Quận/Huyện đã chọn.',
+  path: ['location', 'commune'],
+});
 
 export const jobQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),

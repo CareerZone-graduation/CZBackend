@@ -65,6 +65,10 @@ const jobSchema = new mongoose.Schema({
     trim: true,
     maxlength: [200, 'Address cannot exceed 200 characters']
   },
+  useCompanyAddress: {
+    type: Boolean,
+    default: false
+  },
   type: {
     type: String,
     enum: {

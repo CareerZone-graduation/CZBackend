@@ -46,6 +46,18 @@ export const getMyCompany = asyncHandler(async (req, res) => {
   });
 });
 
+// @desc    Get my company address of the logged-in recruiter
+// @route   GET /api/v1/companies/my-company/address
+// @access  Private/Recruiter
+export const getMyCompanyAddress = asyncHandler(async (req, res) => {
+  const address = await companyService.getMyCompanyAddress(req.user._id);
+  res.status(200).json({
+    success: true,
+    message: 'Lấy địa chỉ công ty thành công.',
+    data: address,
+  });
+});
+
 // @desc    Update the company profile of the logged-in recruiter
 // @route   PATCH /api/v1/companies/my-company
 // @access  Private/Recruiter

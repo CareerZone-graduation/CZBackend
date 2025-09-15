@@ -24,6 +24,8 @@ router.post(
 // Đặt các route cụ thể như 'my-company' LÊN TRÊN các route có tham số động
 router.get('/my-company', passport.authenticate('jwt', { session: false }), authMiddleware.recruiterOnly, companyController.getMyCompany);
 
+router.get('/my-company/address', passport.authenticate('jwt', { session: false }), authMiddleware.recruiterOnly, companyController.getMyCompanyAddress);
+
 router.patch(
   '/my-company',
   passport.authenticate('jwt', { session: false }),
