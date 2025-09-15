@@ -31,9 +31,32 @@ const jobSchema = new mongoose.Schema({
       type: String,
       required: [true, 'Province/City is required']
     },
-    ward: {
+    district: {
       type: String,
-      required: [true, 'Ward/District is required']
+      required: [true, 'District is required']
+    },
+    commune: {
+      type: String,
+      required: [true, 'Commune/Ward is required'],
+      default: '' // Default value if not provided
+    },
+    coordinates: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point'
+      },
+      coordinates: {
+        type: [Number], // [longitude, latitude]
+        validate: {
+          validator: function(coords) {
+            return coords && coords.length === 2 &&
+                   coords[0] >= -180 && coords[0] <= 180 &&
+                   coords[1] >= -90 && coords[1] <= 90;
+          },
+          message: 'Invalid coordinates format'
+        }
+      }
     }
   },
   address: {
@@ -136,14 +159,16 @@ const jobSchema = new mongoose.Schema({
 });
 
 // Create indexes for better search and query performance
-jobSchema.index({ title: 'text', description: 'text', 'location.province': 'text', 'location.ward': 'text' });
+jobSchema.index({ title: 'text', description: 'text', 'location.province': 'text', 'location.district': 'text' });
 jobSchema.index({ recruiterProfileId: 1 }); 
 jobSchema.index({ type: 1 });
 jobSchema.index({ workType: 1 }); // Added index for workType
 jobSchema.index({ category: 1 });
 jobSchema.index({ experience: 1 });
 jobSchema.index({ 'location.province': 1 });
-jobSchema.index({ 'location.ward': 1 });
+jobSchema.index({ 'location.district': 1 });
+jobSchema.index({ 'location.commune': 1 });
+jobSchema.index({ 'location.coordinates': '2dsphere' }); // Added geospatial index
 jobSchema.index({ status: 1 }); // Added index for status
 jobSchema.index({ approved: 1 }); // Added index for approved
 jobSchema.index({ deadline: 1 });
@@ -152,6 +177,6 @@ jobSchema.index({ createdAt: -1 });
 // Compound indexes for common queries
 jobSchema.index({ status: 1, approved: 1, deadline: 1 }); // Updated compound index
 jobSchema.index({ category: 1, type: 1, workType: 1, status: 1 }); // Updated compound index
-jobSchema.index({ 'location.province': 1, 'location.ward': 1, category: 1, status: 1 });
+jobSchema.index({ 'location.province': 1, 'location.district': 1, category: 1, status: 1 });
 
 export default mongoose.model('Job', jobSchema);

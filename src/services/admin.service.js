@@ -393,11 +393,12 @@ export const getCompaniesForAdmin = async (queryParams) => {
       businessRegistrationUrl: profile.company?.businessRegistrationUrl || null,
       size: profile.company?.size || null,
       website: profile.company?.website || null,
-      address: {
-        street: profile.company?.address?.street || null,
-        city: profile.company?.address?.city || null,
-        country: profile.company?.address?.country || null
+      location: {
+        province: profile.company?.location?.province || null,
+        district: profile.company?.location?.district || null,
+        commune: profile.company?.location?.commune || null
       },
+      address: profile.company?.address || null,
       contactInfo: {
         email: profile.company?.contactInfo?.email || null,
         phone: profile.company?.contactInfo?.phone || null
@@ -500,7 +501,8 @@ export const getCompanyDetail = async (companyId) => {
       website: recruiterProfile.company?.website || null,
       location:{
         province: recruiterProfile.company?.location?.province || null,
-        ward: recruiterProfile.company?.location?.ward || null
+        district: recruiterProfile.company?.location?.district || null,
+        commune: recruiterProfile.company?.location?.commune || null
       },
       address: recruiterProfile.company?.address || null,
       contactInfo: {
@@ -569,11 +571,12 @@ export const approveCompany = async (companyId) => {
       businessRegistrationUrl: updatedProfile.company?.businessRegistrationUrl || null,
       size: updatedProfile.company?.size || null,
       website: updatedProfile.company?.website || null,
-      address: {
-        street: updatedProfile.company?.address?.street || null,
-        city: updatedProfile.company?.address?.city || null,
-        country: updatedProfile.company?.address?.country || null
+      location: {
+        province: updatedProfile.company?.location?.province || null,
+        district: updatedProfile.company?.location?.district || null,
+        commune: updatedProfile.company?.location?.commune || null
       },
+      address: updatedProfile.company?.address || null,
       contactInfo: {
         email: updatedProfile.company?.contactInfo?.email || null,
         phone: updatedProfile.company?.contactInfo?.phone || null
@@ -624,11 +627,12 @@ export const rejectCompany = async (companyId, { rejectReason }) => {
       businessRegistrationUrl: updatedProfile.company?.businessRegistrationUrl || null,
       size: updatedProfile.company?.size || null,
       website: updatedProfile.company?.website || null,
-      address: {
-        street: updatedProfile.company?.address?.street || null,
-        city: updatedProfile.company?.address?.city || null,
-        country: updatedProfile.company?.address?.country || null
+      location: {
+        province: updatedProfile.company?.location?.province || null,
+        district: updatedProfile.company?.location?.district || null,
+        commune: updatedProfile.company?.location?.commune || null
       },
+      address: updatedProfile.company?.address || null,
       contactInfo: {
         email: updatedProfile.company?.contactInfo?.email || null,
         phone: updatedProfile.company?.contactInfo?.phone || null

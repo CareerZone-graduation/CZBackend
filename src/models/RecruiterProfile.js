@@ -80,10 +80,33 @@ const companyInfoSchema = new mongoose.Schema({
       trim: true,
       maxlength: [100, 'Province/City cannot exceed 100 characters']
     },
-    ward: {
+    district: {
       type: String,
       trim: true,
-      maxlength: [100, 'Ward/District cannot exceed 100 characters']
+      maxlength: [100, 'District cannot exceed 100 characters']
+    },
+    commune: {
+      type: String,
+      trim: true,
+      maxlength: [100, 'Commune cannot exceed 100 characters']
+    },
+    coordinates: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point'
+      },
+      coordinates: {
+        type: [Number], // [longitude, latitude]
+        validate: {
+          validator: function(coords) {
+            return coords && coords.length === 2 &&
+                   coords[0] >= -180 && coords[0] <= 180 &&
+                   coords[1] >= -90 && coords[1] <= 90;
+          },
+          message: 'Invalid coordinates format'
+        }
+      }
     }
   },
   address: { // Địa chỉ chi tiết (số nhà, tên đường)
@@ -141,6 +164,7 @@ const recruiterProfileSchema = new mongoose.Schema({
 // Index for better query performance
 recruiterProfileSchema.index({ 'company.name': 'text', 'fullname': 'text' });
 recruiterProfileSchema.index({ 'company.industry': 1 });
+recruiterProfileSchema.index({ 'company.location.coordinates': '2dsphere' });
 const RecruiterProfile = mongoose.model('RecruiterProfile', recruiterProfileSchema);
 
 export default RecruiterProfile;

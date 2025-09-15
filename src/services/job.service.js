@@ -76,7 +76,8 @@ export const createJob = async (userId, jobData) => {
       companyName: recruiterProfile.company.name,
       location: {
         province: newJob.location.province,
-        ward: newJob.location.ward,
+        district: newJob.location.district,
+        commune: newJob.location.commune,
       },
       address: newJob.address,
       type: newJob.type,

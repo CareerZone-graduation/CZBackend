@@ -1,4 +1,4 @@
-import tree from '../data/tree.json' with { type: 'json' };
+import tree from '../data/oldtree.json' with { type: 'json' };
 
 /**
  * Dữ liệu gốc có cấu trúc phân cấp của các đơn vị hành chính Việt Nam.
@@ -16,15 +16,15 @@ export const locationTree = tree;
 export const provinceNames = tree.map((province) => province.name);
 
 /**
- * Một cấu trúc Map để tra cứu nhanh các quận/huyện/xã theo tên tỉnh/thành.
+ * Một cấu trúc Map để tra cứu nhanh các quận/huyện và phường/xã theo tên tỉnh/thành.
  * Key: Tên Tỉnh/Thành (string)
- * Value: Một object chứa mảng tên các quận/huyện/xã.
- * Ví dụ: 'Hà Nội' -> { wards: ['Hà Đông', 'Tương Mai', ...] }
- * @type {Map<string, { wards: Array<string> }>}
+ * Value: Một object chứa mảng các quận/huyện. Mỗi quận/huyện là một object có tên và mảng các phường/xã.
+ * Ví dụ: 'Hà Nội' -> { districts: [{ name: 'Ba Đình', communes: ['Phúc Xá', 'Trúc Bạch', ...] }] }
+ * @type {Map<string, { districts: Array<{name: string, communes: Array<string>}> }>}
  */
 export const locationMap = new Map(tree.map(province => [
   province.name,
   {
-    wards: province.wards
+    districts: province.districts
   }
 ]));

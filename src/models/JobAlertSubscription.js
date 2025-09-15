@@ -15,11 +15,11 @@ const jobAlertSubscriptionSchema = new mongoose.Schema({
   location: {
     province: {
       type: String,
-      required: true,
+      required: [true, 'Province is required'],
     },
-    // Ward is optional, user can subscribe to a whole province
-    ward: {
-      type: String, 
+    district: {
+      type: String,
+      required: [true, 'District is required'],
     }
   },
   frequency: {

@@ -27,9 +27,20 @@ const matchJobWithSubscription = (job, subscription) => {
         };
         return ranges[subRange] || false;
     };
+
+    // Location matching với cấu trúc mới
+    const location = subscription.location;
+    // 1. Phải khớp tỉnh/thành phố
+    const provinceMatch = location.province === 'ALL' || location.province === job.location.province;
+    // 2. Nếu có quận/huyện thì phải khớp
+    const districtMatch = !location.district || location.district === job.location.district;
+    // 3. Nếu có phường/xã thì phải khớp
+    const communeMatch = !location.commune || location.commune === job.location.commune;
     
     return (
-        (subscription.location.city === job.location.city) &&
+        provinceMatch &&
+        districtMatch &&
+        communeMatch &&
         (subscription.type === 'ALL' || subscription.type === job.type) &&
         (subscription.workType === 'ALL' || subscription.workType === job.workType) &&
         (subscription.experience === 'ALL' || subscription.experience === job.experience) &&

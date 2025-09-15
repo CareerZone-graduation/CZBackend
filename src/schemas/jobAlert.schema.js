@@ -3,22 +3,24 @@ import { provinceNames, locationMap } from '../constants/locations.enum.js';
 
 const locationAlertSchema = z.object({
   province: z.enum([...provinceNames, 'ALL']),
-  ward: z.string().optional(),
+  district: z.string().min(1, 'Quận/Huyện là bắt buộc'),
 }).refine(data => {
-  // If province is 'ALL', ward should not be present.
   if (data.province === 'ALL') {
-    return !data.ward;
+    return data.district === 'ALL';
   }
-  // If ward is present, it must be valid for the selected province.
-  if (data.ward) {
+  if (data.district === 'ALL') {
+    return true;
+  }
+  if (data.district) {
     const provinceData = locationMap.get(data.province);
-    return provinceData && provinceData.wards.includes(data.ward);
+    if (!provinceData || !provinceData.districts.some(d => d.name === data.district)) {
+      return false;
+    }
   }
-  // If only province is present (and not 'ALL'), it's valid.
   return true;
 }, {
-  message: "Dữ liệu địa điểm không hợp lệ. Nếu chọn 'Tất cả' tỉnh thành, không được chọn phường xã. Nếu chọn phường xã, nó phải thuộc tỉnh thành đã chọn.",
-  path: ['ward'],
+  message: "Dữ liệu địa điểm không hợp lệ. Vui lòng kiểm tra lại Tỉnh/Thành và Quận/Huyện. Nếu chọn tất cả tỉnh thì quận/huyện cũng phải là 'ALL'.",
+  path: ['location'],
 });
 
 const createJobAlertSchema = z.object({

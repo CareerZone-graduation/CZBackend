@@ -14,8 +14,8 @@ const industryEnum = z.enum([
 
 const locationSchema = z.object({
   province: z.enum(provinceNames, { required_error: 'Tỉnh/Thành phố là bắt buộc' }),
-  // Tạm thời cho phép ward là string, sẽ validate trong .refine()
-  ward: z.string({ required_error: 'Phường/Xã là bắt buộc' }),
+  district: z.string({ required_error: 'Quận/Huyện là bắt buộc' }),
+  commune: z.string({ required_error: 'Phường/Xã là bắt buộc' }),
 });
 
 
@@ -59,15 +59,22 @@ const baseCompanySchema = z.object({
 
   contactInfo: contactInfoSchema,
 }).refine(data => {
-  const provinceData = locationMap.get(data.location.province);
-  if (!provinceData) {
-    return false; // Tỉnh không hợp lệ (dù enum đã check, đây là lớp bảo vệ thứ 2)
-  }
-  return provinceData.wards.includes(data.location.ward);
-}, {
-  message: 'Phường/Xã không thuộc Tỉnh/Thành phố đã chọn.',
-  path: ['location', 'ward'],
-});
+    const provinceData = locationMap.get(data.location.province);
+    if (!provinceData) return false;
+    return provinceData.districts.some(d => d.name === data.location.district);
+  }, {
+    message: 'Quận/Huyện không thuộc Tỉnh/Thành phố đã chọn.',
+    path: ['location', 'district'],
+  })
+  .refine(data => {
+    const provinceData = locationMap.get(data.location.province);
+    const districtData = provinceData.districts.find(d => d.name === data.location.district);
+    if (!districtData || !districtData.communes) return false;
+    return districtData.communes.includes(data.location.commune);
+  }, {
+    message: 'Phường/Xã không thuộc Quận/Huyện đã chọn.',
+    path: ['location', 'commune'],
+  });
 
 export const createCompanySchema = baseCompanySchema;
 
@@ -102,20 +109,20 @@ export const updateCompanySchema = z.object({
   
   contactInfo: contactInfoSchema,
 }).refine(data => {
-  // Chỉ validate location nếu nó được cung cấp
-  if (!data.location) {
+    if (!data.location) return true;
+    const provinceData = locationMap.get(data.location.province);
+    if (!provinceData) return false;
+    if (data.location.district && !provinceData.districts.some(d => d.name === data.location.district)) {
+        return false;
+    }
+    if (data.location.district && data.location.commune) {
+        const districtData = provinceData.districts.find(d => d.name === data.location.district);
+        if (!districtData || !districtData.communes.includes(data.location.commune)) {
+            return false;
+        }
+    }
     return true;
-  }
-  // Cả province và ward đều phải được cung cấp nếu location tồn tại
-  if (!data.location.province || !data.location.ward) {
-    return false; // Hoặc có thể đặt message cụ thể hơn
-  }
-  const provinceData = locationMap.get(data.location.province);
-  if (!provinceData) {
-    return false; // Tỉnh không hợp lệ
-  }
-  return provinceData.wards.includes(data.location.ward);
 }, {
-  message: 'Phường/Xã không thuộc Tỉnh/Thành phố đã chọn.',
-  path: ['location', 'ward'],
+    message: 'Địa chỉ không hợp lệ.',
+    path: ['location'],
 });
