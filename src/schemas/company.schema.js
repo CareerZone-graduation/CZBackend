@@ -16,6 +16,12 @@ const locationSchema = z.object({
   province: z.enum(provinceNames, { required_error: 'Tỉnh/Thành phố là bắt buộc' }),
   district: z.string({ required_error: 'Quận/Huyện là bắt buộc' }),
   commune: z.string({ required_error: 'Phường/Xã là bắt buộc' }),
+  coordinates: z.object({
+    type: z.literal('Point').default('Point'),
+    coordinates: z.array(z.number()).length(2, 'Coordinates phải có đúng 2 số [longitude, latitude]')
+      .refine(coords => coords[0] >= -180 && coords[0] <= 180, 'Longitude phải trong khoảng -180 đến 180')
+      .refine(coords => coords[1] >= -90 && coords[1] <= 90, 'Latitude phải trong khoảng -90 đến 90')
+  }).optional()
 });
 
 

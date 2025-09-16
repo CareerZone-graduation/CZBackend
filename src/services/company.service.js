@@ -39,6 +39,18 @@ export const createCompany = async (companyData, recruiterUserId, file) => {
 
   const dataToCreate = { ...companyData };
 
+  // Xử lý coordinates: nếu location có province, district, commune nhưng thiếu coordinates
+  if (dataToCreate.location && 
+      (!dataToCreate.location.coordinates || 
+       !dataToCreate.location.coordinates.coordinates || 
+       dataToCreate.location.coordinates.coordinates.length !== 2)) {
+    // Nếu coordinates không đầy đủ, tạo tọa độ mặc định
+    dataToCreate.location.coordinates = {
+      type: 'Point',
+      coordinates: [106.6297, 10.8231] // Tọa độ mặc định (TP.HCM)
+    };
+  }
+
   if (file) {
     const folder = `CareerZone/business_registrations`;
     const uploadResult = await uploadService.uploadToCloudinary(file.buffer, folder);
@@ -67,6 +79,18 @@ export const updateMyCompany = async (recruiterUserId, companyData, file) => {
   }
 
   const dataToUpdate = { ...companyData };
+
+  // Xử lý coordinates nếu có cập nhật location
+  if (dataToUpdate.location && 
+      (!dataToUpdate.location.coordinates || 
+       !dataToUpdate.location.coordinates.coordinates || 
+       dataToUpdate.location.coordinates.coordinates.length !== 2)) {
+    // Nếu coordinates không đầy đủ, tạo tọa độ mặc định
+    dataToUpdate.location.coordinates = {
+      type: 'Point',
+      coordinates: [106.6297, 10.8231] // Tọa độ mặc định (TP.HCM)
+    };
+  }
 
   if (file) {
     const folder = `CareerZone/business_registrations/${recruiterProfile.company._id}`;
