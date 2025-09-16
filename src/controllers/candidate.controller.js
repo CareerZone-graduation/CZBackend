@@ -103,3 +103,16 @@ export const getMyApplications = asyncHandler(async (req, res) => {
         data: result.data
     });
 });
+
+export const getApplicationById = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    const { applicationId } = req.params;
+    
+    const application = await candidateService.getApplicationById(userId, applicationId);
+    
+    res.status(200).json({
+        success: true,
+        message: 'Lấy chi tiết đơn ứng tuyển thành công.',
+        data: application
+    });
+});

@@ -261,3 +261,39 @@ export const getMyApplications = async (userId, options = {}) => {
 
     return { data: applications, meta };
 };
+
+/**
+ * Lấy chi tiết 1 đơn ứng tuyển của candidate
+ * @param {string} userId ID của user
+ * @param {string} applicationId ID của application
+ * @returns {Object} Chi tiết đơn ứng tuyển
+ */
+export const getApplicationById = async (userId, applicationId) => {
+    logger.info('Getting application details for candidate', { userId, applicationId });
+    
+    // Lấy candidate profile để có candidateProfileId
+    const candidateProfile = await CandidateProfile.findOne({ userId }).lean();
+    if (!candidateProfile) {
+        throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
+    }
+
+    // Tìm application và kiểm tra quyền sở hữu
+    const application = await Application.findOne({
+        _id: applicationId,
+        candidateProfileId: candidateProfile._id
+    })
+    .select('jobId status appliedAt lastStatusUpdateAt coverLetter submittedCV jobSnapshot candidateName candidateEmail candidatePhone candidateRating notes activityHistory isReapplied previousApplicationId')
+    .lean();
+
+    if (!application) {
+        throw new NotFoundError('Không tìm thấy đơn ứng tuyển này.');
+    }
+
+    logger.info('Successfully retrieved application details for candidate', { 
+        userId, 
+        candidateProfileId: candidateProfile._id,
+        applicationId 
+    });
+
+    return application;
+};

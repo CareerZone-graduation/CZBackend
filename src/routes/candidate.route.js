@@ -46,4 +46,11 @@ router.get(
     candidateController.getMyApplications
 );
 
+// Route để lấy chi tiết 1 đơn ứng tuyển của candidate
+router.get(
+    '/my-applications/:applicationId',
+    validationMiddleware.validateParams(applicationSchema.applicationIdParam),
+    candidateController.getApplicationById
+);
+
 export default router;
