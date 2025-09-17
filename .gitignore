@@ -44,3 +44,4 @@ test-websocket-chat.html
 .clineignore
 .ignore
 scripts
+.kiro

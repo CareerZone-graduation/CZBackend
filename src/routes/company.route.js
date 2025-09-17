@@ -45,5 +45,13 @@ router.post(
 
 // === Public Routes ===
 router.get('/', companyController.getAllCompanies);
+
+// Company jobs endpoint with comprehensive logging and validation
+router.get('/:id/jobs', 
+  validationMiddleware.validateParams(commonSchema.idParamSchema),
+  validationMiddleware.validateQuery(companySchema.companyJobsQuerySchema),
+  companyController.getJobsByCompany,
+);
+
 router.get('/:id', validationMiddleware.validateParams(commonSchema.idParamSchema), companyController.getCompanyById);
 export default router;

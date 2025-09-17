@@ -4,7 +4,6 @@ import {
   CandidateProfile,
   Job,
   RecruiterProfile,
-  CV,
   SavedJob,
   User,
 } from '../models/index.js';
@@ -53,16 +52,16 @@ export const createJob = async (userId, jobData) => {
 
   // Xử lý trường hợp sử dụng địa chỉ công ty
   let finalJobData = { ...jobData };
-  
+
   if (jobData.useCompanyAddress) {
     if (!recruiterProfile.company.location || !recruiterProfile.company.address) {
       throw new BadRequestError('Thông tin địa chỉ công ty chưa đầy đủ. Vui lòng cập nhật thông tin công ty trước.');
     }
-    
+
     // Copy location từ company
     finalJobData.location = { ...recruiterProfile.company.location };
     finalJobData.address = recruiterProfile.company.address;
-    
+
     // // Kiểm tra và sửa coordinates nếu không đầy đủ
     // if (finalJobData.location.coordinates && 
     //     (!finalJobData.location.coordinates.coordinates || 
@@ -123,7 +122,7 @@ export const getAllJobs = async (options) => {
   const { page = 1, limit = 10, sortBy, ...filters } = options;
 
   const query = { status: 'ACTIVE', approved: true };
-  
+
   // Simple text search on title and skills
   if (filters.q) {
     query.$or = [
@@ -146,8 +145,8 @@ export const getAllJobs = async (options) => {
 
   const jobs = await Job.find(query)
     .populate({
-        path: 'recruiterProfileId',
-        select: 'company.name company.logo'
+      path: 'recruiterProfileId',
+      select: 'company.name company.logo'
     })
     .sort(sortOptions)
     .skip(skip)
@@ -155,13 +154,13 @@ export const getAllJobs = async (options) => {
     .lean();
 
   const totalJobs = await Job.countDocuments(query);
-  
+
   const formattedJobs = jobs.map(job => {
-      if (job.recruiterProfileId && job.recruiterProfileId.company) {
-          job.company = job.recruiterProfileId.company;
-      }
-      delete job.recruiterProfileId;
-      return job;
+    if (job.recruiterProfileId && job.recruiterProfileId.company) {
+      job.company = job.recruiterProfileId.company;
+    }
+    delete job.recruiterProfileId;
+    return job;
   });
 
   return {
@@ -184,7 +183,7 @@ export const getAllJobs = async (options) => {
  */
 export const getJobsByRecruiter = async (userId, options) => {
   const { page = 1, limit = 10, status, sortBy, search } = options;
-  
+
   const recruiterProfile = await findRecruiterProfileByUserId(userId);
   const recruiterProfileId = recruiterProfile._id;
 
@@ -198,9 +197,9 @@ export const getJobsByRecruiter = async (userId, options) => {
  * @param {string} text - Text to escape
  * @returns {string} Escaped text
  */
-const escapeRegex = (text) => {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-};
+  const escapeRegex = (text) => {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  };
 
   // Add search functionality with escaped regex
   if (search) {
@@ -331,84 +330,84 @@ export const getJobDetailsForRecruiter = async (jobId, userId) => {
  * @returns {Promise<Document>} Chi tiết tin tuyển dụng
  */
 export const getJobById = async (jobId, userId = null) => {
-    const jobDoc = await Job.findById(jobId).populate({
-        path: 'recruiterProfileId',
-        select: 'company.name company.logo company._id'
+  const jobDoc = await Job.findById(jobId).populate({
+    path: 'recruiterProfileId',
+    select: 'company.name company.logo company._id'
+  });
+
+  if (!jobDoc) {
+    throw new NotFoundError('Không tìm thấy tin tuyển dụng.');
+  }
+
+  const job = jobDoc.toObject();
+  logger.info(job);
+
+  // Kiểm tra xem user có phải là candidate và job có được lưu/apply không
+  let isSaved = false;
+  let isApplied = false;
+  if (userId) {
+    // Gửi sự kiện xem việc làm
+    kafkaService.sendUserInteraction({
+      eventType: 'VIEW_JOB',
+      userId,
+      jobId,
+      timestamp: new Date().toISOString(),
+      details: { weight: 1 }
     });
 
-    if (!jobDoc) {
-        throw new NotFoundError('Không tìm thấy tin tuyển dụng.');
-    }
+    // Kiểm tra xem user có phải là candidate và đã lưu/apply job này không
+    try {
+      const candidateProfile = await CandidateProfile.findOne({ userId });
+      if (candidateProfile) {
+        // Kiểm tra saved job
+        const savedJob = await SavedJob.findOne({
+          candidateId: userId,
+          jobId
+        });
+        isSaved = !!savedJob;
 
-    const job = jobDoc.toObject();
-    logger.info(job);
-
-    // Kiểm tra xem user có phải là candidate và job có được lưu/apply không
-    let isSaved = false;
-    let isApplied = false;
-    if (userId) {
-      // Gửi sự kiện xem việc làm
-      kafkaService.sendUserInteraction({
-        eventType: 'VIEW_JOB',
-        userId,
-        jobId,
-        timestamp: new Date().toISOString(),
-        details: { weight: 1 }
-      });
-
-      // Kiểm tra xem user có phải là candidate và đã lưu/apply job này không
-      try {
-        const candidateProfile = await CandidateProfile.findOne({ userId });
-        if (candidateProfile) {
-          // Kiểm tra saved job
-          const savedJob = await SavedJob.findOne({
-            candidateId: userId,
-            jobId
-          });
-          isSaved = !!savedJob;
-
-          // Kiểm tra đã apply job chưa
-          const application = await Application.findOne({
-            candidateProfileId: candidateProfile._id,
-            jobId
-          });
-          isApplied = !!application;
-        }
-      } catch (error) {
-        // Nếu có lỗi khi kiểm tra, isSaved và isApplied vẫn là false
-        logger.warn('Error checking saved/applied job status', { userId, jobId, error: error.message });
+        // Kiểm tra đã apply job chưa
+        const application = await Application.findOne({
+          candidateProfileId: candidateProfile._id,
+          jobId
+        });
+        isApplied = !!application;
       }
+    } catch (error) {
+      // Nếu có lỗi khi kiểm tra, isSaved và isApplied vẫn là false
+      logger.warn('Error checking saved/applied job status', { userId, jobId, error: error.message });
     }
+  }
 
-    // tường minh
-    return {
-      _id: job._id,
-      title: job.title,
-      description: job.description,
-      requirements: job.requirements,
-      benefits: job.benefits,
-      location: job.location,
-      address: job.address,
-      type: job.type,
-      workType: job.workType,
-      minSalary: job.minSalary,
-      maxSalary: job.maxSalary,
-      deadline: job.deadline,
-      experience: job.experience,
-      category: job.category,
-      skills: job.skills,
-      area: job.area,
-      status: job.status,
-      approved: job.approved,
-      company: {
-        name: job.recruiterProfileId.company.name,
-        logo: job.recruiterProfileId.company.logo,
-        _id: job.recruiterProfileId.company._id
-      },
-      isSaved,
-      isApplied
+  // tường minh
+  return {
+    _id: job._id,
+    title: job.title,
+    description: job.description,
+    requirements: job.requirements,
+    benefits: job.benefits,
+    location: job.location,
+    address: job.address,
+    type: job.type,
+    workType: job.workType,
+    minSalary: job.minSalary,
+    maxSalary: job.maxSalary,
+    deadline: job.deadline,
+    experience: job.experience,
+    category: job.category,
+    skills: job.skills,
+    area: job.area,
+    status: job.status,
+    approved: job.approved,
+    company: {
+      name: job.recruiterProfileId.company.name,
+      logo: job.recruiterProfileId.company.logo,
+      _id: job.recruiterProfileId.company._id
+    },
+    isSaved,
+    isApplied
 
-    };
+  };
 };
 
 /**
@@ -432,20 +431,20 @@ export const updateJob = async (jobId, userId, updateData) => {
 
   // Xử lý trường hợp sử dụng địa chỉ công ty
   let finalUpdateData = { ...updateData };
-  
+
   if (updateData.useCompanyAddress) {
     if (!recruiterProfile.company.location || !recruiterProfile.company.address) {
       throw new BadRequestError('Thông tin địa chỉ công ty chưa đầy đủ. Vui lòng cập nhật thông tin công ty trước.');
     }
-    
+
     // Copy location từ company
     finalUpdateData.location = { ...recruiterProfile.company.location };
     finalUpdateData.address = recruiterProfile.company.address;
-    
+
     // Kiểm tra và sửa coordinates nếu không đầy đủ
-    if (finalUpdateData.location.coordinates && 
-        (!finalUpdateData.location.coordinates.coordinates || 
-         finalUpdateData.location.coordinates.coordinates.length !== 2)) {
+    if (finalUpdateData.location.coordinates &&
+      (!finalUpdateData.location.coordinates.coordinates ||
+        finalUpdateData.location.coordinates.coordinates.length !== 2)) {
       // Nếu coordinates không đầy đủ, tạo tọa độ mặc định
       finalUpdateData.location.coordinates = {
         type: 'Point',
@@ -489,31 +488,31 @@ export const deleteJob = async (jobId, userId) => {
  * @returns {Promise<{applicantCount: number}>} Số lượng ứng viên
  */
 export const getApplicantCount = async (jobId, userId) => {
-    // 1. Kiểm tra ứng viên và tin tuyển dụng có tồn tại không
-    const job = await Job.findById(jobId);
-    if (!job || job.status !== 'ACTIVE') {
-      throw new NotFoundError('Tin tuyển dụng không tồn tại hoặc đã hết hạn.');
-    }
+  // 1. Kiểm tra ứng viên và tin tuyển dụng có tồn tại không
+  const job = await Job.findById(jobId);
+  if (!job || job.status !== 'ACTIVE') {
+    throw new NotFoundError('Tin tuyển dụng không tồn tại hoặc đã hết hạn.');
+  }
 
-    // 2. Kiểm tra và trừ xu của ứng viên
-    const candidateUser = await User.findById(userId);
-    if (!candidateUser) {
-      throw new NotFoundError('Không tìm thấy tài khoản người dùng.');
-    }
+  // 2. Kiểm tra và trừ xu của ứng viên
+  const candidateUser = await User.findById(userId);
+  if (!candidateUser) {
+    throw new NotFoundError('Không tìm thấy tài khoản người dùng.');
+  }
 
-    const VIEW_APPLICANT_COST = 10;
-    if (candidateUser.coinBalance < VIEW_APPLICANT_COST) {
-      throw new BadRequestError(`Bạn không đủ xu. Cần ${VIEW_APPLICANT_COST} xu để xem.`);
-    }
+  const VIEW_APPLICANT_COST = 10;
+  if (candidateUser.coinBalance < VIEW_APPLICANT_COST) {
+    throw new BadRequestError(`Bạn không đủ xu. Cần ${VIEW_APPLICANT_COST} xu để xem.`);
+  }
 
-    // Trừ xu
-    candidateUser.coinBalance -= VIEW_APPLICANT_COST;
-    await candidateUser.save();
+  // Trừ xu
+  candidateUser.coinBalance -= VIEW_APPLICANT_COST;
+  await candidateUser.save();
 
-    // 3. Đếm số lượng ứng viên đã nộp đơn
-    const applicantCount = await Application.countDocuments({ jobId });
+  // 3. Đếm số lượng ứng viên đã nộp đơn
+  const applicantCount = await Application.countDocuments({ jobId });
 
-    return { applicantCount };
+  return { applicantCount };
 };
 
 /**
@@ -621,11 +620,11 @@ export const applyToJob = async (userId, jobId, applicationData) => {
 
     // Gửi sự kiện APPLY_JOB
     kafkaService.sendUserInteraction({
-        eventType: 'APPLY_JOB',
-        userId,
-        jobId,
-        timestamp: new Date().toISOString(),
-        details: { weight: 5 }
+      eventType: 'APPLY_JOB',
+      userId,
+      jobId,
+      timestamp: new Date().toISOString(),
+      details: { weight: 5 }
     });
 
     // --- BẮT ĐẦU GỬI SỰ KIỆN THÔNG BÁO ---
@@ -662,10 +661,10 @@ export const applyToJob = async (userId, jobId, applicationData) => {
     return application;
 
   } catch (error) {
-    logger.error(`Lỗi khi nộp đơn: ${error.message}`, { 
-      userId, jobId, cvId, cvTemplateId, error 
+    logger.error(`Lỗi khi nộp đơn: ${error.message}`, {
+      userId, jobId, cvId, cvTemplateId, error
     });
-    
+
     if (error instanceof BadRequestError || error instanceof NotFoundError) {
       throw error;
     }
@@ -764,7 +763,7 @@ export const getSavedJobs = async (userId, options) => {
 
     // Sort theo thời gian tạo
     { $sort: sortOptions },
-    
+
     // Lookup để lấy thông tin job
     {
       $lookup: {
@@ -774,13 +773,13 @@ export const getSavedJobs = async (userId, options) => {
         as: 'job'
       }
     },
-    
+
     // Unwind job (chuyển từ array thành object)
     { $unwind: '$job' },
-    
+
     // Filter chỉ lấy job đang active
     { $match: { 'job.status': 'ACTIVE' } },
-    
+
     // Lookup để lấy thông tin recruiter và company từ job
     {
       $lookup: {
@@ -790,27 +789,27 @@ export const getSavedJobs = async (userId, options) => {
         as: 'recruiter'
       }
     },
-    
+
     // Unwind recruiter
     { $unwind: '$recruiter' },
-    
+
     // Project để format lại dữ liệu - chỉ lấy các trường cần thiết từ job và company
     {
       $project: {
-          _id: 1,
-          jobId: '$job._id',
-          title: '$job.title',
-          minSalary: { $toString: '$job.minSalary' },
-          maxSalary: { $toString: '$job.maxSalary' },
-          deadline: '$job.deadline',
-          area: '$job.area',
-          company: {
-            name: '$recruiter.company.name',
-            logo: '$recruiter.company.logo'
-          }
+        _id: 1,
+        jobId: '$job._id',
+        title: '$job.title',
+        minSalary: { $toString: '$job.minSalary' },
+        maxSalary: { $toString: '$job.maxSalary' },
+        deadline: '$job.deadline',
+        area: '$job.area',
+        company: {
+          name: '$recruiter.company.name',
+          logo: '$recruiter.company.logo'
+        }
       }
     },
-    
+
     // Facet để đếm tổng số và phân trang
     {
       $facet: {
@@ -826,7 +825,7 @@ export const getSavedJobs = async (userId, options) => {
   ];
 
   const [result] = await SavedJob.aggregate(pipeline);
-  
+
   const savedJobs = result.data || [];
   const totalSavedJobs = result.totalCount[0]?.count || 0;
 
@@ -836,6 +835,78 @@ export const getSavedJobs = async (userId, options) => {
       currentPage: parseInt(page),
       totalPages: Math.ceil(totalSavedJobs / limit),
       totalItems: totalSavedJobs,
+      limit: parseInt(limit),
+    },
+  };
+};
+
+/**
+ * Lấy danh sách các tin tuyển dụng của một công ty
+ * @param {string} companyId - ID của công ty
+ * @param {object} options - Tùy chọn truy vấn (phân trang, lọc, sắp xếp)
+ * @returns {Promise<object>} Danh sách tin tuyển dụng và thông tin phân trang
+ */
+export const getJobsByCompany = async (companyId, options = {}) => {
+  const { page = 1, limit = 10, province, sortBy, ...filters } = options;
+
+  // Find recruiter profile by company ID
+  const recruiterProfile = await RecruiterProfile.findOne({
+    'company._id': new mongoose.Types.ObjectId(companyId)
+  }).lean();
+
+  if (!recruiterProfile) {
+    throw new NotFoundError('Không tìm thấy công ty.');
+  }
+
+  // Build query
+  const query = {
+    status: 'ACTIVE',
+    approved: true,
+    recruiterProfileId: recruiterProfile._id
+  };
+
+  // Add province filter
+  if (province) {
+    query['location.province'] = province;
+  }
+
+  // Sort options
+  const sortOptions = {};
+  if (sortBy) {
+    const [field, order] = sortBy.split(':');
+    sortOptions[field] = order === 'desc' ? -1 : 1;
+  } else {
+    sortOptions.createdAt = -1;
+  }
+
+  const skip = (page - 1) * limit;
+
+  const jobs = await Job.find(query)
+    .populate({
+      path: 'recruiterProfileId',
+      select: 'company.name company.logo'
+    })
+    .sort(sortOptions)
+    .skip(skip)
+    .limit(limit)
+    .lean();
+
+  const totalJobs = await Job.countDocuments(query);
+
+  const formattedJobs = jobs.map(job => {
+    if (job.recruiterProfileId && job.recruiterProfileId.company) {
+      job.company = job.recruiterProfileId.company;
+    }
+    delete job.recruiterProfileId;
+    return job;
+  });
+
+  return {
+    data: formattedJobs,
+    meta: {
+      currentPage: parseInt(page),
+      totalPages: Math.ceil(totalJobs / limit),
+      totalItems: totalJobs,
       limit: parseInt(limit),
     },
   };

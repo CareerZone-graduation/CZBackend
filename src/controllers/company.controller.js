@@ -1,5 +1,6 @@
 import asyncHandler from 'express-async-handler';
 import * as companyService from '../services/company.service.js';
+import * as jobService from '../services/job.service.js';
 import * as companySchema from '../schemas/company.schema.js';
 import { BadRequestError } from '../utils/AppError.js';
 
@@ -105,5 +106,22 @@ export const getCompanyById = asyncHandler(async (req, res) => {
     success: true,
     message: 'Lấy thông tin chi tiết công ty thành công.',
     data: company,
+  });
+});
+
+// @desc    Get all jobs from a specific company (public)
+// @route   GET /api/v1/companies/:id/jobs
+// @access  Public
+export const getJobsByCompany = asyncHandler(async (req, res) => {
+  const { id: companyId } = req.params;
+  const options = { ...req.query, companyId };
+  
+  const result = await jobService.getJobsByCompany(companyId, options);
+  
+  res.status(200).json({
+    success: true,
+    message: 'Lấy danh sách việc làm của công ty thành công.',
+    data: result.data,
+    meta: result.meta,
   });
 });

@@ -1,14 +1,16 @@
 import { z } from 'zod';
 import { provinceNames, locationMap } from '../constants/locations.enum.js'; // Import dữ liệu địa điểm
 
+
+
 const industryEnum = z.enum([
-    'Công nghệ thông tin', 'Tài chính', 'Y tế', 'Giáo dục', 'Sản xuất',
-    'Bán lẻ', 'Xây dựng', 'Du lịch', 'Nông nghiệp', 'Truyền thông',
-    'Vận tải', 'Bất động sản', 'Dịch vụ', 'Khởi nghiệp', 'Nhà hàng - Khách sạn',
-    'Bảo hiểm', 'Logistics', 'Năng lượng', 'Viễn thông', 'Dược phẩm',
-    'Hóa chất', 'Ô tô - Xe máy', 'Thực phẩm - Đồ uống', 'Thời trang - Mỹ phẩm',
-    'Thể thao - Giải trí', 'Công nghiệp nặng', 'Công nghiệp điện tử', 'Công nghiệp cơ khí',
-    'Công nghiệp dệt may', "Đa lĩnh vực", 'Khác'
+  'Công nghệ thông tin', 'Tài chính', 'Y tế', 'Giáo dục', 'Sản xuất',
+  'Bán lẻ', 'Xây dựng', 'Du lịch', 'Nông nghiệp', 'Truyền thông',
+  'Vận tải', 'Bất động sản', 'Dịch vụ', 'Khởi nghiệp', 'Nhà hàng - Khách sạn',
+  'Bảo hiểm', 'Logistics', 'Năng lượng', 'Viễn thông', 'Dược phẩm',
+  'Hóa chất', 'Ô tô - Xe máy', 'Thực phẩm - Đồ uống', 'Thời trang - Mỹ phẩm',
+  'Thể thao - Giải trí', 'Công nghiệp nặng', 'Công nghiệp điện tử', 'Công nghiệp cơ khí',
+  'Công nghiệp dệt may', "Đa lĩnh vực", 'Khác'
 ]);
 
 
@@ -27,8 +29,8 @@ const locationSchema = z.object({
 
 
 const contactInfoSchema = z.object({
-    email: z.string().email('Please enter a valid email').trim().toLowerCase().optional(),
-    phone: z.string().regex(/^[\+]?[\d]{1,15}$/, 'Please enter a valid phone number').trim().optional(),
+  email: z.string().email('Please enter a valid email').trim().toLowerCase().optional(),
+  phone: z.string().regex(/^[\+]?[\d]{1,15}$/, 'Please enter a valid phone number').trim().optional(),
 }).optional();
 
 
@@ -59,19 +61,19 @@ const baseCompanySchema = z.object({
   // THÊM CÁC TRƯỜNG MỚI
   location: locationSchema,
   address: z.string().trim().min(1, 'Địa chỉ chi tiết là bắt buộc').max(200),
-  
+
   // XÓA BỎ TRƯỜNG CŨ
   // address: addressSchema, 
 
   contactInfo: contactInfoSchema,
 }).refine(data => {
-    const provinceData = locationMap.get(data.location.province);
-    if (!provinceData) return false;
-    return provinceData.districts.some(d => d.name === data.location.district);
-  }, {
-    message: 'Quận/Huyện không thuộc Tỉnh/Thành phố đã chọn.',
-    path: ['location', 'district'],
-  })
+  const provinceData = locationMap.get(data.location.province);
+  if (!provinceData) return false;
+  return provinceData.districts.some(d => d.name === data.location.district);
+}, {
+  message: 'Quận/Huyện không thuộc Tỉnh/Thành phố đã chọn.',
+  path: ['location', 'district'],
+})
   .refine(data => {
     const provinceData = locationMap.get(data.location.province);
     const districtData = provinceData.districts.find(d => d.name === data.location.district);
@@ -112,23 +114,86 @@ export const updateCompanySchema = z.object({
   // Location và address optional cho update
   location: locationSchema.optional(),
   address: z.string().trim().min(1, 'Địa chỉ chi tiết là bắt buộc').max(200).optional(),
-  
+
   contactInfo: contactInfoSchema,
 }).refine(data => {
-    if (!data.location) return true;
-    const provinceData = locationMap.get(data.location.province);
-    if (!provinceData) return false;
-    if (data.location.district && !provinceData.districts.some(d => d.name === data.location.district)) {
-        return false;
+  if (!data.location) return true;
+  const provinceData = locationMap.get(data.location.province);
+  if (!provinceData) return false;
+  if (data.location.district && !provinceData.districts.some(d => d.name === data.location.district)) {
+    return false;
+  }
+  if (data.location.district && data.location.commune) {
+    const districtData = provinceData.districts.find(d => d.name === data.location.district);
+    if (!districtData || !districtData.communes.includes(data.location.commune)) {
+      return false;
     }
-    if (data.location.district && data.location.commune) {
-        const districtData = provinceData.districts.find(d => d.name === data.location.district);
-        if (!districtData || !districtData.communes.includes(data.location.commune)) {
-            return false;
-        }
-    }
-    return true;
+  }
+  return true;
 }, {
-    message: 'Địa chỉ không hợp lệ.',
-    path: ['location'],
+  message: 'Địa chỉ không hợp lệ.',
+  path: ['location'],
+});
+
+/**
+ * Company jobs query parameters validation schema
+ * @typedef {Object} CompanyJobsQuery
+ * @property {number} page - Page number (default 1, min 1)
+ * @property {number} limit - Items per page (default 10, min 1, max 50)
+ * @property {string} province - Province filter (optional)
+ * @property {string} sortBy - Sort field and order (optional)
+ */
+export const companyJobsQuerySchema = z.object({
+  page: z.preprocess(
+    (val) => {
+      const sanitized = String(val || '1').trim();
+      const parsed = parseInt(sanitized, 10);
+      return isNaN(parsed) ? 1 : parsed;
+    },
+    z.number()
+      .int('Số trang phải là số nguyên hợp lệ')
+      .min(1, 'Số trang phải lớn hơn hoặc bằng 1')
+      .default(1)
+  ),
+  limit: z.preprocess(
+    (val) => {
+      const sanitized = String(val || '10').trim();
+      const parsed = parseInt(sanitized, 10);
+      return isNaN(parsed) ? 10 : parsed;
+    },
+    z.number()
+      .int('Số lượng kết quả phải là số nguyên hợp lệ')
+      .min(1, 'Số lượng kết quả phải lớn hơn hoặc bằng 1')
+      .max(50, 'Số lượng kết quả không được vượt quá 50')
+      .default(10)
+  ),
+  province: z.preprocess(
+    (val) => {
+      if (!val || typeof val !== 'string') return undefined;
+      return val.trim();
+    },
+    z.enum(provinceNames, {
+      errorMap: () => {
+        return {
+          message: `Tỉnh/Thành phố không hợp lệ. Các giá trị cho phép: ${provinceNames.join(', ')}`
+        };
+      }
+    }).optional()
+  ),
+  sortBy: z.preprocess(
+    (val) => {
+      if (!val || typeof val !== 'string') return undefined;
+      return val.trim();
+    },
+    z.string()
+      .regex(/^(createdAt|deadline|minSalary|maxSalary):(asc|desc)$/, {
+        message: 'Tham số sắp xếp phải theo định dạng "trường:thứ_tự". ' +
+          'Các trường hợp lệ: createdAt, deadline, minSalary, maxSalary. ' +
+          'Thứ tự: asc (tăng dần) hoặc desc (giảm dần). ' +
+          'Ví dụ: createdAt:desc'
+      })
+      .optional()
+  )
+}).strict({
+  message: 'Chỉ chấp nhận các tham số truy vấn hợp lệ: page, limit, province, sortBy'
 });
