@@ -50,3 +50,19 @@ export const changePassword = asyncHandler(async (req, res) => {
         message: 'Đổi mật khẩu thành công.',
     });
 });
+
+/**
+ * Get the coin recharge history of the currently logged-in user.
+ * @route GET /api/users/me/recharge-history
+ * @access Private
+ */
+export const getRechargeHistory = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    const { meta, data } = await userService.getRechargeHistory(userId, req.query);
+    res.status(200).json({
+        success: true,
+        message: 'Lấy lịch sử nạp xu thành công.',
+        meta,
+        data,
+    });
+});

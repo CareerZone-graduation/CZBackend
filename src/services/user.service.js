@@ -1,4 +1,4 @@
-import { User, CandidateProfile, RecruiterProfile } from '../models/index.js';
+import { User, CandidateProfile, RecruiterProfile, CoinRecharge } from '../models/index.js';
 import { NotFoundError, BadRequestError } from '../utils/AppError.js';
 
 /**
@@ -68,4 +68,35 @@ export const getCoinBalance = async (userId) => {
     throw new NotFoundError('Không tìm thấy người dùng.');
   }
   return user.coinBalance;
+};
+
+/**
+ * Get coin recharge history for a user.
+ * @param {string} userId - The ID of the user.
+ * @param {object} query - The query parameters for pagination.
+ * @returns {Promise<Object>} The user's coin recharge history.
+ */
+export const getRechargeHistory = async (userId, query) => {
+    const { page = 1, limit = 10 } = query;
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+        CoinRecharge.find({ userId })
+            .select('-__v -userId -metadata') // Loại bỏ các trường không cần thiết
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(Number(limit))
+            .lean(),
+        CoinRecharge.countDocuments({ userId }),
+    ]);
+
+    return {
+        meta: {
+            total,
+            page: Number(page),
+            limit: Number(limit),
+            totalPages: Math.ceil(total / limit),
+        },
+        data,
+    };
 };

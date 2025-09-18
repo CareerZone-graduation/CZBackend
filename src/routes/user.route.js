@@ -2,7 +2,7 @@ import express from 'express';
 import passport from 'passport';
 import * as userController from '../controllers/user.controller.js';
 import { validate } from '../middleware/validation.middleware.js';
-import { updateUserProfileSchema as updateUserSchema } from '../schemas/user.schema.js';
+import { updateUserProfileSchema as updateUserSchema, getRechargeHistorySchema } from '../schemas/user.schema.js';
 
 const router = express.Router();
 
@@ -16,5 +16,9 @@ router.route('/change-password')
 
 router.route('/me/coins')
     .get(jwtAuth, userController.getCoinBalance);
+// router.route('/me/recharge-history')
+//     .get(jwtAuth, validate({ query: getRechargeHistorySchema }), userController.getRechargeHistory);
+router.route('/me/recharge-history')
+    .get(jwtAuth, validate(getRechargeHistorySchema,"query"), userController.getRechargeHistory);
 
 export default router;

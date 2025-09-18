@@ -30,6 +30,7 @@ testapi
 *.http
 .trae
 docs
+.kilocode
 /docs
 MIGRATION_SUMMARY.md
 /.github
@@ -45,3 +46,4 @@ test-websocket-chat.html
 .ignore
 scripts
 .kiro
+.kilocode

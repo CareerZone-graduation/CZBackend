@@ -221,3 +221,8 @@ export const updateUserProfileSchema = z.object({
   isRepresentative: z.boolean().optional(),
   company: z.string().optional() // Assuming company ID is a string
 });
+
+export const getRechargeHistorySchema = z.object({
+    page: z.string().regex(/^\d+$/, "Trang phải là một số").optional().default('1'),
+    limit: z.string().regex(/^\d+$/, "Giới hạn phải là một số").optional().default('10'),
+});
