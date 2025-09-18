@@ -26,8 +26,8 @@ const jobAlertSubscriptionSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Frequency is required'],
     enum: {
-        values: ['daily', 'weekly'],
-        message: '{VALUE} is not a valid frequency'
+      values: ['daily', 'weekly'],
+      message: '{VALUE} is not a valid frequency'
     },
     default: 'weekly'
   },
@@ -35,8 +35,8 @@ const jobAlertSubscriptionSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Salary range is required'],
     enum: {
-        values: ['UNDER_10M', '10M_20M', '20M_30M', 'OVER_30M', 'ALL'],
-        message: '{VALUE} is not a valid salary range'
+      values: ['UNDER_10M', '10M_20M', '20M_30M', 'OVER_30M', 'ALL'],
+      message: '{VALUE} is not a valid salary range'
     }
   },
   type: {
@@ -85,6 +85,11 @@ const jobAlertSubscriptionSchema = new mongoose.Schema({
     },
     default: 'APPLICATION'
   },
+  lastNotificationSent: {
+    type: Date,
+    index: true
+  },
+  // Subscription management fields
   active: {
     type: Boolean,
     default: true
@@ -93,7 +98,9 @@ const jobAlertSubscriptionSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Indexes
-jobAlertSubscriptionSchema.index({ candidateId: 1, active: 1 });
+// Indexes for performance optimization
+jobAlertSubscriptionSchema.index({ candidateId: 1, active: 1, frequency: 1 });
+jobAlertSubscriptionSchema.index({ keyword: 1, active: 1 });
+jobAlertSubscriptionSchema.index({ lastNotificationSent: 1, frequency: 1 });
 
 export default mongoose.model('JobAlertSubscription', jobAlertSubscriptionSchema);

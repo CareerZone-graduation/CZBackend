@@ -52,13 +52,14 @@ const getTransporter = () => {
  * @param {string} [options.from] - Địa chỉ email gửi đi (mặc định là từ config).
  */
 export const sendEmail = async (options) => {
-    const { to, subject, template, data = {}, from = `CareerZone <${config.EMAIL_FROM}>` } = options;
+    const { to, subject, template, html: preRenderedHtml, data = {}, from = `CareerZone <${config.EMAIL_FROM}>` } = options;
 
     const currentTransporter = getTransporter(); // Lấy transporter
 
     try {
-        // 1) Render HTML based on a pug template
-        const html = pug.renderFile(path.join(__dirname, `../views/emails/${template}.pug`), data);
+        // 1) Render HTML if not provided
+        const html = preRenderedHtml || pug.renderFile(path.join(__dirname, `../views/emails/${template}.pug`), data);
+
 
         // 2) Define email options
         const mailOptions = {

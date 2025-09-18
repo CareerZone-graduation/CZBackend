@@ -1,0 +1,222 @@
+doctype html
+html(lang='vi')
+  head
+    meta(charset='UTF-8')
+    meta(name='viewport', content='width=device-width, initial-scale=1.0')
+    title Thông báo việc làm hàng ngày
+    style.
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f4f4f4;
+      }
+      .container {
+        background-color: #ffffff;
+        border-radius: 10px;
+        padding: 30px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+      .header {
+        text-align: center;
+        border-bottom: 3px solid #007bff;
+        padding-bottom: 20px;
+        margin-bottom: 30px;
+      }
+      .header h1 {
+        color: #007bff;
+        margin: 0;
+        font-size: 28px;
+      }
+      .header p {
+        color: #666;
+        margin: 10px 0 0 0;
+        font-size: 16px;
+      }
+      .summary {
+        background-color: #f8f9fa;
+        border-left: 4px solid #007bff;
+        padding: 15px 20px;
+        margin-bottom: 30px;
+        border-radius: 0 5px 5px 0;
+      }
+      .summary h2 {
+        margin: 0 0 10px 0;
+        color: #007bff;
+        font-size: 20px;
+      }
+      .summary p {
+        margin: 5px 0;
+        color: #555;
+      }
+      .job-card {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        background-color: #ffffff;
+        transition: box-shadow 0.3s ease;
+      }
+      .job-card:hover {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      }
+      .job-title {
+        color: #007bff;
+        font-size: 20px;
+        font-weight: bold;
+        margin: 0 0 10px 0;
+        text-decoration: none;
+      }
+      .job-title:hover {
+        text-decoration: underline;
+      }
+      .company-name {
+        color: #28a745;
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 10px;
+      }
+      .job-details {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        margin: 15px 0;
+      }
+      .job-detail {
+        background-color: #f8f9fa;
+        padding: 5px 10px;
+        border-radius: 15px;
+        font-size: 14px;
+        color: #555;
+      }
+      .job-detail.salary {
+        background-color: #e8f5e8;
+        color: #28a745;
+        font-weight: 600;
+      }
+      .job-detail.deadline {
+        background-color: #fff3cd;
+        color: #856404;
+        font-weight: 600;
+      }
+      .job-detail.urgent {
+        background-color: #f8d7da;
+        color: #721c24;
+        font-weight: 600;
+      }
+      .job-description {
+        color: #666;
+        font-size: 14px;
+        line-height: 1.5;
+        margin: 15px 0;
+      }
+      .view-job-btn {
+        display: inline-block;
+        background-color: #007bff;
+        color: white;
+        padding: 10px 20px;
+        text-decoration: none;
+        border-radius: 5px;
+        font-weight: 600;
+        margin-top: 15px;
+        transition: background-color 0.3s ease;
+      }
+      .view-job-btn:hover {
+        background-color: #0056b3;
+        color: white;
+      }
+      .footer {
+        margin-top: 40px;
+        padding-top: 20px;
+        border-top: 1px solid #e0e0e0;
+        text-align: center;
+        color: #666;
+        font-size: 14px;
+      }
+      .footer a {
+        color: #007bff;
+        text-decoration: none;
+      }
+      .footer a:hover {
+        text-decoration: underline;
+      }
+      .no-jobs {
+        text-align: center;
+        padding: 40px 20px;
+        color: #666;
+      }
+      .no-jobs h3 {
+        color: #007bff;
+        margin-bottom: 15px;
+      }
+      @media (max-width: 600px) {
+        body {
+          padding: 10px;
+        }
+        .container {
+          padding: 20px;
+        }
+        .job-details {
+          flex-direction: column;
+          gap: 10px;
+        }
+        .header h1 {
+          font-size: 24px;
+        }
+      }
+
+  body
+    .container
+      .header
+        h1 📧 Thông báo việc làm hàng ngày
+        p Xin chào #{user.name}!
+
+      .summary
+        h2 📊 Tóm tắt thông báo
+        p 🔍 Từ khóa: <strong>#{subscription.keyword}</strong>
+        p 📍 Khu vực: <strong>#{subscription.location}</strong>
+        p 📅 Tần suất: <strong>Hàng ngày</strong>
+        if totalJobs > 0
+          p 💼 Tìm thấy: <strong>#{totalJobs} việc làm mới</strong>
+        else
+          p 💼 Không có việc làm mới hôm nay
+
+      if jobs && jobs.length > 0
+        each job in jobs
+          .job-card
+            a.job-title(href=job.trackingUrl, target='_blank') #{job.title}
+            if job.recruiterProfileId && job.recruiterProfileId.company
+              .company-name 🏢 #{job.recruiterProfileId.company.name || 'Công ty không xác định'}
+            else
+              .company-name 🏢 Công ty không xác định
+            
+            .job-details
+              .job-detail 📍 #{job.location.district}, #{job.location.province}
+              .job-detail 💼 #{job.type}
+              .job-detail 🏠 #{job.workType}
+              .job-detail 🎯 #{job.experience}
+              if job.formattedSalary !== 'Thỏa thuận'
+                .job-detail.salary 💰 #{job.formattedSalary}
+              .job-detail.deadline ⏰ Hạn nộp: #{job.formattedDeadline}
+            
+            if job.description
+              .job-description
+                | #{job.description.substring(0, 200)}
+                if job.description.length > 200
+                  | ...
+            
+            a.view-job-btn(href=job.trackingUrl, target='_blank') Xem chi tiết việc làm
+      else
+        .no-jobs
+          h3 🔍 Không có việc làm mới
+          p Hôm nay chưa có việc làm nào phù hợp với tiêu chí tìm kiếm của bạn.
+          p Hãy thử điều chỉnh từ khóa hoặc mở rộng khu vực tìm kiếm.
+
+      .footer
+        p
+          | Bạn nhận được email này vì đã đăng ký thông báo việc làm với từ khóa "#{subscription.keyword}".
+        p
+          small © 2024 CareerConnect. Tất cả quyền được bảo lưu.

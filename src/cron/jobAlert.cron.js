@@ -2,70 +2,202 @@
 import cron from 'node-cron';
 import logger from '../utils/logger.js';
 import PendingNotification from '../models/PendingNotification.js';
+import JobAlertSubscription from '../models/JobAlertSubscription.js';
+import NotificationHistory from '../models/NotificationHistory.js';
+import Job from '../models/Job.js';
+import User from '../models/User.js';
 import { publishNotification } from '../services/queue.service.js';
 import { ROUTING_KEYS } from '../queues/rabbitmq.js';
-import JobAlertSubscription from '../models/JobAlertSubscription.js';
-import Job from '../models/Job.js';
-// tạm thời đổi thành mỗi 5s để kiểm tra /5 * * * * *
-// Chạy mỗi ngày lúc 2h sáng: '0 0 2 * * *'
-cron.schedule('0 0 2 * * *', async () => {
-// cron.schedule('0 8 * * *', async () => {
-    logger.info('Running daily digest cron job...');
+import NotificationTemplateService from '../services/notificationTemplate.service.js';
+
+/**
+ * Process periodic notifications for a specific frequency
+ * @param {string} frequency - 'daily' or 'weekly'
+ * @param {string} notificationType - 'DAILY' or 'WEEKLY'
+ */
+const processPeriodicNotifications = async (frequency, notificationType) => {
+    logger.info(`Starting ${frequency} notification processing...`);
+    
     try {
-        // Sử dụng aggregation pipeline để gom nhóm hiệu quả
-        const userDigests = await PendingNotification.aggregate([
+        // Get active subscriptions for the specified frequency
+        const subscriptions = await JobAlertSubscription.find({
+            frequency: frequency,
+            active: true
+        }).populate('candidateId', 'fullName email').lean();
+
+        logger.info(`Found ${subscriptions.length} active ${frequency} subscriptions`);
+
+        if (subscriptions.length === 0) {
+            logger.info(`No active ${frequency} subscriptions to process`);
+            return;
+        }
+
+        // Group pending notifications by user and subscription
+        const pendingNotification = await PendingNotification.aggregate([
+            {
+                $lookup: {
+                    from: 'jobalertsubscriptions',
+                    localField: 'subscriptionId',
+                    foreignField: '_id',
+                    as: 'subscription'
+                }
+            },
+            {
+                $unwind: '$subscription'
+            },
+            {
+                $match: {
+                    'subscription.frequency': frequency,
+                    'subscription.active': true
+                }
+            },
             {
                 $group: {
-                    _id: "$userId",
-                    jobIds: { $addToSet: "$jobId" }
+                    _id: {
+                        userId: '$userId',
+                        subscriptionId: '$subscriptionId'
+                    },
+                    jobIds: { $addToSet: '$jobId' },
+                    subscription: { $first: '$subscription' }
                 }
             }
         ]);
 
-        logger.info(`Found ${userDigests.length} users with pending notifications.`, { userDigests });
-        if (userDigests.length === 0) {
-            logger.info('No pending notifications to process.');
-            return;
-        }
+        logger.info(`Found ${pendingNotification.length} user-subscription pairs with pending notifications`);
 
-        for (const digest of userDigests) {
-            const userId = digest._id;
-            const jobIds = digest.jobIds;
-            logger.info(`Processing user ${userId} with jobIds:`, { jobIds });
+        let processedCount = 0;
+        let errorCount = 0;
+        const errors = [];
 
-            const jobs = await Job.find({ _id: { $in: jobIds } })
-                .populate({ path: 'recruiterProfileId', select: 'company.name company.logo' })
-                .limit(10)
-                .lean();
-            logger.info(`Found ${jobs.length} jobs for user ${userId}.`);
-            if (jobs.length > 0) {
-                // đẩy vào queue để gửi thông báo
-                logger.info(`Publishing notification for user ${userId} with ${jobs.length} jobs.`);
-                 await publishNotification(ROUTING_KEYS.DAILY_DIGEST, {
-                    type: 'DAILY_JOB_ALERT',
-                    recipientId: userId.toString(),
-                    data: {
-                        keyword: "việc làm mới phù hợp",
-                        jobs: jobs.map(j => ({ // Format lại dữ liệu
-                            _id: j._id,
-                            title: j.title,
-                            companyName: j.recruiterProfileId?.company?.name || 'Công ty ẩn danh',
-                            companyLogo: j.recruiterProfileId?.company?.logo,
-                            location: j.location,
-                            minSalary: j.minSalary,
-                            maxSalary: j.maxSalary,
-                        })),
-                        notificationMethod: "BOTH" // Mặc định gửi cả 2 kênh
-                    },
+        // Process each user-subscription pair
+        for (const userNotification of pendingNotification) {
+            try {
+                const { userId, subscriptionId } = userNotification._id;
+                const { jobIds, subscription } = userNotification;
+
+                // Get user details
+                const user = await User.findById(userId).select('email').lean();
+                if (!user) {
+                    logger.warn(`User ${userId} not found, skipping notification`);
+                    continue;
+                }
+
+                // Get job details
+                const jobs = await Job.find({ _id: { $in: jobIds } })
+                    .populate('recruiterProfileId', 'company.name company.logo')
+                    .limit(20) // Limit to prevent email overload
+                    .lean();
+
+                if (jobs.length === 0) {
+                    logger.warn(`No jobs found for user ${userId}, subscription ${subscriptionId}`);
+                    continue;
+                }
+
+                // Create notification history record
+                const notificationHistory = await NotificationHistory.create({
+                    userId: userId,
+                    subscriptionId: subscriptionId,
+                    notificationType: notificationType,
+                    jobIds: jobs.map(job => job._id),
+                    deliveryMethod: subscription.notificationMethod,
+                    status: 'SENT'
                 });
+
+
+                // Publish to notification queue
+                await publishNotification(
+                    frequency === 'daily' ? ROUTING_KEYS.JOB_ALERT_DAILY : ROUTING_KEYS.JOB_ALERT_WEEKLY,
+                    {
+                        type: 'JOB_ALERT',
+                        recipientId: userId.toString(),
+                        data: {
+                            notificationHistoryId: notificationHistory._id.toString()
+                        }
+                    }
+                );
+
+                // Update subscription's last notification sent time
+                await JobAlertSubscription.findByIdAndUpdate(subscriptionId, {
+                    lastNotificationSent: new Date()
+                });
+
+                processedCount++;
+                logger.info(`Processed ${frequency} notification for user ${userId}, subscription ${subscriptionId} with ${jobs.length} jobs`);
+
+            } catch (error) {
+                errorCount++;
+                const errorInfo = {
+                    error: error.message,
+                    stack: error.stack,
+                    userId: userNotification._id.userId,
+                    subscriptionId: userNotification._id.subscriptionId,
+                    timestamp: new Date().toISOString()
+                };
+                
+                errors.push(errorInfo);
+                logger.error(`Error processing ${frequency} notification for user ${userNotification._id.userId}:`, errorInfo);
             }
         }
 
-        // Sau khi đã đẩy hết vào queue, xóa các bản ghi đã xử lý
-        await PendingNotification.deleteMany({});
-        logger.info(`Daily digest cron job completed. Processed ${userDigests.length} users.`);
+        // Clean up processed pending notifications
+        const processedSubscriptionIds = pendingNotification.map(un => un._id.subscriptionId);
+        if (processedSubscriptionIds.length > 0) {
+            await PendingNotification.deleteMany({
+                subscriptionId: { $in: processedSubscriptionIds }
+            });
+            logger.info(`Cleaned up pending notifications for ${processedSubscriptionIds.length} subscriptions`);
+        }
 
     } catch (error) {
-        logger.error('Error during daily digest cron job', { error: error.message, stack: error.stack });
+        logger.error(`Critical error during ${frequency} notification processing:`, {
+            error: error.message,
+            stack: error.stack
+        });
+        throw error;
     }
-}, { scheduled: true, timezone: "Asia/Ho_Chi_Minh" });
+};
+
+
+// Daily notification cron job - 8:00 AM
+// tạm thời chạy mỗi 10s để test
+cron.schedule('*/10 * * * * *', async () => {
+// cron.schedule('0 8 * * *', async () => {
+    try {
+        await processPeriodicNotifications('daily', 'DAILY');
+    } catch (error) {
+        logger.error('Daily notification cron job failed:', {
+            error: error.message,
+            stack: error.stack,
+            timestamp: new Date().toISOString()
+        });
+    }
+}, { 
+    scheduled: true, 
+    timezone: "Asia/Ho_Chi_Minh",
+    name: 'daily-notifications'
+});
+
+// Weekly notification cron job - Monday 8:00 AM
+cron.schedule('0 8 * * 1', async () => {
+    try {
+        await processPeriodicNotifications('weekly', 'WEEKLY');
+    } catch (error) {
+        logger.error('Weekly notification cron job failed:', {
+            error: error.message,
+            stack: error.stack,
+            timestamp: new Date().toISOString()
+        });
+    }
+}, { 
+    scheduled: true, 
+    timezone: "Asia/Ho_Chi_Minh",
+    name: 'weekly-notifications'
+});
+
+logger.info('Job alert cron jobs initialized:', {
+    dailyNotifications: '8:00 AM daily',
+    weeklyNotifications: '8:00 AM Monday',
+    cleanup: '2:00 AM daily',
+    healthMonitoring: 'Every 30 minutes',
+    timezone: 'Asia/Ho_Chi_Minh'
+});

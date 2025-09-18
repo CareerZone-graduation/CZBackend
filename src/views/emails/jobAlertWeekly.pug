@@ -1,0 +1,343 @@
+doctype html
+html(lang='vi')
+  head
+    meta(charset='UTF-8')
+    meta(name='viewport', content='width=device-width, initial-scale=1.0')
+    title Tổng hợp việc làm tuần
+    style.
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f4f4f4;
+      }
+      .container {
+        background-color: #ffffff;
+        border-radius: 10px;
+        padding: 30px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+      .header {
+        text-align: center;
+        border-bottom: 3px solid #28a745;
+        padding-bottom: 20px;
+        margin-bottom: 30px;
+      }
+      .header h1 {
+        color: #28a745;
+        margin: 0;
+        font-size: 28px;
+      }
+      .header p {
+        color: #666;
+        margin: 10px 0 0 0;
+        font-size: 16px;
+      }
+      .weekly-badge {
+        background: linear-gradient(135deg, #28a745, #20c997);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 14px;
+        font-weight: 600;
+        display: inline-block;
+        margin-bottom: 20px;
+      }
+      .summary {
+        background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+        border-left: 4px solid #28a745;
+        padding: 20px;
+        margin-bottom: 30px;
+        border-radius: 0 8px 8px 0;
+      }
+      .summary h2 {
+        margin: 0 0 15px 0;
+        color: #28a745;
+        font-size: 22px;
+      }
+      .summary-stats {
+        display: flex;
+        justify-content: space-around;
+        margin: 20px 0;
+        flex-wrap: wrap;
+      }
+      .stat-item {
+        text-align: center;
+        padding: 10px;
+        background-color: white;
+        border-radius: 8px;
+        margin: 5px;
+        flex: 1;
+        min-width: 120px;
+      }
+      .stat-number {
+        font-size: 24px;
+        font-weight: bold;
+        color: #28a745;
+        display: block;
+      }
+      .stat-label {
+        font-size: 12px;
+        color: #666;
+        text-transform: uppercase;
+      }
+      .jobs-section {
+        margin-bottom: 30px;
+      }
+      .section-title {
+        color: #28a745;
+        font-size: 20px;
+        font-weight: bold;
+        margin: 30px 0 20px 0;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #e9ecef;
+      }
+      .job-card {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 15px;
+        background-color: #ffffff;
+        transition: all 0.3s ease;
+        position: relative;
+      }
+      .job-card:hover {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        transform: translateY(-2px);
+      }
+      .job-card.featured {
+        border-left: 4px solid #ffc107;
+        background: linear-gradient(135deg, #fff, #fffbf0);
+      }
+      .featured-badge {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background-color: #ffc107;
+        color: #212529;
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+      }
+      .job-title {
+        color: #28a745;
+        font-size: 18px;
+        font-weight: bold;
+        margin: 0 0 10px 0;
+        text-decoration: none;
+        display: block;
+      }
+      .job-title:hover {
+        text-decoration: underline;
+      }
+      .company-name {
+        color: #007bff;
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 12px;
+      }
+      .job-details {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 12px 0;
+      }
+      .job-detail {
+        background-color: #f8f9fa;
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 13px;
+        color: #555;
+      }
+      .job-detail.salary {
+        background-color: #e8f5e8;
+        color: #28a745;
+        font-weight: 600;
+      }
+      .job-detail.deadline {
+        background-color: #fff3cd;
+        color: #856404;
+        font-weight: 600;
+      }
+      .job-detail.new {
+        background-color: #d1ecf1;
+        color: #0c5460;
+        font-weight: 600;
+      }
+      .job-summary {
+        color: #666;
+        font-size: 14px;
+        line-height: 1.4;
+        margin: 12px 0;
+      }
+      .view-job-btn {
+        display: inline-block;
+        background: linear-gradient(135deg, #28a745, #20c997);
+        color: white;
+        padding: 8px 16px;
+        text-decoration: none;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 14px;
+        margin-top: 10px;
+        transition: all 0.3s ease;
+      }
+      .view-job-btn:hover {
+        background: linear-gradient(135deg, #218838, #1ea085);
+        color: white;
+        transform: translateY(-1px);
+      }
+      .footer {
+        margin-top: 40px;
+        padding-top: 20px;
+        border-top: 1px solid #e0e0e0;
+        text-align: center;
+        color: #666;
+        font-size: 14px;
+      }
+      .footer a {
+        color: #28a745;
+        text-decoration: none;
+      }
+      .footer a:hover {
+        text-decoration: underline;
+      }
+      .no-jobs {
+        text-align: center;
+        padding: 40px 20px;
+        color: #666;
+        background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+        border-radius: 8px;
+      }
+      .no-jobs h3 {
+        color: #28a745;
+        margin-bottom: 15px;
+      }
+      .tips-section {
+        background-color: #e7f3ff;
+        border-left: 4px solid #007bff;
+        padding: 20px;
+        margin: 30px 0;
+        border-radius: 0 8px 8px 0;
+      }
+      .tips-section h3 {
+        color: #007bff;
+        margin: 0 0 15px 0;
+      }
+      .tips-section ul {
+        margin: 0;
+        padding-left: 20px;
+      }
+      .tips-section li {
+        margin-bottom: 8px;
+        color: #555;
+      }
+      @media (max-width: 600px) {
+        body {
+          padding: 10px;
+        }
+        .container {
+          padding: 20px;
+        }
+        .summary-stats {
+          flex-direction: column;
+        }
+        .job-details {
+          flex-direction: column;
+          gap: 8px;
+        }
+        .header h1 {
+          font-size: 24px;
+        }
+      }
+
+  body
+    .container
+      .header
+        .weekly-badge 📅 BÁO CÁO TUẦN
+        h1 📊 Tổng hợp việc làm tuần
+        p Xin chào #{user.name}!
+
+      .summary
+        h2 📈 Thống kê tuần này
+        .summary-stats
+          .stat-item
+            span.stat-number #{totalJobs}
+            span.stat-label Việc làm mới
+          .stat-item
+            span.stat-number #{subscription.keyword}
+            span.stat-label Từ khóa
+          .stat-item
+            span.stat-number #{subscription.location}
+            span.stat-label Khu vực
+        p 🔍 <strong>Từ khóa tìm kiếm:</strong> #{subscription.keyword}
+        p 📍 <strong>Khu vực:</strong> #{subscription.location}
+        p 📅 <strong>Tần suất:</strong> Hàng tuần (Thứ 2)
+
+      if jobs && jobs.length > 0
+        .jobs-section
+          .section-title 💼 Việc làm mới trong tuần
+
+          each job, index in jobs
+            .job-card(class=index < 3 ? 'featured' : '')
+              if index < 3
+                .featured-badge ⭐ Nổi bật
+              
+              a.job-title(href=job.trackingUrl, target='_blank') #{job.title}
+              if job.recruiterProfileId && job.recruiterProfileId.company
+                .company-name 🏢 #{job.recruiterProfileId.company.name || 'Công ty không xác định'}
+              else
+                .company-name 🏢 Công ty không xác định
+              
+              .job-details
+                .job-detail 📍 #{job.location.district}, #{job.location.province}
+                .job-detail 💼 #{job.type}
+                .job-detail 🏠 #{job.workType}
+                .job-detail 🎯 #{job.experience}
+                if job.formattedSalary !== 'Thỏa thuận'
+                  .job-detail.salary 💰 #{job.formattedSalary}
+                .job-detail.deadline ⏰ #{job.formattedDeadline}
+                .job-detail.new 🆕 Mới đăng
+              
+              if job.description
+                .job-summary
+                  | #{job.description.substring(0, 150)}
+                  if job.description.length > 150
+                    | ...
+              
+              a.view-job-btn(href=job.trackingUrl, target='_blank') 👀 Xem chi tiết
+
+        .tips-section
+          h3 💡 Gợi ý cho tuần tới
+          ul
+            li Hãy cập nhật CV của bạn để tăng cơ hội được chú ý
+            li Theo dõi các công ty bạn quan tâm để không bỏ lỡ cơ hội
+            li Chuẩn bị sẵn thư xin việc để ứng tuyển nhanh chóng
+            li Mở rộng mạng lưới kết nối nghề nghiệp trên LinkedIn
+
+      else
+        .no-jobs
+          h3 🔍 Tuần này chưa có việc làm mới
+          p Không có việc làm nào phù hợp với tiêu chí tìm kiếm của bạn trong tuần qua.
+          p Hãy thử điều chỉnh từ khóa hoặc mở rộng khu vực tìm kiếm để có thêm cơ hội.
+
+        .tips-section
+          h3 💡 Gợi ý cải thiện tìm kiếm
+          ul
+            li Thử sử dụng từ khóa tổng quát hơn (ví dụ: "marketing" thay vì "digital marketing manager")
+            li Mở rộng khu vực tìm kiếm sang các tỉnh thành lân cận
+            li Xem xét các vị trí tương tự hoặc cấp độ khác
+            li Đăng ký thêm thông báo với từ khóa khác
+
+      .footer
+        p 
+          | 📧 Bạn nhận được báo cáo tuần này vì đã đăng ký thông báo việc làm với từ khóa "#{subscription.keyword}".
+        p
+          | 📅 Báo cáo tiếp theo sẽ được gửi vào thứ 2 tuần sau.
+        p
+          small © 2024 CareerConnect. Tất cả quyền được bảo lưu.

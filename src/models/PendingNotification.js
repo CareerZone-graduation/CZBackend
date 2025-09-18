@@ -17,6 +17,19 @@ const pendingNotificationSchema = new mongoose.Schema({
         ref: 'JobAlertSubscription', 
         required: true 
     },
+    matchingSubscriptionIds: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'JobAlertSubscription'
+    }],
+    processed: {
+        type: Boolean,
+        default: false,
+        index: true
+    },
+    processedAt: {
+        type: Date,
+        index: true
+    },
     createdAt: { 
         type: Date, 
         default: Date.now,
@@ -24,8 +37,10 @@ const pendingNotificationSchema = new mongoose.Schema({
     }
 });
 
-// Index để tối ưu query của Cron Job và tránh ghi trùng lặp
+// Enhanced indexes for performance optimization
 pendingNotificationSchema.index({ userId: 1, subscriptionId: 1 });
 pendingNotificationSchema.index({ userId: 1, jobId: 1 }, { unique: true });
+pendingNotificationSchema.index({ processed: 1, createdAt: 1 });
+pendingNotificationSchema.index({ userId: 1, processed: 1 });
 
 export default mongoose.model('PendingNotification', pendingNotificationSchema);

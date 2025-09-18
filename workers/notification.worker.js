@@ -8,8 +8,103 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 import { getChannel, QUEUES, ROUTING_KEYS } from '../src/queues/rabbitmq.js';
 import * as notificationService from '../src/services/notification.service.js'; // Import toàn bộ service
 import * as emailService from '../src/services/email.service.js';
+import NotificationTemplateService from '../src/services/notificationTemplate.service.js';
 import connectDB from '../src/utils/connectDB.js';
 import logger from '../src/utils/logger.js';
+import NotificationHistory from '../src/models/NotificationHistory.js';
+import Job from '../src/models/Job.js';
+import User from '../src/models/User.js';
+import JobAlertSubscription from '../src/models/JobAlertSubscription.js';
+import Notification from '../src/models/Notification.js';
+import config from '../src/config/index.js';
+
+async function processJobAlertNotification(payload) {
+  const { notificationHistoryId } = payload.data;
+
+  if (!notificationHistoryId) {
+    logger.error('Job alert task is missing notificationHistoryId', { payload });
+    return;
+  }
+
+  try {
+    const history = await NotificationHistory.findById(notificationHistoryId).lean();
+    if (!history) {
+      logger.error(`NotificationHistory with ID ${notificationHistoryId} not found.`);
+      return;
+    }
+
+    const { userId, subscriptionId, jobIds, notificationType, deliveryMethod } = history;
+
+    // Fetch all data in parallel
+    const [user, subscription, jobs] = await Promise.all([
+      User.findById(userId).select('fullName email').lean(),
+      JobAlertSubscription.findById(subscriptionId).lean(),
+      Job.find({ _id: { $in: jobIds } })
+        .populate('recruiterProfileId', 'company.name company.logo')
+        .limit(20) // Consistent with cron job
+        .lean()
+    ]);
+
+    if (!user || !subscription || jobs.length === 0) {
+      logger.warn('Missing data for processing job alert notification.', { notificationHistoryId, userId, subscriptionId, hasJobs: jobs.length > 0 });
+      // TODO: Update history status to FAILED here
+      return;
+    }
+
+    const frequency = subscription.frequency; // 'daily' or 'weekly'
+    const templateType = notificationType; // 'DAILY' or 'WEEKLY'
+
+    // 1. Handle EMAIL notifications
+    if (deliveryMethod === 'EMAIL' || deliveryMethod === 'BOTH') {
+      const subject = NotificationTemplateService.generateSubject(jobs, subscription.keyword, frequency);
+      
+      const templateData = {
+          user,
+          jobs,
+          subscription,
+          notificationId: notificationHistoryId
+      };
+
+      const html = await NotificationTemplateService.generateEmailTemplate(templateType, templateData);
+
+      await emailService.sendEmail({
+        to: user.email,
+        subject,
+        html, // Pass pre-rendered HTML
+      });
+
+      logger.info(`Job alert email sent to ${user.email} for subscription ${subscriptionId}`);
+    }
+
+    // 2. Handle IN-APP notifications
+    if (deliveryMethod === 'APPLICATION' || deliveryMethod === 'BOTH') {
+        const title = NotificationTemplateService.generateSubject(jobs, subscription.keyword, frequency);
+        const message = `Có ${jobs.length} việc làm mới phù hợp với tìm kiếm của bạn cho từ khóa "${subscription.keyword}".`;
+
+        await Notification.create({
+            userId,
+            title,
+            message,
+            type: 'job_alert',
+            entity: {
+                type: 'JobAlertSubscription',
+                id: subscriptionId,
+            },
+            metadata: {
+                subscriptionId: subscriptionId.toString(),
+                jobIds: jobIds.map(j => j._id.toString()),
+                notificationHistoryId: notificationHistoryId.toString(),
+            },
+        });
+        logger.info(`In-app job alert created for user ${userId} for subscription ${subscriptionId}`);
+    }
+
+  } catch (error) {
+    logger.error(`Error processing job alert notification for history ID ${notificationHistoryId}:`, error);
+    // TODO: Update history status to FAILED
+    throw error; // Re-throw to let the queue handle retry/DLQ
+  }
+}
 
 /**
  * Khởi động worker để xử lý notification tasks
@@ -68,16 +163,19 @@ async function startWorker() {
         case ROUTING_KEYS.INTERVIEW_CANCEL:
           await notificationService.createInterviewCanceledNotification(payload.data.interviewId);
           break;
-
+          /////////////////////////// chưa implement
         case ROUTING_KEYS.INTERVIEW_COMPLETE:
           // Xử lý qua hàm legacy cho các loại interview khác
           await notificationService.processLegacyNotification(payload);
           logger.info(`📅 Interview notification processed via legacy handler`);
           break;
 
-        // === Daily Digest ===
-        case ROUTING_KEYS.DAILY_DIGEST:
-          await handleDailyDigest(payload);
+        case ROUTING_KEYS.JOB_ALERT_DAILY:
+          await processJobAlertNotification(payload);
+          break;
+
+        case ROUTING_KEYS.JOB_ALERT_WEEKLY:
+          await processJobAlertNotification(payload);
           break;
 
         // === Job and Company Related ===
@@ -152,6 +250,7 @@ async function handleStatusUpdate(payload) {
       logger.info(`📋 Interview scheduled notification created`);
       break;
     
+      //chưa implement
     case 'PROFILE_VIEW':
       // Thông báo khi hồ sơ được xem
       await notificationService.createProfileViewNotification(payload);
@@ -166,38 +265,6 @@ async function handleStatusUpdate(payload) {
   }
 }
 
-/**
- * Xử lý daily digest notifications
- * @param {Object} payload - Message payload
- */
-async function handleDailyDigest(payload) {
-  // TODO: Implement daily digest logic
-  logger.info(`📊 Daily digest processing - TODO: Implement this feature`);
-  // Tạm thời xử lý qua legacy handler
-  await notificationService.processLegacyNotification(payload);
-}
-
-// === Error Handling ===
-process.on('unhandledRejection', (reason, promise) => {
-  logger.error('🚨 Unhandled Rejection at:', promise, 'reason:', reason);
-  // Application specific logging, throwing an error, or other logic here
-});
-
-process.on('uncaughtException', (error) => {
-  logger.error('🚨 Uncaught Exception thrown:', error);
-  process.exit(1);
-});
-
-// === Graceful Shutdown ===
-process.on('SIGINT', () => {
-  logger.info('🛑 Received SIGINT. Graceful shutdown...');
-  process.exit(0);
-});
-
-process.on('SIGTERM', () => {
-  logger.info('🛑 Received SIGTERM. Graceful shutdown...');
-  process.exit(0);
-});
 
 // Start the worker
 startWorker().catch((error) => {

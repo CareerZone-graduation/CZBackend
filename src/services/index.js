@@ -12,3 +12,4 @@ export * as interviewService from './interview.service.js';
 export { adminService } from './admin.service.js';
 export * as templateService from './template.service.js';
 export * as cvService from './cv.service.js';
+export { default as notificationTemplateService } from './notificationTemplate.service.js';

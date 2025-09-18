@@ -31,11 +31,12 @@ export const ROUTING_KEYS = {
   INTERVIEW_RESCHEDULE: 'notification.interview_reschedule', // Dành cho dời lịch phỏng vấn
   INTERVIEW_CANCEL: 'notification.interview_cancel', // Dành cho hủy lịch phỏng vấn
   INTERVIEW_COMPLETE: 'notification.interview_complete', // Dành cho hoàn thành phỏng vấn
-  DAILY_DIGEST: 'notification.daily_digest', // Dành cho email tổng hợp tin tuyển dụng hàng ngày
   JOB_APPROVAL: 'notification.job_approval', // Dành cho thông báo phê duyệt tin tuyển dụng
   COMPANY_VERIFICATION: 'notification.company_verification', // Dành cho thông báo xác thực công ty
   EMAIL_SEND: 'notification.email.send', // Dành cho các tác vụ gửi email chung
   NEW_APPLICATION: 'notification.new_application', // Dành cho thông báo ứng viên mới apply
+  JOB_ALERT_DAILY: 'notification.job_alert.daily', // Dành cho thông báo việc làm hàng ngày
+  JOB_ALERT_WEEKLY: 'notification.job_alert.weekly', // Dành cho thông báo việc làm hàng tuần
 };
 
 /**
@@ -107,7 +108,8 @@ export async function getChannel() {
       durable: true,
       deadLetterExchange: DLX,
     });
-    await channel.bindQueue(QUEUES.DIGEST, EXCHANGE, ROUTING_KEYS.DAILY_DIGEST);
+    await channel.bindQueue(QUEUES.DIGEST, EXCHANGE, ROUTING_KEYS.JOB_ALERT_DAILY); // Job alert daily notifications
+    await channel.bindQueue(QUEUES.DIGEST, EXCHANGE, ROUTING_KEYS.JOB_ALERT_WEEKLY); // Job alert weekly notifications
 
     // 7. Queue chứa các message lỗi (Dead-Letter Queue - DLQ)
     // Queue này sẽ lưu trữ tất cả message được gửi từ DLX.

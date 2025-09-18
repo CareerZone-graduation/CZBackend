@@ -13,3 +13,4 @@ export { default as CV } from './CV.js';
 export { default as Conversation } from './Conversation.js';
 export { default as CandidateProfile } from './CandidateProfile.js';
 export { default as PendingNotification } from './PendingNotification.js';
+export { default as NotificationHistory } from './NotificationHistory.js';
