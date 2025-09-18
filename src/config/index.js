@@ -97,6 +97,10 @@ const config = {
   // Pagination
   DEFAULT_PAGE_SIZE: parseInt(process.env.DEFAULT_PAGE_SIZE) || 10,
   MAX_PAGE_SIZE: parseInt(process.env.MAX_PAGE_SIZE) || 100,
+
+  RECRUITER_FE_URL: process.env.RECRUITER_FE_URL || 'http://localhost:4000',
+  CANDIDATE_FE_URL: process.env.CANDIDATE_FE_URL || 'http://localhost:3000',
+  ADMIN_FE_URL: process.env.ADMIN_FE_URL || 'http://localhost:5000'
 };
 
 // Validate required environment variables

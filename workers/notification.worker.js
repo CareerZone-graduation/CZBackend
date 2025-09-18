@@ -16,7 +16,6 @@ import Job from '../src/models/Job.js';
 import User from '../src/models/User.js';
 import JobAlertSubscription from '../src/models/JobAlertSubscription.js';
 import Notification from '../src/models/Notification.js';
-import config from '../src/config/index.js';
 
 async function processJobAlertNotification(payload) {
   const { notificationHistoryId } = payload.data;
