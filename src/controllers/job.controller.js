@@ -154,3 +154,13 @@ export const hybridSearchJobs = asyncHandler(async (req, res) => {
     data: result.data,
   });
 });
+export const autocompleteJobTitles = asyncHandler(async (req, res) => {
+  const { query, limit } = req.query;
+  const suggestions = await jobService.autocompleteJobTitles(query, limit);
+  
+  res.status(200).json({
+    success: true,
+    message: 'Lấy gợi ý tiêu đề công việc thành công.',
+    data: suggestions,
+  });
+});

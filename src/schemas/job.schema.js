@@ -262,3 +262,10 @@ export const hybridSearchJobSchema = z.object({
     message: 'Quận/Huyện không thuộc Tỉnh/Thành phố đã chọn hoặc thiếu thông tin Tỉnh/Thành phố',
     path: ['district'],
   });
+// Schema for autocomplete request
+export const autocompleteJobSchema = z.object({
+  query: z.string({
+    required_error: 'Query là bắt buộc cho autocomplete'
+  }).trim().min(1, 'Query không được để trống').max(100, 'Query không được vượt quá 100 ký tự'),
+  limit: z.coerce.number().int().min(1, 'Limit phải lớn hơn 0').max(20, 'Limit không được vượt quá 20').default(10),
+});
