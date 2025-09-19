@@ -143,3 +143,14 @@ export const getJobDetailsForRecruiter = asyncHandler(async (req, res) => {
     data: jobDetails,
   });
 });
+
+export const hybridSearchJobs = asyncHandler(async (req, res) => {
+  const searchParams = req.query;
+  const result = await jobService.hybridSearchJobs(searchParams);
+  res.status(200).json({
+    success: true,
+    message: 'Tìm kiếm hybrid công việc thành công.',
+    meta: result.meta,
+    data: result.data,
+  });
+});

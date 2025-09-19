@@ -23,6 +23,12 @@ router.get(
 );
 
 router.get(
+  '/search/hybrid',
+  validationMiddleware.validateQuery(jobSchema.hybridSearchJobSchema),
+  jobController.hybridSearchJobs
+);
+
+router.get(
   '/my-jobs',
   passport.authenticate('jwt', { session: false }),
   authMiddleware.recruiterOnly,

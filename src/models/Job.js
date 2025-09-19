@@ -1,6 +1,52 @@
 import mongoose from 'mongoose';
 
 
+const chunkSchema = new mongoose.Schema({
+  jobId: {
+    type: String,
+    required: true,
+    comment: 'ID của job chứa chunk này'
+  },
+  chunkIndex: {
+    type: Number,
+    required: true,
+    comment: 'Thứ tự chunk trong job (0, 1, 2...)'
+  },
+  pageContent: {
+    type: String,
+    required: true,
+    comment: 'Nội dung văn bản của chunk'
+  },
+  embedding: {
+    type: [Number],
+    required: true,
+    comment: 'Vector embedding của chunk'
+  }
+}, { _id: false });
+
+
+const moderationDetailSchema = new mongoose.Schema({
+  moderator: {
+    type: String,
+    enum: ['AI', 'ADMIN'],
+    default: 'AI',
+    comment: 'Ai đã thực hiện kiểm duyệt'
+  },
+  reason: {
+    type: String,
+    trim: true,
+    comment: 'Lý do phê duyệt/từ chối/gắn cờ từ AI hoặc admin'
+  },
+  flags: {
+    type: [String],
+    comment: 'Các cờ vi phạm cụ thể (VD: Lừa đảo, Nội dung người lớn, Vũ khí, Ma túy, Ngôn ngữ thù địch...)'
+  },
+  timestamp: {
+    type: Date,
+    default: Date.now
+  }
+}, { _id: false });
+
 const jobSchema = new mongoose.Schema({
   title: {
     type: String,
@@ -147,15 +193,31 @@ const jobSchema = new mongoose.Schema({
     },
     default: 'ACTIVE'
   },
-  approved: {
-    type: Boolean,
-    default: false
-  },
-  recruiterProfileId: {
+   recruiterProfileId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'RecruiterProfile',
     required: [true, 'Recruiter ID is required']
   },
+  moderationStatus: {
+    type: String,
+    enum: {
+      values: ['PENDING', 'APPROVED', 'REJECTED', 'NEUTRAL'],
+      message: '{VALUE} is not a valid moderation status'
+    },
+    default: 'PENDING'
+  },
+  moderationHistory: {
+    type: [moderationDetailSchema],
+    default: []
+  },
+  // Thêm trường cho embeddings
+  chunks: {
+    type: [chunkSchema],
+    default: []
+  },
+  embeddingsUpdatedAt: {
+    type: Date
+  }
 }, {
   timestamps: true,
   toJSON: { getters: true },
@@ -182,5 +244,11 @@ jobSchema.index({ createdAt: -1 });
 jobSchema.index({ status: 1, approved: 1, deadline: 1 }); // Updated compound index
 jobSchema.index({ category: 1, type: 1, workType: 1, status: 1 }); // Updated compound index
 jobSchema.index({ 'location.province': 1, 'location.district': 1, category: 1, status: 1 });
+
+// Thêm index cho vector search và chunk queries
+jobSchema.index({ 'chunks.jobId': 1 });
+jobSchema.index({ 'chunks.chunkIndex': 1 });
+jobSchema.index({ 'chunks.embedding': '2dsphere' });
+jobSchema.index({ embeddingsUpdatedAt: 1 });
 
 export default mongoose.model('Job', jobSchema);

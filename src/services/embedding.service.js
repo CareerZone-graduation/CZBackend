@@ -1,0 +1,218 @@
+import { Job } from '../models/index.js';
+import { generateEmbeddingWithRetry } from '../utils/embedding.js';
+import logger from '../utils/logger.js';
+
+/**
+ * Split text into chunks for embedding generation
+ * @param {string} text - Text to split
+ * @param {number} maxChunkSize - Maximum size of each chunk (default: 500)
+ * @param {number} overlap - Overlap between chunks (default: 50)
+ * @returns {string[]} Array of text chunks
+ */
+const splitTextIntoChunks = (text, maxChunkSize = 500, overlap = 50) => {
+  if (!text || text.length <= maxChunkSize) {
+    return [text];
+  }
+
+  const chunks = [];
+  let start = 0;
+
+  while (start < text.length) {
+    let end = start + maxChunkSize;
+    
+    // If this isn't the last chunk, try to break at a word boundary
+    if (end < text.length) {
+      const lastSpace = text.lastIndexOf(' ', end);
+      if (lastSpace > start + maxChunkSize * 0.5) {
+        end = lastSpace;
+      }
+    }
+
+    chunks.push(text.slice(start, end).trim());
+    start = end - overlap;
+  }
+
+  return chunks.filter(chunk => chunk.length > 0);
+};
+
+/**
+ * Generate embeddings for a job and update the job document
+ * @param {string} jobId - ID of the job
+ * @returns {Promise<void>}
+ */
+export const generateJobEmbeddings = async (jobId) => {
+  try {
+    const job = await Job.findById(jobId);
+    if (!job) {
+      throw new Error(`Job not found: ${jobId}`);
+    }
+
+    // Combine job text fields for embedding
+    const textFields = [
+      job.title,
+      job.description,
+      job.requirements,
+      job.benefits,
+      job.skills?.join(' '),
+      job.category,
+      job.area
+    ].filter(Boolean);
+
+    const combinedText = textFields.join(' ');
+    
+    if (!combinedText.trim()) {
+      logger.warn('No text content found for job embedding generation', { jobId });
+      return;
+    }
+
+    // Split text into chunks
+    const textChunks = splitTextIntoChunks(combinedText);
+    
+    logger.info('Generating embeddings for job', { 
+      jobId, 
+      textLength: combinedText.length,
+      chunkCount: textChunks.length 
+    });
+
+    // Generate embeddings for each chunk
+    const chunks = [];
+    for (let i = 0; i < textChunks.length; i++) {
+      const chunkText = textChunks[i];
+      
+      try {
+        const embedding = await generateEmbeddingWithRetry(chunkText);
+        
+        chunks.push({
+          jobId: jobId.toString(),
+          chunkIndex: i,
+          text: chunkText,
+          embedding: embedding
+        });
+
+        logger.debug('Generated embedding for chunk', { 
+          jobId, 
+          chunkIndex: i, 
+          textLength: chunkText.length,
+          embeddingDimension: embedding.length 
+        });
+
+      } catch (error) {
+        logger.error('Failed to generate embedding for chunk', { 
+          jobId, 
+          chunkIndex: i, 
+          error: error.message 
+        });
+        // Continue with other chunks even if one fails
+      }
+    }
+
+    if (chunks.length === 0) {
+      logger.error('No embeddings generated for job', { jobId });
+      return;
+    }
+
+    // Update job with embeddings
+    await Job.findByIdAndUpdate(jobId, {
+      chunks: chunks,
+      embeddingsUpdatedAt: new Date()
+    });
+
+    logger.info('Successfully updated job with embeddings', { 
+      jobId, 
+      chunksGenerated: chunks.length,
+      totalChunks: textChunks.length 
+    });
+
+  } catch (error) {
+    logger.error('Error generating job embeddings', { 
+      jobId, 
+      error: error.message 
+    });
+    throw error;
+  }
+};
+
+/**
+ * Batch generate embeddings for multiple jobs
+ * @param {string[]} jobIds - Array of job IDs
+ * @param {number} batchSize - Number of jobs to process concurrently (default: 5)
+ * @returns {Promise<{success: number, failed: number, errors: Array}>}
+ */
+export const batchGenerateJobEmbeddings = async (jobIds, batchSize = 5) => {
+  const results = {
+    success: 0,
+    failed: 0,
+    errors: []
+  };
+
+  logger.info('Starting batch embedding generation', { 
+    totalJobs: jobIds.length, 
+    batchSize 
+  });
+
+  // Process jobs in batches to avoid overwhelming the API
+  for (let i = 0; i < jobIds.length; i += batchSize) {
+    const batch = jobIds.slice(i, i + batchSize);
+    
+    const batchPromises = batch.map(async (jobId) => {
+      try {
+        await generateJobEmbeddings(jobId);
+        results.success++;
+        return { jobId, success: true };
+      } catch (error) {
+        results.failed++;
+        results.errors.push({ jobId, error: error.message });
+        return { jobId, success: false, error: error.message };
+      }
+    });
+
+    await Promise.all(batchPromises);
+    
+    logger.info('Completed batch', { 
+      batchStart: i + 1, 
+      batchEnd: Math.min(i + batchSize, jobIds.length),
+      totalJobs: jobIds.length 
+    });
+
+    // Add a small delay between batches to be respectful to the API
+    if (i + batchSize < jobIds.length) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  }
+
+  logger.info('Batch embedding generation completed', results);
+  return results;
+};
+
+/**
+ * Regenerate embeddings for jobs that don't have them or are outdated
+ * @param {number} daysOld - Regenerate embeddings older than this many days (default: 7)
+ * @returns {Promise<{success: number, failed: number, errors: Array}>}
+ */
+export const regenerateOutdatedEmbeddings = async (daysOld = 7) => {
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - daysOld);
+
+  // Find jobs that need embedding updates
+  const jobsNeedingUpdate = await Job.find({
+    status: 'ACTIVE',
+    $or: [
+      { embeddingsUpdatedAt: { $exists: false } },
+      { embeddingsUpdatedAt: { $lt: cutoffDate } },
+      { chunks: { $size: 0 } }
+    ]
+  }).select('_id').lean();
+
+  const jobIds = jobsNeedingUpdate.map(job => job._id.toString());
+  
+  logger.info('Found jobs needing embedding updates', { 
+    count: jobIds.length, 
+    cutoffDate 
+  });
+
+  if (jobIds.length === 0) {
+    return { success: 0, failed: 0, errors: [] };
+  }
+
+  return await batchGenerateJobEmbeddings(jobIds);
+};
