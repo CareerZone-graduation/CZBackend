@@ -162,7 +162,7 @@ export const handleZaloPayCallback = async (apptransid, status) => {
     } else {
         // Handle failure case
         logger.warn(`ZaloPay callback: Transaction ${apptransid} failed with status ${status}.`);
-        await CoinRecharge.findOneAndUpdate({ transactionCode: apptransid }, { status: 'FAILED' });
+        recharge = await CoinRecharge.findOneAndUpdate({ transactionCode: apptransid }, { status: 'FAILED' });
     }
     const role= await User.findById(recharge.userId).select('role');
     return {role: role}
