@@ -3,7 +3,7 @@ import * as authService from "../services/auth.service.js";
 import jwt from 'jsonwebtoken';
 import config from '../config/index.js';
 import { OAuth2Client } from 'google-auth-library';
-import { CandidateProfile } from '../models/index.js';
+import { CandidateProfile, User, RecruiterProfile } from '../models/index.js';
 import logger from '../utils/logger.js';
 
 const client = new OAuth2Client(config.GOOGLE_CLIENT_ID);
@@ -57,7 +57,7 @@ export const login = asyncHandler(async (req, res) => {
 });
 
 export const googleLogin = asyncHandler(async (req, res) => {
-    const { token } = req.body;
+    const { token, role } = req.body;
     const ticket = await client.verifyIdToken({
         idToken: token,
         audience: config.GOOGLE_CLIENT_ID,
@@ -76,20 +76,31 @@ export const googleLogin = asyncHandler(async (req, res) => {
             await existingUser.save();
             user = existingUser;
         } else {
-            // Create a new user
+            // Create a new user with role from request body (candidate or recruiter)
             const newUser = new User({
                 email,
+                role: role || 'candidate', // Use role from req.body, default to 'candidate' if not provided
                 isEmailVerified: true,
-                // role is decided after, default is 'candidate'
             });
             await newUser.save();
             
-            // Create a corresponding profile
-            await CandidateProfile.create({
-                userId: newUser._id,
-                fullname: name,
-                avatar: avatar
-            });
+            // Create a corresponding profile based on role
+            if (newUser.role === 'candidate') {
+                await CandidateProfile.create({
+                    userId: newUser._id,
+                    fullname: name,
+                    avatar: avatar
+                });
+            } else if (newUser.role === 'recruiter') {
+                await RecruiterProfile.create({
+                    userId: newUser._id,
+                    fullname: name,
+                    company: {
+                        name: '', // Will be filled later by recruiter
+                        logo: 'https://i.pinimg.com/736x/ec/d9/c2/ecd9c2e8ed0dbbc96ac472a965e4afda.jpg'
+                    }
+                });
+            }
             user = newUser;
         }
     }
