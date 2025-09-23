@@ -2507,7 +2507,6 @@ const buildSearchFilter = (searchParams) => {
   // Salary range filters
   if (searchParams.minSalary || searchParams.maxSalary) {
     const salaryFilter = { compound: { should: [] } };
-
     if (searchParams.minSalary && searchParams.maxSalary) {
       // Job salary range overlaps with user's salary range
       salaryFilter.compound.should.push({

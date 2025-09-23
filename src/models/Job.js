@@ -251,4 +251,10 @@ jobSchema.index({ 'chunks.chunkIndex': 1 });
 jobSchema.index({ 'chunks.embedding': '2dsphere' });
 jobSchema.index({ embeddingsUpdatedAt: 1 });
 
+// Thêm index cho vector search và chunk queries
+jobSchema.index({ 'chunks.jobId': 1 });
+jobSchema.index({ 'chunks.chunkIndex': 1 });
+jobSchema.index({ 'chunks.embedding': '2dsphere' });
+jobSchema.index({ embeddingsUpdatedAt: 1 });
+
 export default mongoose.model('Job', jobSchema);

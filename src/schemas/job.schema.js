@@ -221,7 +221,6 @@ export const hybridSearchJobSchema = z.object({
   }).trim().min(1, 'Query không được để trống').max(200, 'Query không được vượt quá 200 ký tự'),
   page: z.coerce.number().int().min(1, 'Trang phải lớn hơn 0').default(1),
   size: z.coerce.number().int().min(1, 'Kích thước trang phải lớn hơn 0').max(50, 'Kích thước trang không được vượt quá 50').default(10),
-
   // Filters cho tìm kiếm
   category: z.enum(jobCategoryEnum).optional(),
   type: z.enum(jobTypeEnum).optional(),
