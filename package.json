@@ -11,7 +11,9 @@
     "worker:notification": "nodemon workers/notification.worker.js",
     "worker:matching": "nodemon workers/matching.worker.js",
     "start:all": "npm-run-all --parallel dev worker:notification worker:matching",
-    "test": "cross-env NODE_ENV=test node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --detectOpenHandles --forceExit --no-cache"
+    "test": "cross-env NODE_ENV=test node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --detectOpenHandles --forceExit --no-cache",
+    "normalize:locations": "node scripts/chuan-hoa-location-data.js",
+    "test:locations": "node scripts/test-location-normalization.js"
   },
   "keywords": [
     "job",
@@ -55,6 +57,7 @@
     "pug": "^3.0.3",
     "redis": "^4.6.11",
     "socket.io": "^4.7.4",
+    "string-similarity": "^4.0.4",
     "uuid": "^9.0.1",
     "winston": "^3.11.0",
     "zod": "^3.22.4"

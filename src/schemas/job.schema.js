@@ -25,6 +25,62 @@ const locationSchema = z.object({
   }).optional()
 });
 
+// Schema for flexible user location input (accepts string format [106.23,24.23])
+const userLocationFlexible = z.string().transform((val, ctx) => {
+  if (!val) return undefined;
+
+  try {
+    // Parse string format [106.23,24.23] to array
+    const parsed = JSON.parse(val);
+
+    if (!Array.isArray(parsed) || parsed.length !== 2) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'userLocation phải có định dạng [longitude, latitude]'
+      });
+      return z.NEVER;
+    }
+
+    const [longitude, latitude] = parsed.map(Number);
+
+    if (isNaN(longitude) || isNaN(latitude)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'userLocation phải chứa số hợp lệ'
+      });
+      return z.NEVER;
+    }
+
+    if (longitude < -180 || longitude > 180) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Longitude phải trong khoảng -180 đến 180'
+      });
+      return z.NEVER;
+    }
+
+    if (latitude < -90 || latitude > 90) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Latitude phải trong khoảng -90 đến 90'
+      });
+      return z.NEVER;
+    }
+
+    return {
+      type: 'Point',
+      coordinates: [longitude, latitude]
+    };
+  } catch (error) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'userLocation phải có định dạng JSON hợp lệ: [longitude, latitude]'
+    });
+    return z.NEVER;
+  }
+});
+
+
 export const createJobSchema = z.object({
   title: z.string().trim().min(5, 'Tiêu đề phải có ít nhất 5 ký tự').max(200),
   description: z.string().trim().min(20, 'Mô tả phải có ít nhất 20 ký tự').max(5000),
@@ -42,40 +98,40 @@ export const createJobSchema = z.object({
   category: z.enum(jobCategoryEnum),
   skills: z.array(z.string().trim().max(50, 'Kỹ năng không được vượt quá 50 ký tự')).optional(),
 })
-.refine(data => !data.minSalary || !data.maxSalary || data.maxSalary >= data.minSalary, {
-  message: 'Lương tối đa phải lớn hơn hoặc bằng lương tối thiểu',
-  path: ['maxSalary'],
-})
-.refine(data => {
-  // Nếu không sử dụng địa chỉ công ty, thì location và address phải có
-  if (!data.useCompanyAddress) {
-    return data.location && data.address;
-  }
-  return true;
-}, {
-  message: 'Vui lòng cung cấp địa chỉ hoặc chọn sử dụng địa chỉ công ty',
-  path: ['location'],
-})
-.refine(data => {
-  if (!data.location) return true;
-  const provinceData = locationMap.get(data.location.province);
-  if (!provinceData) return false;
-  return provinceData.districts.some(d => d.name === data.location.district);
-}, {
-  message: 'Quận/Huyện không thuộc Tỉnh/Thành phố đã chọn.',
-  path: ['location', 'district'],
-})
-.refine(data => {
-  if (!data.location) return true;
-  const provinceData = locationMap.get(data.location.province);
-  // The district is already validated to be in the province by the previous refine.
-  const districtData = provinceData.districts.find(d => d.name === data.location.district);
-  if (!districtData || !districtData.communes) return false; // Commune list must exist
-  return districtData.communes.includes(data.location.commune);
-}, {
-  message: 'Phường/Xã không thuộc Quận/Huyện đã chọn.',
-  path: ['location', 'commune'],
-});
+  .refine(data => !data.minSalary || !data.maxSalary || data.maxSalary >= data.minSalary, {
+    message: 'Lương tối đa phải lớn hơn hoặc bằng lương tối thiểu',
+    path: ['maxSalary'],
+  })
+  .refine(data => {
+    // Nếu không sử dụng địa chỉ công ty, thì location và address phải có
+    if (!data.useCompanyAddress) {
+      return data.location && data.address;
+    }
+    return true;
+  }, {
+    message: 'Vui lòng cung cấp địa chỉ hoặc chọn sử dụng địa chỉ công ty',
+    path: ['location'],
+  })
+  .refine(data => {
+    if (!data.location) return true;
+    const provinceData = locationMap.get(data.location.province);
+    if (!provinceData) return false;
+    return provinceData.districts.some(d => d.name === data.location.district);
+  }, {
+    message: 'Quận/Huyện không thuộc Tỉnh/Thành phố đã chọn.',
+    path: ['location', 'district'],
+  })
+  .refine(data => {
+    if (!data.location) return true;
+    const provinceData = locationMap.get(data.location.province);
+    // The district is already validated to be in the province by the previous refine.
+    const districtData = provinceData.districts.find(d => d.name === data.location.district);
+    if (!districtData || !districtData.communes) return false; // Commune list must exist
+    return districtData.communes.includes(data.location.commune);
+  }, {
+    message: 'Phường/Xã không thuộc Quận/Huyện đã chọn.',
+    path: ['location', 'commune'],
+  });
 
 export const updateJobSchema = z.object({
   title: z.string().trim().min(5, 'Tiêu đề phải có ít nhất 5 ký tự').max(200).optional(),
@@ -95,31 +151,31 @@ export const updateJobSchema = z.object({
   status: z.enum(jobStatusEnum).optional(),
   skills: z.array(z.string().trim().max(50, 'Kỹ năng không được vượt quá 50 ký tự')).optional(),
 })
-.refine(data => !data.minSalary || !data.maxSalary || data.maxSalary >= data.minSalary, {
+  .refine(data => !data.minSalary || !data.maxSalary || data.maxSalary >= data.minSalary, {
     message: 'Lương tối đa phải lớn hơn hoặc bằng lương tối thiểu',
     path: ['maxSalary'],
-})
-.refine(data => {
-  if (!data.location) return true;
-  const provinceData = locationMap.get(data.location.province);
-  if (!provinceData) return false;
-  return provinceData.districts.some(d => d.name === data.location.district);
-}, {
-  message: 'Quận/Huyện không thuộc Tỉnh/Thành phố đã chọn.',
-  path: ['location', 'district'],
-})
-.refine(data => {
-  if (!data.location) return true;
-  // If location is provided, all fields are required by locationSchema.
-  // The previous refine validates the district.
-  const provinceData = locationMap.get(data.location.province);
-  const districtData = provinceData.districts.find(d => d.name === data.location.district);
-  if (!districtData || !districtData.communes) return false;
-  return districtData.communes.includes(data.location.commune);
-}, {
-  message: 'Phường/Xã không thuộc Quận/Huyện đã chọn.',
-  path: ['location', 'commune'],
-});
+  })
+  .refine(data => {
+    if (!data.location) return true;
+    const provinceData = locationMap.get(data.location.province);
+    if (!provinceData) return false;
+    return provinceData.districts.some(d => d.name === data.location.district);
+  }, {
+    message: 'Quận/Huyện không thuộc Tỉnh/Thành phố đã chọn.',
+    path: ['location', 'district'],
+  })
+  .refine(data => {
+    if (!data.location) return true;
+    // If location is provided, all fields are required by locationSchema.
+    // The previous refine validates the district.
+    const provinceData = locationMap.get(data.location.province);
+    const districtData = provinceData.districts.find(d => d.name === data.location.district);
+    if (!districtData || !districtData.communes) return false;
+    return districtData.communes.includes(data.location.commune);
+  }, {
+    message: 'Phường/Xã không thuộc Quận/Huyện đã chọn.',
+    path: ['location', 'commune'],
+  });
 
 export const jobQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -133,14 +189,14 @@ export const applyToJobSchema = z.object({
   // CV ID
   cvId: z.string().trim().optional(),
   cvTemplateId: z.string().trim().optional(),
-  
+
   // Thư xin việc
   coverLetter: z.string().trim().max(2000, 'Thư xin việc không được vượt quá 2000 ký tự').optional(),
-  
+
   // Thông tin cá nhân từ form
-  candidateName: z.string({required_error: "Họ tên là bắt buộc"}).trim().min(2, 'Họ tên phải có ít nhất 2 ký tự').max(100, 'Họ tên không được vượt quá 100 ký tự'),
-  candidateEmail: z.string({required_error: "Email là bắt buộc"}).trim().email('Email không hợp lệ'),
-  candidatePhone: z.string({required_error: "Số điện thoại là bắt buộc"}).trim().regex(/^[\+]?[\d]{1,15}$/, 'Số điện thoại không hợp lệ'),
+  candidateName: z.string({ required_error: "Họ tên là bắt buộc" }).trim().min(2, 'Họ tên phải có ít nhất 2 ký tự').max(100, 'Họ tên không được vượt quá 100 ký tự'),
+  candidateEmail: z.string({ required_error: "Email là bắt buộc" }).trim().email('Email không hợp lệ'),
+  candidatePhone: z.string({ required_error: "Số điện thoại là bắt buộc" }).trim().regex(/^[\+]?[\d]{1,15}$/, 'Số điện thoại không hợp lệ'),
 }).refine(data => {
   // Điều kiện XOR: một trong hai trường phải tồn tại, nhưng không phải cả hai.
   return (data.cvId && !data.cvTemplateId) || (!data.cvId && data.cvTemplateId);
@@ -156,4 +212,59 @@ export const getMyJobsQuerySchema = z.object({
   status: z.enum(['ACTIVE', 'INACTIVE', 'EXPIRED']).optional(),
   sortBy: z.string().optional(),
   search: z.string().optional(), // Add this line
+});
+
+// Schema for hybrid search request
+export const hybridSearchJobSchema = z.object({
+  query: z.string({
+    required_error: 'Query là bắt buộc cho tìm kiếm hybrid'
+  }).trim().min(1, 'Query không được để trống').max(200, 'Query không được vượt quá 200 ký tự'),
+  page: z.coerce.number().int().min(1, 'Trang phải lớn hơn 0').default(1),
+  size: z.coerce.number().int().min(1, 'Kích thước trang phải lớn hơn 0').max(50, 'Kích thước trang không được vượt quá 50').default(10),
+  // Filters cho tìm kiếm
+  category: z.enum(jobCategoryEnum).optional(),
+  type: z.enum(jobTypeEnum).optional(),
+  workType: z.enum(workTypeEnum).optional(),
+  experience: z.enum(experienceEnum).optional(),
+  province: z.enum(provinceNames).optional(),
+  district: z.string().optional(),
+  // Salary range filters
+  minSalary: z.coerce.number().min(0, 'Mức lương tối thiểu không thể âm').optional(),
+  maxSalary: z.coerce.number().min(0, 'Mức lương tối đa không thể âm').optional(),
+
+  // Weight parameters for RRF
+  textWeight: z.coerce.number().min(0).max(1).default(0.4),
+  vectorWeight: z.coerce.number().min(0).max(1).default(0.6),
+  userLocation: userLocationFlexible.optional(),
+})
+  .refine(data => !data.minSalary || !data.maxSalary || data.maxSalary >= data.minSalary, {
+    message: 'Mức lương tối đa phải lớn hơn hoặc bằng mức lương tối thiểu',
+    path: ['maxSalary'],
+  })
+  .refine(data => Math.abs((data.textWeight + data.vectorWeight) - 1) < 0.001, {
+    message: 'Tổng trọng số text và vector phải bằng 1',
+    path: ['vectorWeight'],
+  })
+  .refine(data => {
+    // Nếu có district nhưng không có province, thì không hợp lệ
+    if (data.district && !data.province) {
+      return false;
+    }
+    // Nếu có cả province và district, kiểm tra district có thuộc province không
+    if (data.province && data.district) {
+      const provinceData = locationMap.get(data.province);
+      if (!provinceData) return false;
+      return provinceData.districts.some(d => d.name === data.district);
+    }
+    return true;
+  }, {
+    message: 'Quận/Huyện không thuộc Tỉnh/Thành phố đã chọn hoặc thiếu thông tin Tỉnh/Thành phố',
+    path: ['district'],
+  });
+// Schema for autocomplete request
+export const autocompleteJobSchema = z.object({
+  query: z.string({
+    required_error: 'Query là bắt buộc cho autocomplete'
+  }).trim().min(1, 'Query không được để trống').max(100, 'Query không được vượt quá 100 ký tự'),
+  limit: z.coerce.number().int().min(1, 'Limit phải lớn hơn 0').max(20, 'Limit không được vượt quá 20').default(10),
 });

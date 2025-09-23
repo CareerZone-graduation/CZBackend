@@ -23,6 +23,20 @@ router.get(
 );
 
 router.get(
+  '/search/hybrid',
+  validationMiddleware.validateQuery(jobSchema.hybridSearchJobSchema),
+  jobController.hybridSearchJobs
+);
+
+// Autocomplete routes
+router.get(
+  '/autocomplete/titles',
+  validationMiddleware.validateQuery(jobSchema.autocompleteJobSchema),
+  jobController.autocompleteJobTitles
+);
+
+
+router.get(
   '/my-jobs',
   passport.authenticate('jwt', { session: false }),
   authMiddleware.recruiterOnly,
