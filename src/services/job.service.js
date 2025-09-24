@@ -2627,7 +2627,7 @@ export const hybridSearchJobs = async (searchParams) => {
       // --- Text search branch (BM25) ---
       {
         $search: {
-          index: "viidx", // Your Atlas Search index name
+          index: "kw", // Your Atlas Search index name
           compound: {
             must: [
               {
@@ -2689,7 +2689,7 @@ export const hybridSearchJobs = async (searchParams) => {
           pipeline: [
             {
               $vectorSearch: {
-                index: "default2", // Your vector search index name
+                index: "vt", // Your vector search index name
                 path: "chunks.embedding",
                 queryVector: queryVector,
                 numCandidates: numCandidates,
@@ -2852,7 +2852,7 @@ export const autocompleteJobTitles = async (query, limit = 10) => {
     const results = await Job.aggregate([
       {
         $search: {
-          index: "autocl", // Your autocomplete index name
+          index: "default", // Your autocomplete index name
           compound: {
             must: [
               {

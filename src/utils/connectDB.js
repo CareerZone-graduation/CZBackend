@@ -12,7 +12,7 @@ const connectDB = async () => {
   try {
     const conn = await mongoose.connect(config.DB_URI);
 
-    logger.info(`MongoDB Connected: ${conn.connection.host}`);
+    logger.info(`${config.DB_URI} MongoDB Connected: ${conn.connection.host}`);
     
     // Handle connection events
     mongoose.connection.on('error', (err) => {

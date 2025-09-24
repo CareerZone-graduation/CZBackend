@@ -160,8 +160,8 @@ const processPeriodicNotifications = async (frequency, notificationType) => {
 
 // Daily notification cron job - 8:00 AM
 // tạm thời chạy mỗi 10s để test
-cron.schedule('*/10 * * * * *', async () => {
-// cron.schedule('0 8 * * *', async () => {
+// cron.schedule('*/10 * * * * *', async () => {
+cron.schedule('0 8 * * *', async () => {
     try {
         await processPeriodicNotifications('daily', 'DAILY');
     } catch (error) {
