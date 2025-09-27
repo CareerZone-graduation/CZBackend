@@ -2633,11 +2633,21 @@ export const hybridSearchJobs = async (searchParams) => {
               {
                 text: {
                   query: query,
-                  path: ["title", "description", "requirements"],
+                  path: "title",
                   fuzzy: {
                     maxEdits: 1,
                     prefixLength: 2
-                  }
+                  },
+                  score: { boost: { value: 2 } } // ưu tiên mạnh cho title
+                }
+              }
+            ],
+            should: [
+              {
+                text: {
+                  query: query,
+                  path: ["description", "requirements"],
+                  fuzzy: { maxEdits: 1, prefixLength: 2 },
                 }
               }
             ],
@@ -2852,7 +2862,7 @@ export const autocompleteJobTitles = async (query, limit = 10) => {
     const results = await Job.aggregate([
       {
         $search: {
-          index: "default", // Your autocomplete index name
+          index: "autocl", // Your autocomplete index name
           compound: {
             must: [
               {
