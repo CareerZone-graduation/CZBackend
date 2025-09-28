@@ -2633,21 +2633,11 @@ export const hybridSearchJobs = async (searchParams) => {
               {
                 text: {
                   query: query,
-                  path: "title",
+                  path: ["title", "description", "requirements"],
                   fuzzy: {
                     maxEdits: 1,
                     prefixLength: 2
-                  },
-                  score: { boost: { value: 2 } } // ưu tiên mạnh cho title
-                }
-              }
-            ],
-            should: [
-              {
-                text: {
-                  query: query,
-                  path: ["description", "requirements"],
-                  fuzzy: { maxEdits: 1, prefixLength: 2 },
+                  }
                 }
               }
             ],
@@ -2839,13 +2829,7 @@ export const hybridSearchJobs = async (searchParams) => {
     };
 
   } catch (error) {
-    logger.error('Hybrid search error:', {
-      message: error.message,
-      stack: error.stack,
-      query,
-      searchParams
-    });
-    console.error('Hybrid search failed:', error.message);
+    logger.error('Hybrid search error:', error);
     throw new BadRequestError('Lỗi khi thực hiện tìm kiếm hybrid');
   }
 };
@@ -2868,7 +2852,7 @@ export const autocompleteJobTitles = async (query, limit = 10) => {
     const results = await Job.aggregate([
       {
         $search: {
-          index: "autocl", // Your autocomplete index name
+          index: "default", // Your autocomplete index name
           compound: {
             must: [
               {
@@ -2936,10 +2920,8 @@ export const autocompleteJobTitles = async (query, limit = 10) => {
   } catch (error) {
     logger.error('Error in autocomplete search:', {
       query,
-      error: error.message,
-      stack: error.stack
+      error: error.message
     });
-    console.error('Autocomplete failed:', error.message);
 
     // Fallback to simple regex search if Atlas Search fails
     return await fallbackAutocomplete(query, limit);
