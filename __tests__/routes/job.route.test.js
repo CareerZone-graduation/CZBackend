@@ -363,7 +363,7 @@ describe('Job Routes API', () => {
         description: 'Another description.',
         recruiterProfileId: recruiterProfile._id,
         locations: ['Hanoi'],
-        salary: { min: 1000, max: 2000, unit: 'USD', negotiable: false },
+        salary: { min: 1000, max: 2000, unit: 'Triệu', negotiable: false },
         category: 'IT',
         experience: 'ENTRY_LEVEL',
         deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),

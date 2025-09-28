@@ -50,7 +50,7 @@ describe('Candidate Applications Routes', () => {
             description: 'Develop amazing things.',
             recruiterProfileId: recruiterProfile._id, // Liên kết với RecruiterProfile
             locations: ['Hanoi'],
-            salary: { min: 1000, max: 2000, unit: 'USD', negotiable: false },
+            salary: { min: 1000, max: 2000, unit: 'Triệu', negotiable: false },
             category: 'IT', // Thêm trường bắt buộc
             experience: 'ENTRY_LEVEL', // Thêm trường bắt buộc
             deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // Thêm trường bắt buộc (1 tuần kể từ bây giờ)

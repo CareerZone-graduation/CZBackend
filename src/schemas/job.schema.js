@@ -13,6 +13,24 @@ const jobCategoryEnum = [
 ];
 const jobStatusEnum = ['ACTIVE', 'INACTIVE', 'EXPIRED'];
 
+// Helper function to parse salary strings with thousand separators (dots)
+const parseSalary = (value) => {
+  if (value === null || value === undefined || value === '') return undefined;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    // Remove dots (thousand separators) and parse as number
+    const cleaned = value.replace(/\./g, '');
+    const num = Number(cleaned);
+    return isNaN(num) ? undefined : num;
+  }
+  return undefined;
+};
+
+// Custom salary schema that handles Vietnamese number format
+const salarySchema = z.preprocess((val) => {
+  return parseSalary(val);
+}, z.number().min(0, 'Mức lương không thể là số âm').optional());
+
 const locationSchema = z.object({
   province: z.enum(provinceNames, { required_error: 'Tỉnh/Thành phố là bắt buộc' }),
   district: z.string({ required_error: 'Quận/Huyện là bắt buộc' }),
@@ -91,8 +109,8 @@ export const createJobSchema = z.object({
   useCompanyAddress: z.boolean().optional(),
   type: z.enum(jobTypeEnum),
   workType: z.enum(workTypeEnum),
-  minSalary: z.coerce.number().min(0, 'Mức lương không thể là số âm').optional(),
-  maxSalary: z.coerce.number().min(0, 'Mức lương không thể là số âm').optional(),
+  minSalary: salarySchema,
+  maxSalary: salarySchema,
   deadline: z.coerce.date().refine((date) => date > new Date(), 'Hạn chót phải là một ngày trong tương lai'),
   experience: z.enum(experienceEnum),
   category: z.enum(jobCategoryEnum),
@@ -143,8 +161,8 @@ export const updateJobSchema = z.object({
   useCompanyAddress: z.boolean().optional(),
   type: z.enum(jobTypeEnum).optional(),
   workType: z.enum(workTypeEnum).optional(),
-  minSalary: z.coerce.number().min(0, 'Mức lương không thể là số âm').optional(),
-  maxSalary: z.coerce.number().min(0, 'Mức lương không thể là số âm').optional(),
+  minSalary: salarySchema,
+  maxSalary: salarySchema,
   deadline: z.coerce.date().refine((date) => date > new Date(), 'Hạn chót phải là một ngày trong tương lai').optional(),
   experience: z.enum(experienceEnum).optional(),
   category: z.enum(jobCategoryEnum).optional(),
@@ -229,8 +247,8 @@ export const hybridSearchJobSchema = z.object({
   province: z.enum(provinceNames).optional(),
   district: z.string().optional(),
   // Salary range filters
-  minSalary: z.coerce.number().min(0, 'Mức lương tối thiểu không thể âm').optional(),
-  maxSalary: z.coerce.number().min(0, 'Mức lương tối đa không thể âm').optional(),
+  minSalary: salarySchema,
+  maxSalary: salarySchema,
 
   // Weight parameters for RRF
   textWeight: z.coerce.number().min(0).max(1).default(0.4),

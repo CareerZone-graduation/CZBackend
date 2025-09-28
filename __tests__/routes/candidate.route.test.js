@@ -58,7 +58,7 @@ describe('Candidate Profile Routes API', () => {
       description: 'Develop amazing things.',
       recruiterProfileId: recruiterProfile._id,
       locations: ['Hanoi'],
-      salary: { min: 1000, max: 2000, unit: 'USD', negotiable: false },
+      salary: { min: 1000, max: 2000, unit: 'Tri', negotiable: false },
       category: 'IT',
       experience: 'ENTRY_LEVEL',
       deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),

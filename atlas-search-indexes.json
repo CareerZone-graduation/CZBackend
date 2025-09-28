@@ -1,0 +1,86 @@
+{
+  "kw": {
+    "mappings": {
+      "dynamic": false,
+      "fields": {
+        "title": {
+          "type": "string",
+          "analyzer": "lucene.standard"
+        },
+        "description": {
+          "type": "string",
+          "analyzer": "lucene.standard"
+        },
+        "requirements": {
+          "type": "string",
+          "analyzer": "lucene.standard"
+        },
+        "benefits": {
+          "type": "string",
+          "analyzer": "lucene.standard"
+        },
+        "skills": {
+          "type": "string",
+          "analyzer": "lucene.standard"
+        },
+        "location": {
+          "type": "object",
+          "fields": {
+            "province": {
+              "type": "string",
+              "analyzer": "lucene.standard"
+            },
+            "district": {
+              "type": "string",
+              "analyzer": "lucene.standard"
+            },
+            "commune": {
+              "type": "string",
+              "analyzer": "lucene.standard"
+            }
+          }
+        },
+        "company": {
+          "type": "object",
+          "fields": {
+            "name": {
+              "type": "string",
+              "analyzer": "lucene.standard"
+            }
+          }
+        }
+      }
+    }
+  },
+  "vt": {
+    "mappings": {
+      "dynamic": false,
+      "fields": {
+        "chunks": {
+          "type": "object",
+          "fields": {
+            "embedding": {
+              "type": "knnVector",
+              "dimensions": 768,
+              "similarity": "cosine"
+            }
+          }
+        }
+      }
+    }
+  },
+  "autocl": {
+    "mappings": {
+      "dynamic": false,
+      "fields": {
+        "title": {
+          "type": "autocomplete",
+          "analyzer": "lucene.standard",
+          "tokenization": "edgeGram",
+          "minGrams": 2,
+          "maxGrams": 15
+        }
+      }
+    }
+  }
+}
