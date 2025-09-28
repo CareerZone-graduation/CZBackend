@@ -2839,7 +2839,13 @@ export const hybridSearchJobs = async (searchParams) => {
     };
 
   } catch (error) {
-    logger.error('Hybrid search error:', error);
+    logger.error('Hybrid search error:', {
+      message: error.message,
+      stack: error.stack,
+      query,
+      searchParams
+    });
+    console.error('Hybrid search failed:', error.message);
     throw new BadRequestError('Lỗi khi thực hiện tìm kiếm hybrid');
   }
 };
@@ -2930,8 +2936,10 @@ export const autocompleteJobTitles = async (query, limit = 10) => {
   } catch (error) {
     logger.error('Error in autocomplete search:', {
       query,
-      error: error.message
+      error: error.message,
+      stack: error.stack
     });
+    console.error('Autocomplete failed:', error.message);
 
     // Fallback to simple regex search if Atlas Search fails
     return await fallbackAutocomplete(query, limit);
