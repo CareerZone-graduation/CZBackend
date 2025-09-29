@@ -200,7 +200,14 @@ export const jobQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(10),
   status: z.enum(jobStatusEnum).optional(),
   sortBy: z.string().optional(),
-  search: z.string().optional(), // Thêm dòng này
+  search: z.string().optional(),
+});
+
+export const getSavedJobsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(10),
+  sortBy: z.string().optional(),
+  search: z.string().optional(),
 });
 
 export const applyToJobSchema = z.object({
@@ -234,9 +241,7 @@ export const getMyJobsQuerySchema = z.object({
 
 // Schema for hybrid search request
 export const hybridSearchJobSchema = z.object({
-  query: z.string({
-    required_error: 'Query là bắt buộc cho tìm kiếm hybrid'
-  }).trim().min(1, 'Query không được để trống').max(200, 'Query không được vượt quá 200 ký tự'),
+  query: z.string().trim().max(200, 'Query không được vượt quá 200 ký tự').optional(),
   page: z.coerce.number().int().min(1, 'Trang phải lớn hơn 0').default(1),
   size: z.coerce.number().int().min(1, 'Kích thước trang phải lớn hơn 0').max(50, 'Kích thước trang không được vượt quá 50').default(10),
   // Filters cho tìm kiếm

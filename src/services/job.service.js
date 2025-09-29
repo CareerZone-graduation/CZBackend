@@ -145,6 +145,7 @@ export const getAllJobs = async (options) => {
   const skip = (page - 1) * limit;
 
   const jobs = await Job.find(query)
+    .select('-requirements -description -benefits -address -embeddingsUpdatedAt -chunks')
     .populate({
       path: 'recruiterProfileId',
       select: 'company.name company.logo'
@@ -222,6 +223,7 @@ export const getJobsByRecruiter = async (userId, options) => {
   const skip = (page - 1) * limit;
 
   const jobs = await Job.find(query)
+    .select('-requirements -description -benefits -address -embeddingsUpdatedAt -chunks')
     .sort(sortOptions)
     .skip(skip)
     .limit(limit)
@@ -232,11 +234,7 @@ export const getJobsByRecruiter = async (userId, options) => {
   const plainJobs = jobs.map(job => ({
     _id: job._id,
     title: job.title,
-    description: job.description,
-    requirements: job.requirements,
-    benefits: job.benefits,
     location: job.location,
-    address: job.address,
     type: job.type,
     workType: job.workType,
     minSalary: job.minSalary?.toString(),
@@ -333,7 +331,7 @@ export const getJobDetailsForRecruiter = async (jobId, userId) => {
 export const getJobById = async (jobId, userId = null) => {
   const jobDoc = await Job.findById(jobId).populate({
     path: 'recruiterProfileId',
-    select: 'company.name company.logo company._id'
+    select: 'company.name company.logo company._id company.industry'
   });
 
   if (!jobDoc) {
@@ -403,6 +401,7 @@ export const getJobById = async (jobId, userId = null) => {
     company: {
       name: job.recruiterProfileId.company.name,
       logo: job.recruiterProfileId.company.logo,
+      industry: job.recruiterProfileId.company.industry,
       _id: job.recruiterProfileId.company._id
     },
     isSaved,
@@ -742,7 +741,7 @@ export const unsaveJob = async (userId, jobId) => {
  * @returns {Promise<object>} Danh sách tin tuyển dụng đã lưu và thông tin phân trang
  */
 export const getSavedJobs = async (userId, options) => {
-  const { page = 1, limit = 10, sortBy } = options;
+  const { page = 1, limit = 10, sortBy, search } = options;
 
   // 1. Tìm hồ sơ ứng viên để đảm bảo user là candidate
   await findCandidateProfileByUserId(userId);
@@ -781,6 +780,13 @@ export const getSavedJobs = async (userId, options) => {
     // Filter chỉ lấy job đang active
     { $match: { 'job.status': 'ACTIVE' } },
 
+    // Thêm điều kiện tìm kiếm nếu có
+    ...(search ? [{
+      $match: {
+        'job.title': { $regex: search, $options: 'i' }
+      }
+    }] : []),
+
     // Lookup để lấy thông tin recruiter và company từ job
     {
       $lookup: {
@@ -797,8 +803,7 @@ export const getSavedJobs = async (userId, options) => {
     // Project để format lại dữ liệu - chỉ lấy các trường cần thiết từ job và company
     {
       $project: {
-        _id: 1,
-        jobId: '$job._id',
+        _id: '$job._id',
         title: '$job.title',
         minSalary: { $toString: '$job.minSalary' },
         maxSalary: { $toString: '$job.maxSalary' },
@@ -2599,7 +2604,7 @@ const buildPreFilter = (searchParams) => {
  * @param {object} searchParams - Search parameters
  * @returns {Promise<object>} Search results with pagination
  */
-export const hybridSearchJobs = async (searchParams) => {
+export const hybridSearchJobs = async (searchParams, userId = null) => {
   const {
     query,
     page = 1,
@@ -2607,7 +2612,82 @@ export const hybridSearchJobs = async (searchParams) => {
     textWeight = 0.4,
     vectorWeight = 0.6,
   } = searchParams;
-  console.log(searchParams);
+
+  // Nếu không có query, thực hiện tìm kiếm thông thường với filter
+  if (!query || query.trim() === '') {
+    console.log('No query provided, performing regular search with filters.');
+    try {
+      const preFilter = buildPreFilter(searchParams);
+      const skip = (page - 1) * size;
+
+      let [results, totalCount] = await Promise.all([
+        Job.find(preFilter)
+          .select('-requirements -description -benefits -address -embeddingsUpdatedAt -chunks')
+          .populate({
+            path: 'recruiterProfileId',
+            select: 'company.name company.logo'
+          })
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(size)
+          .lean(),
+        Job.countDocuments(preFilter)
+        // sau đó đưa company.name, logo trải phẳng trong results
+        
+      ]);
+
+      // Add isSaved status if userId is provided
+      if (userId) {
+        const jobIds = results.map(job => job._id);
+        const savedJobs = await SavedJob.find({
+          candidateId: userId,
+          jobId: { $in: jobIds }
+        }).select('jobId').lean();
+
+        const savedJobIds = new Set(savedJobs.map(saved => saved.jobId.toString()));
+
+        results = results.map(job => {
+          job.isSaved = savedJobIds.has(job._id.toString());
+          return job;
+        });
+      }
+      results = results.map(job => {
+        const company = job.recruiterProfileId?.company || {};
+        return {
+          ...job,
+          company:{
+          name: company.name || null,
+          logo: company.logo || null
+          },
+          recruiterProfileId: job.recruiterProfileId?._id || null // giữ lại id nếu cần
+        };
+      });
+      return {
+        data: results,
+        meta: {
+          currentPage: page,
+          totalPages: Math.ceil(totalCount / size),
+          totalItems: totalCount,
+          limit: size,
+          searchQuery: '',
+          appliedFilters: {
+            category: searchParams.category,
+            type: searchParams.type,
+            workType: searchParams.workType,
+            experience: searchParams.experience,
+            province: searchParams.province,
+            district: searchParams.district,
+            minSalary: searchParams.minSalary,
+            maxSalary: searchParams.maxSalary,
+            userLocation: searchParams.userLocation
+          }
+        }
+      };
+    } catch (error) {
+      logger.error('Regular job search failed:', { error: error.message, searchParams });
+      throw new BadRequestError('Lỗi khi tìm kiếm công việc.');
+    }
+  }
   // Calculate branch limit for pagination
   const branchLimit = Math.max(page * size + 100, 500); // Ensure sufficient candidates
   const numCandidates = Math.max(1000, branchLimit * 20); // For vector search recall
@@ -2672,11 +2752,7 @@ export const hybridSearchJobs = async (searchParams) => {
         $project: {
           _id: 1,
           title: 1,
-          description: 1,
-          requirements: 1,
-          benefits: 1,
           location: 1,
-          address: 1,
           type: 1,
           workType: 1,
           minSalary: 1,
@@ -2735,11 +2811,7 @@ export const hybridSearchJobs = async (searchParams) => {
               $project: {
                 _id: 1,
                 title: 1,
-                description: 1,
-                requirements: 1,
-                benefits: 1,
                 location: 1,
-                address: 1,
                 type: 1,
                 workType: 1,
                 minSalary: 1,
@@ -2795,6 +2867,37 @@ export const hybridSearchJobs = async (searchParams) => {
 
       // --- Pagination with $facet ---
       {
+        $lookup: {
+          from: 'recruiterprofiles',
+          localField: 'recruiterProfileId',
+          foreignField: '_id',
+          as: 'recruiter'
+        }
+      },
+      {
+        $unwind: {
+          path: '$recruiter',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $addFields: {
+          'company.name': '$recruiter.company.name',
+          'company.logo': '$recruiter.company.logo',
+        }
+      },
+      {
+        $project: {
+          description: 0,
+          requirements: 0,
+          benefits: 0,
+          address: 0,
+          embeddingsUpdatedAt: 0,
+          chunks: 0,
+          recruiter: 0,
+        }
+      },
+      {
         $facet: {
           page: [
             { $skip: (page - 1) * size },
@@ -2810,14 +2913,25 @@ export const hybridSearchJobs = async (searchParams) => {
     const pageResults = results[0]?.page || [];
     const totalCount = results[0]?.total[0]?.value || 0;
 
-    // Populate recruiter information
-    const populatedResults = await Job.populate(pageResults, {
-      path: 'recruiterProfileId',
-      select: 'company.name company.logo'
-    });
+    let finalResults = pageResults;
+    // Add isSaved status if userId is provided
+    if (userId) {
+      const jobIds = finalResults.map(job => job._id);
+      const savedJobs = await SavedJob.find({
+        candidateId: userId,
+        jobId: { $in: jobIds }
+      }).select('jobId').lean();
+
+      const savedJobIds = new Set(savedJobs.map(saved => saved.jobId.toString()));
+
+      finalResults = finalResults.map(job => {
+        job.isSaved = savedJobIds.has(job._id.toString());
+        return job;
+      });
+    }
 
     return {
-      data: populatedResults,
+      data: finalResults,
       meta: {
         currentPage: page,
         totalPages: Math.ceil(totalCount / size),

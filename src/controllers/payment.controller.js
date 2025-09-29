@@ -68,7 +68,10 @@ export const handleZaloPayRedirect = asyncHandler(async (req, res) => {
   } else {
     // Thanh toán thất bại
     if (role === "candidate") {
+
       res.header("Location", config.CANDIDATE_FE_URL + `/payment/failure`);
+      res.status(302).end();
+
     } else if (role === "recruiter") {
       res.header("Location", config.RECRUITER_FE_URL + `/payment/failure`);
       res.status(302).end();

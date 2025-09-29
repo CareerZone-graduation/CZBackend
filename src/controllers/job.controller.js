@@ -121,9 +121,9 @@ export const unsaveJob = asyncHandler(async (req, res) => {
 
 export const getSavedJobs = asyncHandler(async (req, res) => {
   const userId = req.user._id;
-  const options = req.query;
+  const { search, ...options } = req.query;
 
-  const result = await jobService.getSavedJobs(userId, options);
+  const result = await jobService.getSavedJobs(userId, { search, ...options });
 
   res.status(200).json({
     success: true,
@@ -145,8 +145,9 @@ export const getJobDetailsForRecruiter = asyncHandler(async (req, res) => {
 });
 
 export const hybridSearchJobs = asyncHandler(async (req, res) => {
-  const searchParams = req.query;
-  const result = await jobService.hybridSearchJobs(searchParams);
+  const searchParams = { ...req.query };
+  const userId = req.user ? req.user._id : null;
+  const result = await jobService.hybridSearchJobs(searchParams, userId);
   res.status(200).json({
     success: true,
     message: 'Tìm kiếm hybrid công việc thành công.',

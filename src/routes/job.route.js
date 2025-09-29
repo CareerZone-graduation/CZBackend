@@ -24,6 +24,13 @@ router.get(
 
 router.get(
   '/search/hybrid',
+  (req, res, next) => {
+    if (req.headers.authorization) {
+      passport.authenticate('jwt', { session: false })(req, res, next);
+    } else {
+      next();
+    }
+  },
   validationMiddleware.validateQuery(jobSchema.hybridSearchJobSchema),
   jobController.hybridSearchJobs
 );
@@ -120,7 +127,7 @@ router.get(
   '/saved/list',
   passport.authenticate('jwt', { session: false }),
   authMiddleware.candidateOnly,
-  validationMiddleware.validateQuery(jobSchema.jobQuerySchema),
+  validationMiddleware.validateQuery(jobSchema.getSavedJobsQuerySchema),
   jobController.getSavedJobs
 );
 
