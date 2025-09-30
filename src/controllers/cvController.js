@@ -14,7 +14,7 @@ const createCv = async (req, res) => {
   try {
     const cvData = {
       templateId,
-      title: `New CV`,
+      name: `New CV`,
       cvData: {}, // Start with empty data
     };
 
@@ -109,13 +109,17 @@ const exportPdf = async (req, res) => {
     res.status(500).json({ message: 'Failed to generate PDF' });
   }
 };
-// @desc    Get all CVs
-// @route   GET /api/cvs
-// @access  Public (for now)
+const CV = require('../models/CV');
+
 const getAllCVs = async (req, res) => {
   try {
+    // Make this endpoint public by not requiring authentication
     const cvs = await CV.find({});
-    res.json(cvs);
+    res.status(200).json({
+      success: true,
+      message: 'Lấy danh sách CV thành công.',
+      data: cvs
+    });
   } catch (error) {
     console.error(`Error: ${error.message}`);
     res.status(500).json({ message: 'Server Error' });
