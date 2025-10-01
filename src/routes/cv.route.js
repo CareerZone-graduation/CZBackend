@@ -23,4 +23,7 @@ router.route('/:id')
 // Route duplicate CV
 router.post('/:id/duplicate', validationMiddleware.validateBody(cvSchema.duplicateCvSchema), cvController.duplicateCv);
 
+// Route tạo CV từ template
+router.post('/from-template', validationMiddleware.validateBody(cvSchema.createCvFromTemplateSchema), cvController.createCvFromTemplate);
+
 export default router;

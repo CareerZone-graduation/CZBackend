@@ -73,3 +73,16 @@ export const duplicateCv = asyncHandler(async (req, res) => {
         data: cv
     });
 });
+
+/**
+ * Tạo CV từ template có sẵn
+ */
+export const createCvFromTemplate = asyncHandler(async (req, res) => {
+    const { templateId, name } = req.body;
+    const cv = await cvService.createCvFromTemplate(req.user._id, templateId, name);
+    res.status(201).json({
+        success: true,
+        message: 'Tạo CV từ template thành công.',
+        data: cv
+    });
+});
