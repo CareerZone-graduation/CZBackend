@@ -77,7 +77,12 @@ const experienceSchema = new mongoose.Schema({
     type: String,
     trim: true,
     maxlength: [2000, 'Description cannot exceed 2000 characters']
-  }
+  },
+  responsibilities: [{
+    type: String,
+    trim: true,
+    maxlength: [500, 'Responsibility cannot exceed 500 characters']
+  }]
 }, { _id: true });
 
 

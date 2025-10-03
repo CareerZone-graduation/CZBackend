@@ -18,7 +18,7 @@ export const getProfile = async (userId) => {
 };
 
 /**
- * Update candidate profile (for PUT - full update)
+ * Update candidate profile (for PUT - partial update)
  * @param {string} userId
  * @param {Object} updateData
  * @returns {Promise<Object>}
@@ -26,15 +26,14 @@ export const getProfile = async (userId) => {
 export const updateProfile = async (userId, updateData) => {
     const { fullname, phone, bio, skills, educations, experiences } = updateData;
 
-    // Prepare data for database update
-    const profileUpdateData = {
-        fullname,
-        phone, 
-        bio: bio || '',
-        skills: skills || [],
-        educations: educations || [],
-        experiences: experiences || []
-    };
+    // Prepare data for database update - only set provided fields
+    const profileUpdateData = {};
+    if (fullname !== undefined) profileUpdateData.fullname = fullname;
+    if (phone !== undefined) profileUpdateData.phone = phone;
+    if (bio !== undefined) profileUpdateData.bio = bio;
+    if (skills !== undefined) profileUpdateData.skills = skills;
+    if (educations !== undefined) profileUpdateData.educations = educations;
+    if (experiences !== undefined) profileUpdateData.experiences = experiences;
 
     // Update the profile in CandidateProfile model
     const updatedProfile = await CandidateProfile.findOneAndUpdate(
