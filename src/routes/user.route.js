@@ -21,4 +21,7 @@ router.route('/me/coins')
 router.route('/me/recharge-history')
     .get(jwtAuth, validate(getRechargeHistorySchema,"query"), userController.getRechargeHistory);
 
+router.route('/register-device')
+    .post(jwtAuth, userController.registerDevice);
+
 export default router;

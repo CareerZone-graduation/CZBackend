@@ -1,9 +1,70 @@
+import admin from '../config/firebase.js';
 import { Notification, Application, User, Job, InterviewRoom, CandidateProfile } from '../models/index.js';
 import { NotFoundError, BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
 import { logActivity } from './application.service.js';
 import e, { application } from 'express';
+
+/**
+ * Gửi và lưu thông báo
+ * @param {string} userId - ID của người dùng nhận
+ * @param {object} payload - Nội dung thông báo
+ * @param {string} payload.title - Tiêu đề
+ * @param {string} payload.body - Nội dung
+ * @param {string} payload.type - Loại thông báo
+ * @param {object} [payload.data] - Dữ liệu kèm theo (vd: link điều hướng)
+ */
+export async function pushNotification(userId, payload) {
+  try {
+    // --- BƯỚC 1: LƯU VÀO DATABASE ---
+    // --- BƯỚC 2: PUSH NOTIFICATION ---
+    const user = await User.findById(userId);
+    if (!user || !user.fcmTokens || user.fcmTokens.length === 0) {
+      logger.info(`User ${userId} has no FCM tokens.`);
+      return { success: true, message: 'Notification saved, but user has no device tokens to push.' };
+    }
+
+    const message = {
+      notification: {
+        title: payload.title,
+        body: payload.body,
+      },
+      data: payload.data || {}, // Gửi data kèm theo push
+      tokens: user.fcmTokens,
+    };
+
+    const response = await admin.messaging().sendEachForMulticast(message);
+
+    // --- (Optional but recommended) Bước 3: Dọn dẹp token không hợp lệ ---
+    if (response.failureCount > 0) {
+      const tokensToRemove = [];
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success) {
+          const error = resp.error.code;
+          // Các lỗi này cho thấy token đã không còn hợp lệ
+          if (error === 'messaging/invalid-registration-token' ||
+              error === 'messaging/registration-token-not-registered') {
+            tokensToRemove.push(user.fcmTokens[idx]);
+          }
+        }
+      });
+      
+      if (tokensToRemove.length > 0) {
+        await User.updateOne(
+          { _id: userId },
+          { $pullAll: { fcmTokens: tokensToRemove } }
+        );
+        logger.info('Removed invalid tokens:', tokensToRemove);
+      }
+    }
+
+    return { success: true, response, notification };
+  } catch (error) {
+    logger.error('Error sending notification:', error);
+    return { success: false, error };
+  }
+}
 
 // =================================================================
 // Chức năng CRUD Thông báo
@@ -130,6 +191,16 @@ export const createApplicationSubmittedNotification = async (applicationId) => {
       }
     });
 
+
+    // đồng thời push thông báo đẩy
+    await pushNotification(candidateId, {
+      title: "Nộp đơn thành công",
+      body: `Bạn đã nộp đơn thành công vào vị trí "${application.jobSnapshot.title}" tại ${application.jobSnapshot.company}.`,
+      data: {
+        url: `/applications/${applicationId}`,
+      }
+    });
+
 };
 
 export const createRatingUpdateNotification = async (applicationId, newRating) => {
@@ -154,7 +225,16 @@ export const createRatingUpdateNotification = async (applicationId, newRating) =
       applicationId: applicationId.toString(),
     }
   });
+  // đồng thời push thông báo đẩy
+    await pushNotification(candidateId, {
+      title: notification.title,
+      body: notification.message,
+      data: {
+        url: `/applications/${applicationId}`,
+      }
+    });
 }
+  
 
 
 export const createInterviewScheduledNotification = async (applicationId, interviewId) => {
@@ -176,6 +256,14 @@ export const createInterviewScheduledNotification = async (applicationId, interv
       interviewId: interviewId.toString()
     }
   });
+  // đồng thời push thông báo đẩy
+    await pushNotification(candidateId, {
+      title: notification.title,
+      body: notification.message,
+      data: {
+        url: `/interviews/${interviewId}`,
+      }
+    });
 
 };
 
@@ -206,6 +294,14 @@ export const createInterviewRescheduledNotification = async (interviewId, newSch
       interviewId: interviewId.toString()
     }
   });
+  // đồng thời push thông báo đẩy
+    await pushNotification(interview.candidateId, {
+      title: notification.title,
+      body: notification.message,
+      data: {
+        url: `/interviews/${interviewId}`,
+      }
+    });
 
 };
 
@@ -231,6 +327,14 @@ export const createInterviewCanceledNotification = async (interviewId) => {
       interviewId: interviewId.toString()
     }
   });
+  // đồng thời push thông báo đẩy
+    await pushNotification(interview.candidateId, {
+      title: notification.title,
+      body: notification.message,
+      data: {
+        url: `/interviews/${interviewId}`,
+      }
+    })
 
 };
 
@@ -280,8 +384,26 @@ export const createInterviewReminderNotification = async (interviewId) => {
   });
   interview.isReminderSent = true;
   await interview.save();
+
+  // đồng thời push thông báo đẩy
+  await pushNotification(interview.candidateId, {
+    title,
+    body,
+    data: {
+      url: `/interviews/${interviewId}`,
+    }
+  });
+  await pushNotification(interview.recruiterId, {
+    title,
+    body,
+    data: {
+      url: `/interviews/${interviewId}`,
+    }
+  });
 };
 
+
+// TODO
 /**
  * Tạo thông báo khi hồ sơ được xem.
  * @param {object} payload - Dữ liệu từ worker
@@ -551,6 +673,15 @@ export const upsertRecruiterApplicantsRollup = async (payload) => {
       { upsert: true, new: true }
     ).lean();
     
+    // đồng thời push  thông báo đẩy
+    await pushNotification(recruiterId, {
+      body: updatedNotification.message,
+      title: updatedNotification.title,
+      data: {
+        url: `/jobs/${jobId}/applicants`
+      }
+    });
+
     return updatedNotification;
   } catch (error) {
     logger.error('Error in upsertRecruiterApplicantsRollup:', error);

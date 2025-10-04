@@ -47,3 +47,4 @@ test-websocket-chat.html
 .kiro
 .kilocode
 scripts
+serviceAccountKey.json

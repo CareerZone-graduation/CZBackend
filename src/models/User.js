@@ -39,7 +39,8 @@ const userSchema = new mongoose.Schema({
   emailVerificationExpires: {
     type: Date,
     default: null
-  }
+  },
+  fcmTokens: [{ type: String }] // Lưu một mảng các token
 }, {
   timestamps: true
 });
@@ -67,6 +68,14 @@ userSchema.pre('save', async function(next) {
 
 userSchema.methods.comparePassword = async function(password) {
   return await bcrypt.compare(password, this.password);
+};
+
+// Xóa token cũ khỏi mảng
+userSchema.statics.removeToken = function(userId, tokenToRemove) {
+  return this.updateOne(
+    { _id: userId },
+    { $pull: { fcmTokens: tokenToRemove } }
+  );
 };
 
 

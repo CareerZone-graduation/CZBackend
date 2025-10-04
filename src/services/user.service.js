@@ -100,3 +100,19 @@ export const getRechargeHistory = async (userId, query) => {
         data,
     };
 };
+
+/**
+ * Register a new device for FCM notifications.
+ * @param {string} userId - The ID of the user.
+ * @param {string} token - The FCM token.
+ */
+export const registerDevice = async (userId, token) => {
+    if (!token) {
+        throw new BadRequestError('Token is required.');
+    }
+
+    await User.updateOne(
+        { _id: userId },
+        { $addToSet: { fcmTokens: token } }
+    );
+};

@@ -11,6 +11,7 @@ import { NotFoundError, UnauthorizedError, BadRequestError } from '../utils/AppE
 import logger from '../utils/logger.js';
 import * as queueService from './queue.service.js';
 import * as rabbitmq from '../queues/rabbitmq.js';
+import { pushNotification } from './notification.service.js';
 
 // ==========================================================
 // === HELPER FUNCTIONS FOR AUTOMATION & LOGGING (NEW) ====
@@ -255,15 +256,15 @@ export const updateCandidateRating = async (applicationId, recruiterId, rating) 
   application.candidateRating = rating;
   await application.save();
 
-  // gửi thông báo vào queue
+  // Gửi thông báo cho ứng viên
   const candidateProfile = await CandidateProfile.findById(application.candidateProfileId).select('userId');
   if (candidateProfile) {
-    queueService.publishNotification(rabbitmq.ROUTING_KEYS.STATUS_UPDATE, {
-      type: 'RATING_UPDATE',
-      recipientId: candidateProfile.userId.toString(),
+    await pushNotification(candidateProfile.userId, {
+      title: 'CV của bạn đã được duyệt!',
+      body: `Nhà tuyển dụng đã đánh giá hồ sơ của bạn cho vị trí "${application.jobSnapshot.title}" là: ${ratingMessage}.`,
+      type: 'application',
       data: {
-        applicationId: application._id.toString(),
-        newRating: rating,
+        url: `/my-jobs/applied` // Link để người dùng click vào sẽ mở ra
       }
     });
   }

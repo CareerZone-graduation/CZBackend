@@ -1,3 +1,5 @@
+// Initialize Firebase Admin SDK
+import './config/firebase.js';
 // 📦 Core Dependencies
 import express from 'express';
 import cors from 'cors';
