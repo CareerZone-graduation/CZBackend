@@ -2618,6 +2618,20 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
     console.log('No query provided, performing regular search with filters.');
     try {
       const preFilter = buildPreFilter(searchParams);
+      
+      // Add distance filter if coordinates and distance are provided
+      if (searchParams.latitude && searchParams.longitude && searchParams.distance) {
+        preFilter['location.coordinates'] = {
+          $geoWithin: {
+            $centerSphere: [
+              [searchParams.longitude, searchParams.latitude],
+              searchParams.distance / 6378.1 // Convert km to radians (Earth radius = 6378.1 km)
+            ]
+          }
+        };
+      }
+      console.log('Pre-filter applied:', preFilter);
+      
       const skip = (page - 1) * size;
 
       let [results, totalCount] = await Promise.all([
@@ -2679,7 +2693,9 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
             district: searchParams.district,
             minSalary: searchParams.minSalary,
             maxSalary: searchParams.maxSalary,
-            userLocation: searchParams.userLocation
+            latitude: searchParams.latitude,
+            longitude: searchParams.longitude,
+            distance: searchParams.distance
           }
         }
       };
@@ -2783,18 +2799,6 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
                 filter: preFilter
               }
             },
-            ...(searchParams.userLocation ? [{
-              $match: {
-                'location.coordinates': {
-                  $geoWithin: {
-                    $centerSphere: [
-                      searchParams.userLocation.coordinates,
-                      20000 / 6378137 // radians
-                    ]
-                  }
-                }
-              }
-            }] : []),
             { $set: { vectorScore: { $meta: "vectorSearchScore" } } },
             {
               $setWindowFields: {
@@ -2829,8 +2833,20 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
           ]
         }
       },
-
       // --- Merge and rank fusion ---
+      // Apply distance filter if provided (strict radius filtering)
+      ...(searchParams.latitude && searchParams.longitude && searchParams.distance ? [{
+        $match: {
+          'location.coordinates': {
+            $geoWithin: {
+              $centerSphere: [
+                [searchParams.longitude, searchParams.latitude],
+                searchParams.distance / 6378.1 // Convert km to radians (Earth radius = 6378.1 km)
+              ]
+            }
+          }
+        }
+      }] : []),
       {
         $group: {
           _id: "$_id",
@@ -2947,7 +2963,9 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
           district: searchParams.district,
           minSalary: searchParams.minSalary,
           maxSalary: searchParams.maxSalary,
-          userLocation: searchParams.userLocation
+          latitude: searchParams.latitude,
+          longitude: searchParams.longitude,
+          distance: searchParams.distance
         }
       }
     };
