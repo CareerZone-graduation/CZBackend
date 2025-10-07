@@ -227,6 +227,10 @@ const CVSchema = new mongoose.Schema({
     required: [true, 'Template ID is required'],
     trim: true
   },
+  cvData: {
+    type: Object,
+    default: {}
+  },
   personalInfo: personalInfoSchema,
   summary: {
     type: String,

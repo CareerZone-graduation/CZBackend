@@ -87,3 +87,9 @@ export const updateCvSchema = createCvSchema.partial();
 export const duplicateCvSchema = z.object({
   name: z.string().min(1, 'Tên CV là bắt buộc').max(200, 'Tên CV không được vượt quá 200 ký tự')
 });
+
+// Schema để tạo CV từ template
+export const createCvFromTemplateSchema = z.object({
+  templateId: z.string().min(1, 'Template ID là bắt buộc'),
+  name: z.string().min(1, 'Tên CV là bắt buộc').max(200, 'Tên CV không được vượt quá 200 ký tự')
+});
