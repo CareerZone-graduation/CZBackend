@@ -3,6 +3,7 @@ import passport from 'passport';
 import * as validationMiddleware from '../middleware/validation.middleware.js';
 import * as authMiddleware from '../middleware/auth.middleware.js';
 import * as jobSchema from '../schemas/job.schema.js';
+import { getMapClustersSchema } from '../schemas/map.schema.js';
 import * as commonSchema from '../schemas/common.schema.js';
 import * as jobController from '../controllers/job.controller.js';
 
@@ -42,6 +43,18 @@ router.get(
   jobController.autocompleteJobTitles
 );
 
+// Map search routes
+router.get(
+  '/map-search',
+  validationMiddleware.validateQuery(jobSchema.mapBoundsSchema),
+  jobController.searchJobsOnMap
+);
+
+router.get(
+  '/map-clusters',
+  validationMiddleware.validateQuery(getMapClustersSchema),
+  jobController.getJobClusters
+);
 
 router.get(
   '/my-jobs',

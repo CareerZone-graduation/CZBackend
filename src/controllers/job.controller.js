@@ -165,3 +165,25 @@ export const autocompleteJobTitles = asyncHandler(async (req, res) => {
     data: suggestions,
   });
 });
+
+export const searchJobsOnMap = asyncHandler(async (req, res) => {
+  const bounds = req.query;
+  const jobs = await jobService.findJobsInBounds(bounds);
+  
+  res.status(200).json({
+    success: true,
+    message: 'Lấy danh sách công việc trên bản đồ thành công.',
+    data: jobs,
+  });
+});
+
+export const getJobClusters = asyncHandler(async (req, res) => {
+  const { zoom, ...bounds } = req.query;
+  const clusters = await jobService.getMapClusters(bounds, parseInt(zoom));
+  
+  res.status(200).json({
+    success: true,
+    message: 'Lấy cụm công việc trên bản đồ thành công.',
+    data: clusters,
+  });
+});

@@ -3154,3 +3154,364 @@ const fallbackAutocomplete = async (query, limit = 10) => {
     return [];
   }
 };
+
+/**
+ * Find jobs within a bounding box (map viewport)
+ * @param {object} bounds - Bounding box coordinates {sw_lng, sw_lat, ne_lng, ne_lat}
+ * @param {object} options - Additional options like limit
+ * @returns {Promise<Array>} Array of jobs within the bounds
+ */
+export const findJobsInBounds = async (bounds) => {
+  const { sw_lng, sw_lat, ne_lng, ne_lat, limit = 500 } = bounds;
+
+  const jobs = await Job.find({
+    status: 'ACTIVE',
+    approved: true,
+    'location.coordinates': {
+      $geoWithin: {
+        $box: [
+          [parseFloat(sw_lng), parseFloat(sw_lat)], // Southwest corner [lng, lat]
+          [parseFloat(ne_lng), parseFloat(ne_lat)]  // Northeast corner [lng, lat]
+        ]
+      }
+    }
+  })
+    .limit(parseInt(limit))
+    .select('title location.coordinates address minSalary maxSalary type workType')
+    .populate({
+      path: 'recruiterProfileId',
+      select: 'company.name company.logo'
+    })
+    .lean();
+
+  // Format response
+  return jobs.map(job => ({
+    _id: job._id,
+    title: job.title,
+    coordinates: job.location.coordinates.coordinates,
+    address: job.address,
+    minSalary: job.minSalary?.toString(),
+    maxSalary: job.maxSalary?.toString(),
+    type: job.type,
+    workType: job.workType,
+    company: {
+      name: job.recruiterProfileId?.company?.name,
+      logo: job.recruiterProfileId?.company?.logo
+    }
+  }));
+};
+
+/**
+ * Get job clusters for map view using geohash-based clustering
+ * @param {object} bounds - Bounding box coordinates {sw_lng, sw_lat, ne_lng, ne_lat}
+ * @param {number} zoom - Map zoom level (1-20)
+ * @returns {Promise<Array>} Array of clusters and individual jobs
+ */
+export const getClustersFromDb = async (bounds, zoom) => {
+  const { sw_lng, sw_lat, ne_lng, ne_lat } = bounds;
+
+  // Determine grid precision based on zoom level
+  const getPrecision = (zoomLevel) => {
+    if (zoomLevel >= 15) return 8;
+    if (zoomLevel >= 12) return 7;
+    if (zoomLevel >= 10) return 6;
+    if (zoomLevel >= 7) return 5;
+    return 4;
+  };
+
+  const precision = getPrecision(parseInt(zoom));
+
+  const pipeline = [
+    // Stage 1: Filter jobs within viewport
+    {
+      $match: {
+        status: 'ACTIVE',
+        approved: true,
+        'location.coordinates': {
+          $geoWithin: {
+            $box: [
+              [parseFloat(sw_lng), parseFloat(sw_lat)],
+              [parseFloat(ne_lng), parseFloat(ne_lat)]
+            ]
+          }
+        }
+      }
+    },
+    // Stage 2: Generate geohash for clustering
+    {
+      $project: {
+        _id: 1,
+        location: 1,
+        title: 1,
+        geohash: {
+          $substrBytes: [
+            { $function: {
+              body: function(coords) {
+                // Simple geohash implementation
+                const [lng, lat] = coords;
+                const base32 = '0123456789bcdefghjkmnpqrstuvwxyz';
+                let idx = 0;
+                let bit = 0;
+                let evenBit = true;
+                let geohash = '';
+                
+                let latMin = -90, latMax = 90;
+                let lngMin = -180, lngMax = 180;
+                
+                while (geohash.length < 12) {
+                  if (evenBit) {
+                    const lngMid = (lngMin + lngMax) / 2;
+                    if (lng > lngMid) {
+                      idx |= (1 << (4 - bit));
+                      lngMin = lngMid;
+                    } else {
+                      lngMax = lngMid;
+                    }
+                  } else {
+                    const latMid = (latMin + latMax) / 2;
+                    if (lat > latMid) {
+                      idx |= (1 << (4 - bit));
+                      latMin = latMid;
+                    } else {
+                      latMax = latMid;
+                    }
+                  }
+                  evenBit = !evenBit;
+                  
+                  if (bit < 4) {
+                    bit++;
+                  } else {
+                    geohash += base32[idx];
+                    bit = 0;
+                    idx = 0;
+                  }
+                }
+                return geohash;
+              },
+              args: ['$location.coordinates.coordinates'],
+              lang: 'js'
+            }},
+            0,
+            precision
+          ]
+        }
+      }
+    },
+    // Stage 3: Group by geohash to create clusters
+    {
+      $group: {
+        _id: '$geohash',
+        count: { $sum: 1 },
+        center: { $avg: '$location.coordinates.coordinates' },
+        jobId: { $first: '$_id' },
+        title: { $first: '$title' }
+      }
+    },
+    // Stage 4: Format output
+    {
+      $project: {
+        _id: 0,
+        count: 1,
+        coordinates: '$center',
+        cluster: { $gt: ['$count', 1] },
+        jobId: {
+          $cond: {
+            if: { $eq: ['$count', 1] },
+            then: '$jobId',
+            else: '$$REMOVE'
+          }
+        },
+        title: {
+          $cond: {
+            if: { $eq: ['$count', 1] },
+            then: '$title',
+            else: '$$REMOVE'
+          }
+        }
+      }
+    }
+  ];
+
+  try {
+    const clusters = await Job.aggregate(pipeline);
+    return clusters;
+  } catch (error) {
+    logger.error('Error in getClustersFromDb:', {
+      error: error.message,
+      bounds,
+      zoom
+    });
+    
+    // Fallback to simple bounds query without clustering
+    return await findJobsInBounds({ ...bounds, limit: 100 }).then(jobs =>
+      jobs.map(job => ({
+        count: 1,
+        coordinates: job.coordinates,
+        cluster: false,
+        jobId: job._id,
+        title: job.title
+      }))
+    );
+  }
+};
+
+
+/**
+ * Xác định số lượng cụm mong muốn dựa trên mức zoom
+ * Càng zoom xa (zoom nhỏ), càng ít cụm. Càng zoom gần (zoom lớn), càng nhiều cụm.
+ */
+const getBucketCount = (zoom) => {
+  if (zoom < 5) return 50;
+  if (zoom < 8) return 100;
+  if (zoom < 12) return 250;
+  return 400; // Số lượng "thùng" (cụm) tối đa
+};
+
+/**
+ * Lấy các cụm công việc trên bản đồ dựa trên bounds và zoom level
+ * Sử dụng MongoDB $bucketAuto để phân cụm tự động
+ * @param {object} bounds - Khung nhìn bản đồ {sw_lat, sw_lng, ne_lat, ne_lng}
+ * @param {number} zoom - Mức độ zoom của bản đồ
+ * @param {object} filters - Các bộ lọc bổ sung (category, type, workType, etc.)
+ * @returns {Promise<Array>} Danh sách các cụm và điểm đơn lẻ
+ */
+export const getMapClusters = async (bounds, zoom, filters = {}) => {
+  const bucketCount = getBucketCount(zoom);
+
+  // ✅ DEBUG: Log input parameters
+  logger.info(`[MAP CLUSTERS] Zoom: ${zoom}, BucketCount: ${bucketCount}`);
+  logger.info(`[MAP CLUSTERS] Bounds:`, bounds);
+  logger.info(`[MAP CLUSTERS] Filters:`, filters);
+
+  // 1. Xây dựng điều kiện match cơ bản
+  const baseMatch = {
+    status: 'ACTIVE',
+    'location.coordinates.coordinates': {
+      $geoWithin: {
+        $box: [
+          [parseFloat(bounds.sw_lng), parseFloat(bounds.sw_lat)],
+          [parseFloat(bounds.ne_lng), parseFloat(bounds.ne_lat)],
+        ],
+      },
+    },
+  };
+
+  // Áp dụng các bộ lọc bổ sung
+  if (filters.category) baseMatch.category = filters.category;
+  if (filters.type) baseMatch.type = filters.type;
+  if (filters.workType) baseMatch.workType = filters.workType;
+  if (filters.experience) baseMatch.experience = filters.experience;
+  if (filters.province) baseMatch['location.province'] = filters.province;
+  if (filters.district) baseMatch['location.district'] = filters.district;
+
+  // 2. Xây dựng Aggregation Pipeline với $bucketAuto
+  const pipeline = [
+    // Giai đoạn 1: Lọc các công việc trong khung nhìn và theo bộ lọc
+    { $match: baseMatch },
+
+    // Giai đoạn 2: Tự động phân cụm
+    {
+      $bucketAuto: {
+        groupBy: '$location.coordinates.coordinates', // Phân nhóm dựa trên tọa độ
+        buckets: bucketCount, // Số lượng cụm tối đa mong muốn
+        output: {
+          // Đếm số lượng công việc trong mỗi cụm
+          point_count: { $sum: 1 },
+          // Lấy tọa độ của công việc đầu tiên làm đại diện cho cụm
+          coordinates: { $first: '$location.coordinates.coordinates' },
+          // Thu thập các ID của công việc trong cụm
+          jobIds: { $push: '$_id' },
+          // Thu thập thông tin job cho single points
+          jobs: {
+            $push: {
+              _id: '$_id',
+              title: '$title',
+              minSalary: '$minSalary',
+              maxSalary: '$maxSalary',
+              recruiterProfileId: '$recruiterProfileId'
+            }
+          }
+        },
+      },
+    },
+
+    // Giai đoạn 3: Định dạng lại đầu ra
+    {
+      $project: {
+        _id: 0,
+        coordinates: 1,
+        point_count: 1,
+        // Đánh dấu đây có phải là cụm hay chỉ là 1 điểm
+        isCluster: { $gt: ['$point_count', 1] },
+        // Lấy ID của công việc nếu nó là điểm đơn lẻ (cụm chỉ có 1)
+        jobId: {
+          $cond: {
+            if: { $eq: ['$point_count', 1] },
+            then: { $arrayElemAt: ['$jobIds', 0] },
+            else: null,
+          },
+        },
+        jobIds: 1,
+        jobs: 1
+      },
+    },
+  ];
+
+  try {
+    const results = await Job.aggregate(pipeline);
+
+    // ✅ DEBUG: Log raw aggregation results
+    logger.info(`[MAP CLUSTERS] Raw results count: ${results.length}`);
+    if (results.length > 0) {
+      logger.info(`[MAP CLUSTERS] First result sample:`, JSON.stringify(results[0], null, 2));
+    }
+
+    // 3. Xử lý kết quả và lấy thông tin chi tiết cho các điểm đơn lẻ
+    const formattedResults = [];
+
+    for (const result of results) {
+      if (result.isCluster) {
+        // Đây là một cụm
+        formattedResults.push({
+          type: 'cluster',
+          coordinates: result.coordinates,
+          count: result.point_count,
+          jobIds: result.jobIds.map(id => id.toString())
+        });
+      } else {
+        // Đây là một điểm đơn lẻ - lấy thông tin chi tiết
+        const job = result.jobs[0];
+        
+        // Populate company info
+        const recruiterProfile = await RecruiterProfile.findById(job.recruiterProfileId)
+          .select('company.name company.logo')
+          .lean();
+
+        formattedResults.push({
+          type: 'single',
+          coordinates: result.coordinates,
+          job: {
+            _id: job._id,
+            title: job.title,
+            minSalary: job.minSalary?.toString(),
+            maxSalary: job.maxSalary?.toString(),
+            company: {
+              name: recruiterProfile?.company?.name,
+              logo: recruiterProfile?.company?.logo
+            }
+          }
+        });
+      }
+    }
+
+    // ✅ DEBUG: Log final formatted results
+    const clusterCount = formattedResults.filter(r => r.type === 'cluster').length;
+    const singleCount = formattedResults.filter(r => r.type === 'single').length;
+    logger.info(`[MAP CLUSTERS] Final results: ${clusterCount} clusters, ${singleCount} singles`);
+
+    return formattedResults;
+  } catch (error) {
+    logger.error('Error in getMapClusters:', error);
+    throw error;
+  }
+};

@@ -305,3 +305,28 @@ export const autocompleteJobSchema = z.object({
   }).trim().min(1, 'Query không được để trống').max(100, 'Query không được vượt quá 100 ký tự'),
   limit: z.coerce.number().int().min(1, 'Limit phải lớn hơn 0').max(20, 'Limit không được vượt quá 20').default(10),
 });
+
+// Schema for map bounding box search
+export const mapBoundsSchema = z.object({
+  sw_lat: z.coerce.number().min(-90, 'Latitude phải trong khoảng -90 đến 90').max(90, 'Latitude phải trong khoảng -90 đến 90'),
+  sw_lng: z.coerce.number().min(-180, 'Longitude phải trong khoảng -180 đến 180').max(180, 'Longitude phải trong khoảng -180 đến 180'),
+  ne_lat: z.coerce.number().min(-90, 'Latitude phải trong khoảng -90 đến 90').max(90, 'Latitude phải trong khoảng -90 đến 90'),
+  ne_lng: z.coerce.number().min(-180, 'Longitude phải trong khoảng -180 đến 180').max(180, 'Longitude phải trong khoảng -180 đến 180'),
+  limit: z.coerce.number().int().min(1).max(500).default(500).optional(),
+});
+
+// Schema for map clustering
+export const mapClusterSchema = z.object({
+  sw_lat: z.coerce.number().min(-90, 'Latitude phải trong khoảng -90 đến 90').max(90, 'Latitude phải trong khoảng -90 đến 90'),
+  sw_lng: z.coerce.number().min(-180, 'Longitude phải trong khoảng -180 đến 180').max(180, 'Longitude phải trong khoảng -180 đến 180'),
+  ne_lat: z.coerce.number().min(-90, 'Latitude phải trong khoảng -90 đến 90').max(90, 'Latitude phải trong khoảng -90 đến 90'),
+  ne_lng: z.coerce.number().min(-180, 'Longitude phải trong khoảng -180 đến 180').max(180, 'Longitude phải trong khoảng -180 đến 180'),
+  zoom: z.coerce.number().int().min(1, 'Zoom phải lớn hơn 0').max(20, 'Zoom không được vượt quá 20'),
+  // Các bộ lọc tùy chọn
+  category: z.enum(jobCategoryEnum).optional(),
+  type: z.enum(jobTypeEnum).optional(),
+  workType: z.enum(workTypeEnum).optional(),
+  experience: z.enum(experienceEnum).optional(),
+  province: z.enum(provinceNames).optional(),
+  district: z.string().optional(),
+});
