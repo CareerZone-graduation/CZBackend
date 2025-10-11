@@ -48,3 +48,5 @@ test-websocket-chat.html
 .kilocode
 scripts
 serviceAccountKey.json
+.env.lht
+.gitignore

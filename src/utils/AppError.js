@@ -40,3 +40,4 @@ export class ValidationError extends AppError {
 }
 
 export default AppError;
+export {AppError}

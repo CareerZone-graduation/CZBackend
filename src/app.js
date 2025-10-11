@@ -38,6 +38,7 @@ import chatRoutes from './routes/chat.route.js';
 import adminRoutes from './routes/admin.route.js';
 import interviewRoutes from './routes/interview.route.js';
 import analyticsRoutes from './routes/analytics.route.js'; // [MỚI] Import route mới
+import sonioxRoutes from './routes/soniox.route.js'; // Soniox voice search API
 
 // 🚧 Middlewares
 import * as errorMiddleware from './middleware/error.middleware.js';
@@ -128,6 +129,7 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/interviews', interviewRoutes);
 app.use('/api/analytics', analyticsRoutes); // [MỚI] Thêm route mới vào app
+app.use('/api/soniox', sonioxRoutes); // Soniox voice search API
 
 // 404 & error
 app.use(notFoundMiddleware.notFound);

@@ -3357,23 +3357,36 @@ export const getClustersFromDb = async (bounds, zoom) => {
 
 
 /**
- * Xác định số lượng cụm mong muốn dựa trên mức zoom
- * Càng zoom xa (zoom nhỏ), càng ít cụm. Càng zoom gần (zoom lớn), càng nhiều cụm.
+ * ✅ OPTIMIZED: Xác định số lượng cụm mong muốn dựa trên mức zoom
+ * 
+ * Nguyên tắc: Zoom càng XA → Bucket count càng NHỎ → Cụm càng LỚN
+ * 
+ * Logic:
+ * - Zoom 1-4 (Rất xa - cả nước): 5-10 cụm lớn
+ * - Zoom 5-7 (Xa - vùng/tỉnh): 10-20 cụm
+ * - Zoom 8-11 (Gần - <qu></qu>ận/huyện): 30-50 cụm
+ * - Zoom 12+ (Rất gần - NOT USED, frontend dùng client clustering)
  */
 const getBucketCount = (zoom) => {
-  if (zoom < 5) return 50;
-  if (zoom < 8) return 100;
-  if (zoom < 12) return 250;
-  return 400; // Số lượng "thùng" (cụm) tối đa
+  if (zoom < 5) return 2;   // Zoom rất xa: 2 cụm LỚN
+  if (zoom < 8) return 4;   // Zoom xa: 4 cụm VỪA (FIXED: was 100)
+  if (zoom < 10) return 6;  // Zoom gần: 6 cụm NHỎ (FIXED: was 50)
+  if (zoom < 11) return 7;  // Zoom gần: 7 cụm NHỎ
+  if (zoom < 12) return 8;  // Zoom gần: 7 cụm NHỎ (FIXED: was 250)
+  return 20; // Fallback (không nên xảy ra vì zoom >= 12 dùng /map-search)
 };
 
 /**
- * Lấy các cụm công việc trên bản đồ dựa trên bounds và zoom level
+ * ✅ ĐỀ XUẤT 2: Lấy CHỈ CLUSTERS cho zoom level thấp (< 12)
+ * - API này CHỈ TRẢ VỀ clusters (point_count > 1)
+ * - KHÔNG trả về single jobs (điểm đơn lẻ)
+ * - Frontend sẽ sử dụng MarkerClusterGroup để gom cụm phía client khi zoom >= 12
+ * 
  * Sử dụng MongoDB $bucketAuto để phân cụm tự động
  * @param {object} bounds - Khung nhìn bản đồ {sw_lat, sw_lng, ne_lat, ne_lng}
  * @param {number} zoom - Mức độ zoom của bản đồ
  * @param {object} filters - Các bộ lọc bổ sung (category, type, workType, etc.)
- * @returns {Promise<Array>} Danh sách các cụm và điểm đơn lẻ
+ * @returns {Promise<Array>} Danh sách CHỈ GỒM clusters (type: 'cluster', count > 1)
  */
 export const getMapClusters = async (bounds, zoom, filters = {}) => {
   const bucketCount = getBucketCount(zoom);
@@ -3420,39 +3433,26 @@ export const getMapClusters = async (bounds, zoom, filters = {}) => {
           // Lấy tọa độ của công việc đầu tiên làm đại diện cho cụm
           coordinates: { $first: '$location.coordinates.coordinates' },
           // Thu thập các ID của công việc trong cụm
-          jobIds: { $push: '$_id' },
-          // Thu thập thông tin job cho single points
-          jobs: {
-            $push: {
-              _id: '$_id',
-              title: '$title',
-              minSalary: '$minSalary',
-              maxSalary: '$maxSalary',
-              recruiterProfileId: '$recruiterProfileId'
-            }
-          }
+          jobIds: { $push: '$_id' }
+          // ✅ REMOVED: jobs field (không cần nữa vì chỉ trả clusters)
         },
       },
     },
 
-    // Giai đoạn 3: Định dạng lại đầu ra
+    // Giai đoạn 3: Lọc chỉ lấy clusters (point_count > 1)
+    {
+      $match: {
+        point_count: { $gt: 1 } // ✅ CHỈ LẤY CLUSTERS, bỏ qua singles
+      }
+    },
+
+    // Giai đoạn 4: Định dạng lại đầu ra
     {
       $project: {
         _id: 0,
         coordinates: 1,
         point_count: 1,
-        // Đánh dấu đây có phải là cụm hay chỉ là 1 điểm
-        isCluster: { $gt: ['$point_count', 1] },
-        // Lấy ID của công việc nếu nó là điểm đơn lẻ (cụm chỉ có 1)
-        jobId: {
-          $cond: {
-            if: { $eq: ['$point_count', 1] },
-            then: { $arrayElemAt: ['$jobIds', 0] },
-            else: null,
-          },
-        },
-        jobIds: 1,
-        jobs: 1
+        jobIds: 1
       },
     },
   ];
@@ -3466,48 +3466,19 @@ export const getMapClusters = async (bounds, zoom, filters = {}) => {
       logger.info(`[MAP CLUSTERS] First result sample:`, JSON.stringify(results[0], null, 2));
     }
 
-    // 3. Xử lý kết quả và lấy thông tin chi tiết cho các điểm đơn lẻ
-    const formattedResults = [];
-
-    for (const result of results) {
-      if (result.isCluster) {
-        // Đây là một cụm
-        formattedResults.push({
-          type: 'cluster',
-          coordinates: result.coordinates,
-          count: result.point_count,
-          jobIds: result.jobIds.map(id => id.toString())
-        });
-      } else {
-        // Đây là một điểm đơn lẻ - lấy thông tin chi tiết
-        const job = result.jobs[0];
-        
-        // Populate company info
-        const recruiterProfile = await RecruiterProfile.findById(job.recruiterProfileId)
-          .select('company.name company.logo')
-          .lean();
-
-        formattedResults.push({
-          type: 'single',
-          coordinates: result.coordinates,
-          job: {
-            _id: job._id,
-            title: job.title,
-            minSalary: job.minSalary?.toString(),
-            maxSalary: job.maxSalary?.toString(),
-            company: {
-              name: recruiterProfile?.company?.name,
-              logo: recruiterProfile?.company?.logo
-            }
-          }
-        });
-      }
-    }
+    // ✅ ĐỀ XUẤT 2: CHỈ TRẢ CLUSTERS - Không trả singles
+    // Frontend sẽ chỉ nhận clusters khi zoom < 12
+    // Aggregation pipeline đã lọc sẵn (point_count > 1) nên results chỉ chứa clusters
+    const formattedResults = results.map(result => ({
+      type: 'cluster',
+      coordinates: result.coordinates,
+      count: result.point_count,
+      jobIds: result.jobIds.map(id => id.toString())
+    }));
 
     // ✅ DEBUG: Log final formatted results
-    const clusterCount = formattedResults.filter(r => r.type === 'cluster').length;
-    const singleCount = formattedResults.filter(r => r.type === 'single').length;
-    logger.info(`[MAP CLUSTERS] Final results: ${clusterCount} clusters, ${singleCount} singles`);
+    logger.info(`[MAP CLUSTERS] Final results: ${formattedResults.length} clusters ONLY (singles removed)`);
+    logger.info(`[MAP CLUSTERS] Total jobs in clusters: ${formattedResults.reduce((sum, c) => sum + c.count, 0)}`);
 
     return formattedResults;
   } catch (error) {
