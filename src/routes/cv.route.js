@@ -8,13 +8,12 @@ import * as cvSchema from '../schemas/cv.schema.js';
 
 const router = express.Router();
 
-// Tất cả các route này yêu cầu đăng nhập
+// All CV routes require authentication
 router.use(passport.authenticate('jwt', { session: false }));
 
-// Routes cho CV
 router.route('/')
-  .post(validationMiddleware.validateBody(cvSchema.createCvSchema), cvController.createCv)
-  .get(cvController.getAllCvsByUser);
+  .get(cvController.getAllCvsByUser)
+  .post(validationMiddleware.validateBody(cvSchema.createCvSchema), cvController.createCv);
 
 router.route('/:id')
   .get(cvController.getCvById)
@@ -23,5 +22,8 @@ router.route('/:id')
 
 // Route duplicate CV
 router.post('/:id/duplicate', validationMiddleware.validateBody(cvSchema.duplicateCvSchema), cvController.duplicateCv);
+
+// Route tạo CV từ template
+router.post('/from-template', validationMiddleware.validateBody(cvSchema.createCvFromTemplateSchema), cvController.createCvFromTemplate);
 
 export default router;

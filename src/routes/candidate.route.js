@@ -17,7 +17,7 @@ router
     .route('/my-profile')
     .get(candidateController.getProfile)
     .put(
-        validationMiddleware.validateBody(userSchema.candidateProfileSchema),
+        validationMiddleware.validateBody(userSchema.candidateProfilePartialSchema),
         candidateController.updateProfile
     );
 
