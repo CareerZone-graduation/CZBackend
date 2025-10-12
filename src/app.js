@@ -85,7 +85,7 @@ app.use(cors({
   credentials: true   // cho phép cookie, auth header
 }));
 
-app.options("*", cors()); // xử lý preflight
+// app.options("*", cors()); // xử lý preflight
 // Khác
 const shouldCompress = (req, res) => {
   if (req.noCompression) {

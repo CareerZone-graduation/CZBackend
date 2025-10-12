@@ -24,9 +24,9 @@ router.route('/:id')
 router.post('/:id/duplicate', cvController.duplicateCv);
 
 // Route tạo CV từ template
-router.post('/from-template', validationMiddleware.validateBody(cvSchema.createCvFromTemplateSchema), cvController.createCvFromTemplate);
+router.post('/from-template', cvController.createCvFromTemplate);
 
 // Route export PDF (POST method like the sample)
-router.post('/:id/export-pdf', cvController.exportPdf);
+router.get('/:id/export-pdf', cvController.exportPdf);
 
 export default router;

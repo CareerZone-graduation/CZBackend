@@ -1,341 +1,315 @@
 // src/controllers/cv.controller.js
-import asyncHandler from 'express-async-handler';
-import puppeteer from 'puppeteer';
-import CV from '../models/CV.js';
-import { NotFoundError } from '../utils/AppError.js';
+import puppeteer from "puppeteer";
+import CV from "../models/CV.js";
+import { NotFoundError } from "../utils/AppError.js";
 
 /**
  * @desc    Create a new CV
  * @route   POST /api/cvs
  * @access  Private
  */
-export const createCv = asyncHandler(async (req, res) => {
-    const { templateId } = req.body;
+export const createCv = async (req, res) => {
+  const { templateId } = req.body;
 
-    if (!templateId) {
-        return res.status(400).json({ 
-            success: false,
-            message: 'Template ID is required' 
-        });
-    }
-
-    // Create a new CV with the selected templateId and empty data
-    const newCv = new CV({
-        userId: req.user._id,
-        templateId,
-        title: 'New CV',
-        cvData: {
-            personalInfo: {},
-            professionalSummary: '',
-            workExperience: [],
-            education: [],
-            skills: [],
-            projects: [],
-            certificates: [],
-            sectionOrder: ['summary', 'experience', 'education', 'skills', 'projects', 'certificates'],
-            template: templateId
-        }
+  if (!templateId) {
+    return res.status(400).json({
+      success: false,
+      message: "Template ID is required",
     });
+  }
 
-    const createdCv = await newCv.save();
-    
-    res.status(201).json({
-        success: true,
-        message: 'Tạo CV thành công.',
-        data: createdCv
-    });
-});
+  // Create a new CV with the selected templateId and empty data
+  const newCv = new CV({
+    userId: req.user._id,
+    templateId,
+    title: "New CV",
+    cvData: {
+      personalInfo: {},
+      professionalSummary: "",
+      workExperience: [],
+      education: [],
+      skills: [],
+      projects: [],
+      certificates: [],
+      sectionOrder: [
+        "summary",
+        "experience",
+        "education",
+        "skills",
+        "projects",
+        "certificates",
+      ],
+      template: templateId,
+    },
+  });
+
+  const createdCv = await newCv.save();
+
+  res.status(201).json({
+    success: true,
+    message: "Tạo CV thành công.",
+    data: createdCv,
+  });
+};
 
 /**
  * @desc    Create a new CV from a template with initial data
  * @route   POST /api/cvs/from-template
  * @access  Private
  */
-export const createCvFromTemplate = asyncHandler(async (req, res) => {
-    const { templateId, cvData, title } = req.body;
+export const createCvFromTemplate = async (req, res) => {
+  const { templateId, cvData, title } = req.body;
 
-    if (!templateId || !cvData) {
-        return res.status(400).json({
-            success: false,
-            message: 'Template ID and CV data are required'
-        });
-    }
-
-    // Create a new CV with the selected templateId and provided data
-    const newCv = new CV({
-        userId: req.user._id,
-        templateId,
-        title: title || 'New CV from Template',
-        cvData: {
-            ...cvData,
-            template: templateId // Ensure template is set in cvData
-        }
+  if (!templateId || !cvData) {
+    return res.status(400).json({
+      success: false,
+      message: "Template ID and CV data are required",
     });
+  }
 
-    const createdCv = await newCv.save();
+  // Create a new CV with the selected templateId and provided data
+  const newCv = new CV({
+    userId: req.user._id,
+    templateId,
+    title: title || "New CV from Template",
+    cvData: {
+      ...cvData,
+      template: templateId, // Ensure template is set in cvData
+    },
+  });
 
-    res.status(201).json({
-        success: true,
-        message: 'Tạo CV từ mẫu thành công.',
-        data: createdCv
-    });
-});
+  const createdCv = await newCv.save();
+
+  res.status(201).json({
+    success: true,
+    message: "Tạo CV từ mẫu thành công.",
+    data: createdCv,
+  });
+};
 
 /**
  * @desc    Get CV by ID
  * @route   GET /api/cvs/:id
  * @access  Private
  */
-export const getCvById = asyncHandler(async (req, res) => {
-    const cv = await CV.findById(req.params.id);
-    
-    if (!cv) {
-        throw new NotFoundError('CV not found');
-    }
-    
-    // Check if user owns this CV
-    if (cv.userId.toString() !== req.user._id.toString()) {
-        return res.status(403).json({
-            success: false,
-            message: 'Not authorized to access this CV'
-        });
-    }
-    
-    res.status(200).json({
-        success: true,
-        message: 'Lấy CV thành công.',
-        data: cv
-    });
-});
+export const getCvById = async (req, res) => {
+  const cv = await CV.findById(req.params.id);
+
+  if (!cv) {
+    throw new NotFoundError("CV not found");
+  }
+
+  // Check if user owns this CV
+  // if (cv.userId.toString() !== req.user._id.toString()) {
+  //     return res.status(403).json({
+  //         success: false,
+  //         message: 'Not authorized to access this CV'
+  //     });
+  // }
+
+  res.status(200).json({
+    success: true,
+    message: "Lấy CV thành công.",
+    data: cv,
+  });
+};
 
 /**
  * @desc    Update a CV
  * @route   PUT /api/cvs/:id
  * @access  Private
  */
-export const updateCv = asyncHandler(async (req, res) => {
-    const { title, cvData } = req.body;
-    
-    console.log('Updating CV with data:', { title, cvData });
-    
-    const cv = await CV.findById(req.params.id);
-    
-    if (!cv) {
-        throw new NotFoundError('CV not found');
-    }
-    
-    // Check if user owns this CV
-    if (cv.userId.toString() !== req.user._id.toString()) {
-        return res.status(403).json({
-            success: false,
-            message: 'Not authorized to update this CV'
-        });
-    }
-    
-    // Update fields
-    if (title) cv.title = title;
-    if (cvData) cv.cvData = cvData;
-    
-    const updatedCv = await cv.save();
-    
-    res.status(200).json({
-        success: true,
-        message: 'Cập nhật CV thành công.',
-        data: updatedCv
+export const updateCv = async (req, res) => {
+  const { title, cvData } = req.body;
+
+  console.log("Updating CV with data:", { title, cvData });
+
+  const cv = await CV.findById(req.params.id);
+
+  if (!cv) {
+    throw new NotFoundError("CV not found");
+  }
+
+  // Check if user owns this CV
+  if (cv.userId.toString() !== req.user._id.toString()) {
+    return res.status(403).json({
+      success: false,
+      message: "Not authorized to update this CV",
     });
-});
+  }
 
-/**
- * @desc    Delete a CV
- * @route   DELETE /api/cvs/:id
- * @access  Private
- */
-export const deleteCv = asyncHandler(async (req, res) => {
-    const cv = await CV.findById(req.params.id);
-    
-    if (!cv) {
-        throw new NotFoundError('CV not found');
-    }
-    
-    // Check if user owns this CV
-    if (cv.userId.toString() !== req.user._id.toString()) {
-        return res.status(403).json({
-            success: false,
-            message: 'Not authorized to delete this CV'
-        });
-    }
-    
-    await CV.deleteOne({ _id: req.params.id });
-    
-    res.status(200).json({
-        success: true,
-        message: 'Xóa CV thành công.'
+  // Update fields
+  if (title) cv.title = title;
+  if (cvData) cv.cvData = cvData;
+
+  const updatedCv = await cv.save();
+
+  res.status(200).json({
+    success: true,
+    message: "Cập nhật CV thành công.",
+    data: updatedCv,
+  });
+};
+
+export const deleteCv = async (req, res) => {
+  const cv = await CV.findById(req.params.id);
+
+  if (!cv) {
+    throw new NotFoundError("CV not found");
+  }
+
+  // Check if user owns this CV
+  if (cv.userId.toString() !== req.user._id.toString()) {
+    return res.status(403).json({
+      success: false,
+      message: "Not authorized to delete this CV",
     });
-});
+  }
 
-/**
- * @desc    Get all CVs of current user
- * @route   GET /api/cvs
- * @access  Private
- */
-export const getAllCvsByUser = asyncHandler(async (req, res) => {
-    const cvs = await CV.find({ userId: req.user._id })
-        .sort({ createdAt: -1 })
-        .lean();
-    
-    res.status(200).json({
-        success: true,
-        message: 'Lấy tất cả CV thành công.',
-        data: cvs
+  await CV.deleteOne({ _id: req.params.id });
+
+  res.status(200).json({
+    success: true,
+    message: "Xóa CV thành công.",
+  });
+};
+
+export const getAllCvsByUser = async (req, res) => {
+  const cvs = await CV.find({ userId: req.user._id })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  res.status(200).json({
+    success: true,
+    message: "Lấy tất cả CV thành công.",
+    data: cvs,
+  });
+};
+
+export const duplicateCv = async (req, res) => {
+  const { name } = req.body;
+
+  const originalCv = await CV.findById(req.params.id);
+
+  if (!originalCv) {
+    throw new NotFoundError("CV not found");
+  }
+
+  // Check if user owns this CV
+  if (originalCv.userId.toString() !== req.user._id.toString()) {
+    return res.status(403).json({
+      success: false,
+      message: "Not authorized to duplicate this CV",
     });
-});
+  }
 
-/**
- * @desc    Duplicate a CV
- * @route   POST /api/cvs/:id/duplicate
- * @access  Private
- */
-export const duplicateCv = asyncHandler(async (req, res) => {
-    const { name } = req.body;
-    
-    const originalCv = await CV.findById(req.params.id);
-    
-    if (!originalCv) {
-        throw new NotFoundError('CV not found');
-    }
-    
-    // Check if user owns this CV
-    if (originalCv.userId.toString() !== req.user._id.toString()) {
-        return res.status(403).json({
-            success: false,
-            message: 'Not authorized to duplicate this CV'
-        });
-    }
-    
-    // Create duplicate
-    const duplicatedCv = new CV({
-        userId: req.user._id,
-        templateId: originalCv.templateId,
-        title: name || `${originalCv.title} (Copy)`,
-        cvData: originalCv.cvData
+  // Create duplicate
+  const duplicatedCv = new CV({
+    userId: req.user._id,
+    templateId: originalCv.templateId,
+    title: name || `${originalCv.title} (Copy)`,
+    cvData: originalCv.cvData,
+  });
+
+  await duplicatedCv.save();
+
+  res.status(201).json({
+    success: true,
+    message: "Sao chép CV thành công.",
+    data: duplicatedCv,
+  });
+};
+
+export const exportPdf = async (req, res) => {
+  console.log("Exporting CV as PDF");
+  const { id } = req.params;
+  const browser = await puppeteer.launch({
+    headless: "new",
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-web-security",
+    ],
+  });
+  const page = await browser.newPage();
+  // ================= THÊM CÁC LISTENER GỠ LỖI =================
+  // 1. In ra tất cả console log từ trang web
+  // page.on('console', msg => console.log(`[PUPPETEER CONSOLE] ${msg.text()}`));
+  // // 2. In ra lỗi nếu có yêu cầu mạng thất bại (VD: Lỗi API, CORS)
+  // page.on('requestfailed', request => {
+  //     console.error(`[PUPPETEER REQUEST FAILED] URL: ${request.url()}, Method: ${request.method()}, Error: ${request.failure().errorText}`);
+  // });
+  try {
+    // Set viewport to match A4 size for consistent rendering
+    await page.setViewport({
+      width: 794, // A4 width in pixels at 96 DPI (210mm)
+      height: 1123, // A4 height in pixels at 96 DPI (297mm)
+      deviceScaleFactor: 2, // Higher quality rendering
     });
-    
-    await duplicatedCv.save();
-    
-    res.status(201).json({
-        success: true,
-        message: 'Sao chép CV thành công.',
-        data: duplicatedCv
+
+    // Navigate to the render page
+    // const renderUrl = `${process.env.FRONTEND_URL}/render/${id}`;
+    const renderUrl =
+      "http://localhost:3000/render.html?cvId=68da98728ae1c8ab421b668d";
+    console.log("Navigating to:", renderUrl);
+    // ✅ Thêm header auth tại đây
+    await page.setExtraHTTPHeaders({
+      Authorization: `Bearer ${
+        req.headers.authorization?.split(" ")[1] ||
+        process.env.INTERNAL_PDF_TOKEN
+      }`,
     });
-});
 
-/**
- * @desc    Export CV as PDF
- * @route   POST /api/cvs/:id/export-pdf
- * @access  Private
- */
-export const exportPdf = asyncHandler(async (req, res) => {
-    console.log('Exporting CV as PDF');
-    const { id } = req.params;
+    await page.goto(renderUrl, {
+      waitUntil: "networkidle0",
+      timeout: 30000,
+    });
 
-    // Verify CV exists and belongs to user
-    const cv = await CV.findById(id);
-    
-    if (!cv) {
-        throw new NotFoundError('CV not found');
-    }
-    
-    if (cv.userId.toString() !== req.user._id.toString()) {
-        return res.status(403).json({
-            success: false,
-            message: 'Not authorized to export this CV'
-        });
-    }
+    // console.log('Waiting for frontend signal (data-cv-ready="true")...');
+    // await page.waitForSelector('body[data-cv-ready="true"]', {
+    //     timeout: 25000 // Chờ tối đa 25 giây, nếu không sẽ báo lỗi
+    // });
+    // console.log('Frontend signal received! Generating PDF...');
 
-    try {
-        const browser = await puppeteer.launch({
-            headless: 'new',
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-web-security',
-                '--font-render-hinting=none' // Optimize font rendering
-            ]
-        });
-        
-        const page = await browser.newPage();
+    console.log(
+      '[DEBUG] Waiting for frontend signal (data-cv-ready="true")...'
+    );
+    await page.waitForSelector('body[data-cv-ready="true"]', {
+      timeout: 30000,
+    });
+    console.log("[DEBUG] Frontend signal received!");
 
-        // Log console messages from the Puppeteer page to help with debugging
-        // page.on('console', msg => console.log(`PUPPETEER CONSOLE: ${msg.text()}`));
-        // page.on('pageerror', error => {
-        //     console.error(`PUPPETEER PAGE ERROR: ${error.message}`);
-        // });
+    // ================= CHỤP ẢNH MÀN HÌNH ĐỂ XEM =================
+    // const screenshotPath = `debug_screenshot_${id}.png`;
+    // await page.screenshot({ path: screenshotPath, fullPage: true });
+    // console.log(`[DEBUG] Screenshot saved to: ${screenshotPath}`);
+    // ==============================================================
 
-        // Set viewport to match A4 size for consistent rendering
-        await page.setViewport({
-            width: 794,  // A4 width in pixels at 96 DPI (210mm)
-            height: 1123, // A4 height in pixels at 96 DPI (297mm)
-            deviceScaleFactor: 2, // Reduced from 2 to lower file size
-        });
+    // Generate PDF with exact settings
+    const pdfBuffer = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      margin: {
+        top: "0mm",
+        right: "0mm",
+        bottom: "0mm",
+        left: "0mm",
+      },
+      preferCSSPageSize: false,
+      displayHeaderFooter: false,
+    });
 
-        // Lấy accessToken từ header của request gốc
-        const authHeader = req.headers.authorization;
-        const token = authHeader && authHeader.split(' ')[1];
+    await browser.close();
 
-        // Navigate to the render page
-        const renderUrl = `${process.env.CLIENT_URL}/render/${id}`;
-        console.log('Navigating to:', renderUrl);
-        
-        await page.goto(renderUrl, {
-            waitUntil: 'networkidle0',
-            timeout: 30000
-        });
-
-        // Pass token to the page's localStorage
-        if (token) {
-            await page.evaluate(token => {
-                localStorage.setItem('accessToken', token);
-            }, token);
-            console.log('Access token has been set in Puppeteer page context.');
-            // Tải lại trang để Redux và apiClient có thể sử dụng token mới
-            await page.reload({ waitUntil: 'networkidle0' });
-        }
-
-        // Wait for any fonts to load
-        await page.evaluateHandle('document.fonts.ready');
-
-        // Additional wait for the CV content to be rendered
-        await page.waitForSelector('#cv-preview', { timeout: 10000 });
-
-        // Wait a bit more for any dynamic content and rendering
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        // Generate PDF with exact settings
-        const pdfBuffer = await page.pdf({
-            format: 'A4',
-            printBackground: true,
-            margin: {
-                top: '0mm',
-                right: '0mm',
-                bottom: '0mm',
-                left: '0mm'
-            },
-            preferCSSPageSize: false,
-            displayHeaderFooter: false,
-        });
-
-        await browser.close();
-
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename=cv-${id}.pdf`);
-        res.send(pdfBuffer);
-
-    } catch (error) {
-        console.error('Error generating PDF:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to generate PDF'
-        });
-    }
-});
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename=cv-${id}.pdf`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error("Error generating PDF:", error);
+    res.status(500).json({ success: false, message: "Failed to generate PDF" });
+  } finally {
+    await browser.close();
+    console.log("[DEBUG] Browser closed.");
+  }
+};
