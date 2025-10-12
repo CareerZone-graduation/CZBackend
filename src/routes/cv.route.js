@@ -17,13 +17,16 @@ router.route('/')
 
 router.route('/:id')
   .get(cvController.getCvById)
-  .put(validationMiddleware.validateBody(cvSchema.updateCvSchema), cvController.updateCv)
+  .put(cvController.updateCv)
   .delete(cvController.deleteCv);
 
 // Route duplicate CV
-router.post('/:id/duplicate', validationMiddleware.validateBody(cvSchema.duplicateCvSchema), cvController.duplicateCv);
+router.post('/:id/duplicate', cvController.duplicateCv);
 
 // Route tạo CV từ template
 router.post('/from-template', validationMiddleware.validateBody(cvSchema.createCvFromTemplateSchema), cvController.createCvFromTemplate);
+
+// Route export PDF (POST method like the sample)
+router.post('/:id/export-pdf', cvController.exportPdf);
 
 export default router;

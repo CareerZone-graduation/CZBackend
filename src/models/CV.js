@@ -1,256 +1,130 @@
 import mongoose from 'mongoose';
 
-const skillSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: [true, 'Skill name is required'],
-    trim: true,
-    maxlength: [100, 'Skill name cannot exceed 100 characters']
-  }
-}, { _id: true });
+/**
+ * CV Schema - Following the sample project pattern exactly
+ * 
+ * Structure matches the frontend expected format:
+ * - userId: Reference to User who owns this CV
+ * - templateId: Template identifier (e.g., 'modern-blue', 'classic-white')
+ * - title: CV title/name (e.g., user's full name)
+ * - cvData: Nested object with detailed schema for all CV sections
+ */
 
-const educationSchema = new mongoose.Schema({
-  school: {
-    type: String,
-    required: [true, 'School name is required'],
-    trim: true,
-    maxlength: [200, 'School name cannot exceed 200 characters']
+const cvSchema = new mongoose.Schema({
+  // User reference (required for multi-user support)
+  userId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User', 
+    required: true 
   },
-  major: {
-    type: String,
-    required: [true, 'Major is required'],
-    trim: true,
-    maxlength: [200, 'Major cannot exceed 200 characters']
+  
+  // Template identifier
+  templateId: { 
+    type: String, 
+    required: true 
   },
-  degree: {
-    type: String,
-    required: [true, 'Degree is required'],
-    trim: true,
-    maxlength: [100, 'Degree cannot exceed 100 characters']
+  
+  // CV title/name (displayed in CV list)
+  title: { 
+    type: String, 
+    default: 'Untitled CV' 
   },
-  startDate: {
-    type: String,
-    required: [true, 'Start date is required']
-  },
-  endDate: {
-    type: String
-  },
-  description: {
-    type: String,
-    trim: true,
-    maxlength: [1000, 'Description cannot exceed 1000 characters']
-  },
-  gpa: {
-    type: String,
-    trim: true
-  },
-  type: {
-    type: String,
-    trim: true,
-    maxlength: [50, 'Type cannot exceed 50 characters']
-  }
-}, { _id: true });
-
-const experienceSchema = new mongoose.Schema({
-  companyName: {
-    type: String,
-    required: [true, 'Company name is required'],
-    trim: true,
-    maxlength: [200, 'Company name cannot exceed 200 characters']
-  },
-  position: {
-    type: String,
-    required: [true, 'Position is required'],
-    trim: true,
-    maxlength: [200, 'Position cannot exceed 200 characters']
-  },
-  startDate: {
-    type: String,
-    required: [true, 'Start date is required']
-  },
-  endDate: {
-    type: String
-  },
-  description: {
-    type: String,
-    trim: true,
-    maxlength: [2000, 'Description cannot exceed 2000 characters']
-  }
-}, { _id: true });
-
-const personalInfoSchema = new mongoose.Schema({
-  firstName: {
-    type: String,
-    trim: true,
-    maxlength: [100, 'First name cannot exceed 100 characters']
-  },
-  lastName: {
-    type: String,
-    trim: true,
-    maxlength: [100, 'Last name cannot exceed 100 characters']
-  },
-  email: {
-    type: String,
-    trim: true,
-    lowercase: true,
-    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
-  },
-  phone: {
-    type: String,
-    trim: true,
-    match: [/^[\+]?[\d]{1,15}$/, 'Please enter a valid phone number']
-  },
-  address: {
-    type: String,
-    trim: true,
-    maxlength: [200, 'Address cannot exceed 200 characters']
-  },
-  linkedin: {
-    type: String,
-    trim: true,
-    match: [/^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/, 'Please enter a valid LinkedIn URL']
-  },
-  github: {
-    type: String,
-    trim: true,
-    match: [/^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/, 'Please enter a valid GitHub URL']
-  },
-  portfolio: {
-    type: String,
-    trim: true,
-    match: [/^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/, 'Please enter a valid portfolio URL']
-  },
-  avatar: {
-    type: String,
-    trim: true,
-    match: [/^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/, 'Please enter a valid avatar URL']
-  }
-}, { _id: true });
-
-const awardCertificationSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    trim: true,
-    maxlength: [200, 'Award/Certification name cannot exceed 200 characters']
-  },
-  issuer: {
-    type: String,
-    trim: true,
-    maxlength: [200, 'Issuer cannot exceed 200 characters']
-  },
-  date: {
-    type: String,
-    trim: true
-  },
-  description: {
-    type: String,
-    trim: true,
-    maxlength: [1000, 'Description cannot exceed 1000 characters']
-  }
-}, { _id: true });
-
-const projectSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    trim: true,
-    maxlength: [200, 'Project name cannot exceed 200 characters']
-  },
-  description: {
-    type: String,
-    trim: true,
-    maxlength: [2000, 'Project description cannot exceed 2000 characters']
-  },
-  startDate: {
-    type: String,
-    trim: true
-  },
-  endDate: {
-    type: String,
-    trim: true
-  },
-  url: {
-    type: String,
-    trim: true,
-    match: [/^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/, 'Please enter a valid URL']
-  },
-  technologies: [{
-    type: String,
-    trim: true,
-    maxlength: [100, 'Technology name cannot exceed 100 characters']
-  }]
-}, { _id: true });
-
-const referenceSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    trim: true,
-    maxlength: [200, 'Reference name cannot exceed 200 characters']
-  },
-  title: {
-    type: String,
-    trim: true,
-    maxlength: [200, 'Title cannot exceed 200 characters']
-  },
-  company: {
-    type: String,
-    trim: true,
-    maxlength: [200, 'Company name cannot exceed 200 characters']
-  },
-  email: {
-    type: String,
-    trim: true,
-    lowercase: true,
-    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
-  },
-  phone: {
-    type: String,
-    trim: true,
-    match: [/^[\+]?[\d]{1,15}$/, 'Please enter a valid phone number']
-  }
-}, { _id: true });
-
-
-const CVSchema = new mongoose.Schema({
-  userId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: [true, 'User ID is required']
-  },
-  name: {
-    type: String,
-    required: [true, 'CV name is required'],
-    trim: true,
-    maxlength: [200, 'CV name cannot exceed 200 characters']
-  },
-  templateId: {
-    type: String,
-    required: [true, 'Template ID is required'],
-    trim: true
-  },
+  
+  // Detailed CV data structure
   cvData: {
-    type: Object,
-    default: {}
-  },
-  personalInfo: personalInfoSchema,
-  summary: {
-    type: String,
-    trim: true,
-    maxlength: [2000, 'Summary cannot exceed 2000 characters']
-  },
-  skills: [skillSchema],
-  educations: [educationSchema],
-  experiences: [experienceSchema],
-  awardsAndCertifications: [awardCertificationSchema],
-  projects: [projectSchema],
-  references: [referenceSchema]
-}, {
-  timestamps: true
-});
+    // Personal Information
+    personalInfo: {
+      fullName: String,
+      email: String,
+      phone: String,
+      address: String,
+      website: String,
+      linkedin: String,
+      github: String,
+      profileImage: String, // URL or base64
+    },
+    
+    // Professional Summary
+    professionalSummary: String,
+    
+    // Work Experience
+    workExperience: [{
+      id: { type: String, default: () => new mongoose.Types.ObjectId().toString() },
+      position: String,
+      company: String,
+      location: String,
+      startDate: String,
+      endDate: String,
+      isCurrentJob: { type: Boolean, default: false },
+      description: String,
+      achievements: [String], // Bullet points
+    }],
+    
+    // Education
+    education: [{
+      id: { type: String, default: () => new mongoose.Types.ObjectId().toString() },
+      degree: String,
+      institution: String,
+      fieldOfStudy: String,
+      location: String,
+      startDate: String,
+      endDate: String,
+      gpa: String,
+      honors: String,
+      description: String,
+    }],
+    
+    // Skills
+    skills: [{
+      id: { type: String, default: () => new mongoose.Types.ObjectId().toString() },
+      name: String,
+      level: String, // 'Beginner', 'Intermediate', 'Advanced', 'Expert'
+      category: { 
+        type: String, 
+        enum: ['Technical', 'Soft Skills', 'Language'],
+        default: 'Technical'
+      },
+    }],
+    
+    // Projects
+    projects: [{
+      id: { type: String, default: () => new mongoose.Types.ObjectId().toString() },
+      name: String,
+      description: String,
+      url: String,
+      startDate: String,
+      endDate: String,
+      technologies: [String], // Tech stack
+    }],
+    
+    // Certificates
+    certificates: [{
+      id: { type: String, default: () => new mongoose.Types.ObjectId().toString() },
+      name: String,
+      issuer: String,
+      issueDate: String,
+      expiryDate: String,
+      credentialId: String,
+      url: String,
+    }],
+    
+    // Section Order for dynamic rendering
+    sectionOrder: { 
+      type: [String],
+      default: ['summary', 'experience', 'education', 'skills', 'projects', 'certificates']
+    },
+    
+    // Template name (for backward compatibility)
+    template: {
+      type: String,
+      default: 'modern-blue'
+    }
+  }
+}, { timestamps: true }); // Add createdAt and updatedAt timestamps
 
-// Create indexes for better query performance
-CVSchema.index({ userId: 1, createdAt: -1 }); // Changed createdDate to createdAt
-CVSchema.index({ templateId: 1 });
-CVSchema.index({ 'personalInfo.email': 1 });
-CVSchema.index({ 'skills.name': 'text', summary: 'text' }); // Text index for search
+// Indexes for better query performance
+cvSchema.index({ userId: 1, createdAt: -1 });
+cvSchema.index({ templateId: 1 });
+cvSchema.index({ title: 'text' });
 
-export default mongoose.model('CV', CVSchema);
+export default mongoose.model('CV', cvSchema);

@@ -67,29 +67,40 @@ const referenceSchema = z.object({
   phone: z.string().regex(/^[\+]?[\d]{1,15}$/, 'Số điện thoại không hợp lệ').optional()
 });
 
-// Schema chính cho CV
-export const createCvSchema = z.object({
-  name: z.string().min(1, 'Tên CV là bắt buộc').max(200, 'Tên CV không được vượt quá 200 ký tự'),
-  templateId: z.string().min(1, 'Template ID là bắt buộc'),
-  personalInfo: personalInfoSchema,
-  summary: z.string().max(2000, 'Tóm tắt không được vượt quá 2000 ký tự').optional(),
+// Base CV data schema, to be reused
+const cvDataSchema = z.object({
+  personalInfo: personalInfoSchema.optional(),
+  professionalSummary: z.string().max(2000).optional(),
+  workExperience: z.array(experienceSchema).optional(),
+  education: z.array(educationSchema).optional(),
   skills: z.array(skillSchema).optional(),
-  educations: z.array(educationSchema).optional(),
-  experiences: z.array(experienceSchema).optional(),
-  awardsAndCertifications: z.array(awardCertificationSchema).optional(),
   projects: z.array(projectSchema).optional(),
-  references: z.array(referenceSchema).optional()
+  certificates: z.array(awardCertificationSchema).optional(),
+  sectionOrder: z.array(z.string()).optional(),
+  template: z.string().optional(),
+}).deepPartial();
+
+// Schema for creating a full CV from scratch
+export const createCvSchema = z.object({
+  title: z.string().min(1, 'Tên CV là bắt buộc').max(200, 'Tên CV không được vượt quá 200 ký tự'),
+  templateId: z.string().min(1, 'Template ID là bắt buộc'),
+  cvData: cvDataSchema.optional(),
 });
 
-export const updateCvSchema = createCvSchema.partial();
+// Schema for updating a CV (all fields are optional)
+export const updateCvSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  cvData: cvDataSchema.optional(),
+});
 
 
 export const duplicateCvSchema = z.object({
   name: z.string().min(1, 'Tên CV là bắt buộc').max(200, 'Tên CV không được vượt quá 200 ký tự')
 });
 
-// Schema để tạo CV từ template
+// Schema to create a CV from a template (most common case)
 export const createCvFromTemplateSchema = z.object({
   templateId: z.string().min(1, 'Template ID là bắt buộc'),
-  name: z.string().min(1, 'Tên CV là bắt buộc').max(200, 'Tên CV không được vượt quá 200 ký tự')
+  title: z.string().min(1, 'Tên CV là bắt buộc').max(200).optional(),
+  cvData: cvDataSchema.optional(),
 });

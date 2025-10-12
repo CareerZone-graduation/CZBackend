@@ -9,15 +9,17 @@ import * as templateService from './template.service.js';
  * @param {Object} cvData - Dữ liệu CV
  * @returns {Promise<Object>} CV được tạo
  */
-export const createCv = async (userId, cvData) => {
-    // Kiểm tra templateId có hợp lệ không
-    if (!templateService.validateTemplateId(cvData.templateId)) {
+export const createCv = async (userId, data) => {
+    const { templateId, name, cvData } = data;
+    if (!templateService.validateTemplateId(templateId)) {
         throw new ValidationError('Mẫu CV không hợp lệ hoặc không tồn tại.');
     }
     
     const newCv = await CV.create({
-        ...cvData,
         userId,
+        name: name || 'CV không tên',
+        templateId,
+        cvData: cvData || {}
     });
     return newCv;
 };
@@ -33,7 +35,8 @@ export const getCvById = async (cvId, userId) => {
     if (!cv) {
         throw new NotFoundError('Không tìm thấy CV.');
     }
-    if (cv.userId.toString() !== userId) {
+    console.log(cv.userId, userId);
+    if (!cv.userId.equals(userId)) {
         throw new UnauthorizedError('Bạn không có quyền truy cập CV này.');
     }
     return cv;
@@ -47,13 +50,28 @@ export const getCvById = async (cvId, userId) => {
  * @returns {Promise<Object>} CV đã cập nhật
  */
 export const updateCv = async (cvId, userId, updateData) => {
-    if (updateData.templateId && !templateService.validateTemplateId(updateData.templateId)) {
+    const cv = await getCvById(cvId, userId); // Re-use for authorization check
+
+    const { name, templateId, cvData } = updateData;
+
+    if (templateId && !templateService.validateTemplateId(templateId)) {
         throw new ValidationError('Mẫu CV không hợp lệ.');
     }
 
-    const cv = await getCvById(cvId, userId); // Tái sử dụng hàm get để kiểm tra quyền
+    cv.name = name || cv.name;
+    cv.templateId = templateId || cv.templateId;
     
-    Object.assign(cv, updateData);
+    if (cvData) {
+        // This is the key: iterate and set fields individually for reliable change detection
+        for (const key in cvData) {
+            if (Object.prototype.hasOwnProperty.call(cvData, key)) {
+                cv.cvData[key] = cvData[key];
+            }
+        }
+        // Mark the entire object as modified to ensure Mongoose saves it
+        cv.markModified('cvData');
+    }
+
     await cv.save();
     return cv;
 };
@@ -93,14 +111,17 @@ export const createCvFromTemplate = async (userId, templateId, cvName) => {
         userId,
         name: cvName || 'CV mới',
         templateId,
-        personalInfo: {},
-        summary: '',
-        skills: [],
-        educations: [],
-        experiences: [],
-        awardsAndCertifications: [],
-        projects: [],
-        references: []
+        cvData: { // Create with nested structure
+            personalInfo: {},
+            professionalSummary: '',
+            workExperience: [],
+            education: [],
+            skills: [],
+            projects: [],
+            certificates: [],
+            sectionOrder: ['summary', 'experience', 'education', 'skills', 'projects', 'certificates'],
+            template: templateId
+        }
     });
 
     return newCv;

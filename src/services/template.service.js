@@ -40,5 +40,5 @@ export const getTemplateById = async (templateId) => {
  * @returns {boolean} True nếu template tồn tại
  */
 export const validateTemplateId = (templateId) => {
-    return cvTemplatesData.templates.some(t => t._id === templateId);
+    return cvTemplatesData.templates.some(t => t.id === templateId);
 };
