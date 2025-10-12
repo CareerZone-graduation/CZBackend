@@ -114,6 +114,12 @@ const cvSchema = new mongoose.Schema({
       default: ['summary', 'experience', 'education', 'skills', 'projects', 'certificates']
     },
     
+    // Hidden Sections (sections that should not be displayed)
+    hiddenSections: {
+      type: [String],
+      default: []
+    },
+    
     // Template name (for backward compatibility)
     template: {
       type: String,

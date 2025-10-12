@@ -2,7 +2,7 @@
 import puppeteer from "puppeteer";
 import CV from "../models/CV.js";
 import { NotFoundError } from "../utils/AppError.js";
-
+import config  from "../config/index.js";
 /**
  * @desc    Create a new CV
  * @route   POST /api/cvs
@@ -39,6 +39,7 @@ export const createCv = async (req, res) => {
         "projects",
         "certificates",
       ],
+      hiddenSections: [], // Thêm hiddenSections
       template: templateId,
     },
   });
@@ -249,16 +250,15 @@ export const exportPdf = async (req, res) => {
     });
 
     // Navigate to the render page
-    // const renderUrl = `${process.env.FRONTEND_URL}/render/${id}`;
-    const renderUrl =
-      "http://localhost:3000/render.html?cvId=68da98728ae1c8ab421b668d";
+    const renderUrl = `${config.CANDIDATE_FE_URL}/render.html?cvId=${id}`;
+    // const renderUrl =
+    //   "http://localhost:3000/render.html?cvId=68da98728ae1c8ab421b668d";
     console.log("Navigating to:", renderUrl);
     // ✅ Thêm header auth tại đây
     await page.setExtraHTTPHeaders({
-      Authorization: `Bearer ${
-        req.headers.authorization?.split(" ")[1] ||
+      Authorization: `Bearer ${req.headers.authorization?.split(" ")[1] ||
         process.env.INTERNAL_PDF_TOKEN
-      }`,
+        }`,
     });
 
     await page.goto(renderUrl, {
