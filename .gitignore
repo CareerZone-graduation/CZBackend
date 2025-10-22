@@ -50,3 +50,5 @@ scripts
 serviceAccountKey.json
 .env.lht
 .gitignore
+pnpm-lock.yaml
+package-lock.json
