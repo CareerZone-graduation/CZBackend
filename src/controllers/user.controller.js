@@ -73,7 +73,7 @@ export const registerDevice = asyncHandler(async (req, res) => {
  */
 export const getRechargeHistory = asyncHandler(async (req, res) => {
     const userId = req.user._id;
-    const { meta, data } = await userService.getRechargeHistory(userId, req.query);
+    const { meta, data } = await userService.getRechargeHistory(userId, req.validatedQuery);
     res.status(200).json({
         success: true,
         message: 'Lấy lịch sử nạp xu thành công.',

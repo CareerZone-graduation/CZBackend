@@ -8,7 +8,7 @@ import * as applicationService from '../services/application.service.js';
  */
 export const getApplicationsByJob = asyncHandler(async (req, res) => {
   const { jobId } = req.params;
-  const options = req.query;
+  const options = req.validatedQuery;
   
   // Gọi service để lấy danh sách ứng viên
   const serviceResult = await applicationService.getApplicationsByJob(jobId, req.user._id, options);

@@ -92,7 +92,7 @@ export const updateAvatar = asyncHandler(async (req, res) => {
 
 export const getMyApplications = asyncHandler(async (req, res) => {
     const userId = req.user._id;
-    const options = req.query;
+    const options = req.validatedQuery;
     
     const result = await candidateService.getMyApplications(userId, options);
     

@@ -265,7 +265,6 @@ export const exportPdf = async (req, res) => {
       waitUntil: "networkidle0",
       timeout: 30000,
     });
-
     // console.log('Waiting for frontend signal (data-cv-ready="true")...');
     // await page.waitForSelector('body[data-cv-ready="true"]', {
     //     timeout: 25000 // Chờ tối đa 25 giây, nếu không sẽ báo lỗi
@@ -278,6 +277,7 @@ export const exportPdf = async (req, res) => {
     await page.waitForSelector('body[data-cv-ready="true"]', {
       timeout: 30000,
     });
+    await page.waitForSelector('[data-cv-ready="true"]', { timeout: 10000 });
     console.log("[DEBUG] Frontend signal received!");
 
     // ================= CHỤP ẢNH MÀN HÌNH ĐỂ XEM =================
@@ -285,11 +285,13 @@ export const exportPdf = async (req, res) => {
     // await page.screenshot({ path: screenshotPath, fullPage: true });
     // console.log(`[DEBUG] Screenshot saved to: ${screenshotPath}`);
     // ==============================================================
-
+// 2. Bắt Puppeteer dùng CSS media "screen"
     // Generate PDF with exact settings
     const pdfBuffer = await page.pdf({
       format: "A4",
       printBackground: true,
+      width: '210mm',         // Giữ nguyên chiều rộng A4
+  height: '1123px',         // <-- CON SỐ NÀY PHẢI KHỚP VỚI A4_HEIGHT_PX
       margin: {
         top: "0mm",
         right: "0mm",

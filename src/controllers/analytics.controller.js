@@ -8,12 +8,12 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
 });
 
 export const getUserGrowth = asyncHandler(async (req, res) => {
-  const data = await analyticsService.getUserGrowth(req.query);
+  const data = await analyticsService.getUserGrowth(req.validatedQuery);
   res.json({ success: true, data });
 });
 
 export const getRevenueTrends = asyncHandler(async (req, res) => {
-  const data = await analyticsService.getRevenueTrends(req.query);
+  const data = await analyticsService.getRevenueTrends(req.validatedQuery);
   res.json({ success: true, data });
 });
 
@@ -32,7 +32,7 @@ export const getCompanyStats = asyncHandler(async (req, res) => {
 });
 
 export const getTransactionTrends = asyncHandler(async (req, res) => {
-  const data = await analyticsService.getTransactionAnalytics(req.query);
+  const data = await analyticsService.getTransactionAnalytics(req.validatedQuery);
   res.json({
     success: true,
     message: 'Lấy dữ liệu phân tích giao dịch thành công',
@@ -50,7 +50,7 @@ export const getTransactionToday = asyncHandler(async (req, res) => {
 });
 
 export const getTopSpendingUsers = asyncHandler(async (req, res) => {
-  const data = await analyticsService.getTopSpendingUsers(req.query);
+  const data = await analyticsService.getTopSpendingUsers(req.validatedQuery);
   res.json({
     success: true,
     message: 'Lấy danh sách người dùng chi tiêu nhiều nhất thành công',
@@ -60,7 +60,7 @@ export const getTopSpendingUsers = asyncHandler(async (req, res) => {
 
 // [MỚI]
 export const getAllTransactions = asyncHandler(async (req, res) => {
-  const result = await analyticsService.getAllTransactions(req.query);
+  const result = await analyticsService.getAllTransactions(req.validatedQuery);
   res.json({
     success: true,
     message: 'Lấy danh sách giao dịch thành công.',

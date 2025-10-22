@@ -48,7 +48,7 @@ export const getNotificationHistory = asyncHandler(async (req, res) => {
     const { id } = req.params;
     const result = await jobAlertService.getNotificationHistory(userId, {
         subscriptionId: id,
-        ...req.query
+        ...req.validatedQuery
     });
     res.status(200).json({
         success: true,
@@ -60,7 +60,7 @@ export const getNotificationHistory = asyncHandler(async (req, res) => {
 
 export const getAllNotificationHistory = asyncHandler(async (req, res) => {
     const userId = req.user._id;
-    const result = await jobAlertService.getNotificationHistory(userId, req.query);
+    const result = await jobAlertService.getNotificationHistory(userId, req.validatedQuery);
     res.status(200).json({
         success: true,
         message: 'Lấy lịch sử thông báo thành công.',

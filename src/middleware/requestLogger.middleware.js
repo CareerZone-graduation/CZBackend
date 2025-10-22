@@ -22,7 +22,7 @@ export const requestLogger = (req, res, next) => {
     // Only log params and query for company jobs endpoint
     ...(req.originalUrl.includes('/companies/') && req.originalUrl.includes('/jobs') && {
       params: req.params,
-      query: req.query
+      query: req.validatedQuery
     })
   };
 
@@ -91,7 +91,7 @@ export const errorRequestLogger = (err, req, res, next) => {
     userAgent: req.get('User-Agent'),
     ip: req.ip || req.connection.remoteAddress,
     params: req.params,
-    query: req.query,
+    query: req.validatedQuery,
     error: {
       message: err.message,
       statusCode: err.statusCode,

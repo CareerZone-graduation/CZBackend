@@ -4,15 +4,14 @@ import AppError from '../utils/AppError.js';
 
 /**
  * Generic validation middleware factory
- * @param {z.ZodSchema} schema - Zod schema to validate against
- * @param {string} source - Source of data to validate ('body', 'query', 'params')
- * @returns {Function} Express middleware function
+ * @param {z.ZodSchema} schema
+ * @param {'body'|'query'|'params'|'file'|'files'} source
  */
 export const validate = (schema, source = 'body') => {
   return async (req, res, next) => {
     try {
       let dataToValidate;
-      
+
       switch (source) {
         case 'body':
           dataToValidate = req.body;
@@ -33,78 +32,57 @@ export const validate = (schema, source = 'body') => {
           dataToValidate = req.body;
       }
 
-      // Validate and transform the data
-      const validatedData = await schema.parseAsync(dataToValidate);
-      
-      // Replace the original data with validated/transformed data
+      // ✅ Parse đúng 1 lần, tránh redeclare
+      const parsed = await schema.parseAsync(dataToValidate);
+
+      // ✅ Gán kết quả đã hợp lệ về đúng chỗ
       switch (source) {
         case 'body':
-          req.body = validatedData;
+          req.body = parsed;
           break;
         case 'query':
-          req.query = validatedData;
+          // Lưu bản chuẩn hoá để controller dùng
+          req.validatedQuery = parsed;
+
+          // (tuỳ chọn) làm sạch req.query để tránh lộ param rác
+          Object.keys(req.query).forEach((k) => {
+            if (!(k in parsed)) delete req.query[k];
+          });
+          // Nếu muốn đồng bộ kiểu đã ép, có thể:
+          Object.assign(req.query, parsed);
           break;
         case 'params':
-          req.params = validatedData;
+          req.params = parsed;
           break;
         case 'file':
-          req.file = validatedData;
+          req.file = parsed;
           break;
         case 'files':
-          req.files = validatedData;
+          req.files = parsed;
           break;
       }
 
       next();
     } catch (error) {
       if (error instanceof z.ZodError) {
-  const validationError = new AppError('Validation failed', 400); // Giữ nguyên "Validation failed" để làm "dấu hiệu"
-  validationError.errors = error.errors.map(err => ({
-    field: err.path.join('.'),
-    message: err.message,
-    code: err.code
-  }));
-  return next(validationError); 
-}
+        const validationError = new AppError('Validation failed', 400);
+        validationError.errors = error.errors.map((err) => ({
+          field: err.path.join('.'),
+          message: err.message,
+          code: err.code,
+        }));
+        return next(validationError);
+      }
 
-      // For non-Zod errors, pass to error handler
       logger.error('Unexpected validation error:', error);
       next(error);
     }
   };
 };
 
-/**
- * Convenience middleware for validating request body
- * @param {z.ZodSchema} schema - Zod schema to validate against
- * @returns {Function} Express middleware function
- */
+// Convenience wrappers
 export const validateBody = (schema) => validate(schema, 'body');
-
-/**
- * Convenience middleware for validating query parameters
- * @param {z.ZodSchema} schema - Zod schema to validate against
- * @returns {Function} Express middleware function
- */
 export const validateQuery = (schema) => validate(schema, 'query');
-
-/**
- * Convenience middleware for validating route parameters
- * @param {z.ZodSchema} schema - Zod schema to validate against
- * @returns {Function} Express middleware function
- */
 export const validateParams = (schema) => validate(schema, 'params');
-
-/**
- * Convenience middleware for validating file uploads
- * @param {z.ZodSchema} schema - Zod schema to validate against
- * @returns {Function} Express middleware function
- */
 export const validateFile = (schema) => validate(schema, 'file');
-
-/**
- * Convenience middleware for validating multiple file uploads
- * @param {z.ZodSchema} schema - Zod schema to validate against
- * @returns {Function} Express middleware function
- */
 export const validateFiles = (schema) => validate(schema, 'files');
