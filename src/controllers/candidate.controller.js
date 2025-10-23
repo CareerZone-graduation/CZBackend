@@ -56,6 +56,26 @@ export const deleteCv = asyncHandler(async (req, res) => {
     });
 });
 
+export const renameCvUpload = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    const { cvId } = req.params;
+    const { name } = req.body;
+    
+    if (!name || !name.trim()) {
+        return res.status(400).json({
+            success: false,
+            message: 'Tên CV không được để trống.',
+        });
+    }
+    
+    const cvs = await candidateService.renameCv(userId, cvId, name.trim());
+    res.status(200).json({
+        success: true,
+        message: 'Đổi tên CV thành công.',
+        data: cvs,
+    });
+});
+
 export const updateProfile = asyncHandler(async (req, res) => {
     const userId = req.user._id;
     logger.info('Updating candidate profile', { 

@@ -37,6 +37,7 @@ router.route('/cvs/:cvId/set-default')
     .patch(validationMiddleware.validateParams(z.object({ cvId: commonSchema.idParamSchema.shape.id })), candidateController.setDefaultCv);
 
 router.route('/cvs/:cvId')
+    .patch(validationMiddleware.validateParams(z.object({ cvId: commonSchema.idParamSchema.shape.id })), candidateController.renameCvUpload)
     .delete(validationMiddleware.validateParams(z.object({ cvId: commonSchema.idParamSchema.shape.id })), candidateController.deleteCv);
 
 // Route để lấy danh sách các đơn ứng tuyển của candidate
