@@ -61,10 +61,10 @@ export const createCv = async (req, res) => {
 export const createCvFromTemplate = async (req, res) => {
   const { templateId, cvData, title } = req.body;
 
-  if (!templateId || !cvData) {
+  if (!templateId) {
     return res.status(400).json({
       success: false,
-      message: "Template ID and CV data are required",
+      message: "Template ID is required",
     });
   }
 
@@ -148,6 +148,46 @@ export const updateCv = async (req, res) => {
   res.status(200).json({
     success: true,
     message: "Cập nhật CV thành công.",
+    data: updatedCv,
+  });
+};
+
+/**
+ * @desc    Rename a CV (update only the name/title)
+ * @route   PATCH /api/cvs/:id
+ * @access  Private
+ */
+export const renameCv = async (req, res) => {
+  const { name } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({
+      success: false,
+      message: "CV name is required",
+    });
+  }
+
+  const cv = await CV.findById(req.params.id);
+
+  if (!cv) {
+    throw new NotFoundError("CV not found");
+  }
+
+  // Check if user owns this CV
+  if (cv.userId.toString() !== req.user._id.toString()) {
+    return res.status(403).json({
+      success: false,
+      message: "Not authorized to update this CV",
+    });
+  }
+
+  // Update only the title/name
+  cv.title = name.trim();
+  const updatedCv = await cv.save();
+
+  res.status(200).json({
+    success: true,
+    message: "Đổi tên CV thành công.",
     data: updatedCv,
   });
 };

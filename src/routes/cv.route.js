@@ -18,6 +18,7 @@ router.route('/')
 router.route('/:id')
   .get(cvController.getCvById)
   .put(cvController.updateCv)
+  .patch(cvController.renameCv)
   .delete(cvController.deleteCv);
 
 // Route duplicate CV
