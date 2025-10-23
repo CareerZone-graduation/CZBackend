@@ -193,7 +193,17 @@ export const companyJobsQuerySchema = z.object({
           'Ví dụ: createdAt:desc'
       })
       .optional()
+  ),
+  search: z.preprocess(
+    (val) => {
+      if (!val || typeof val !== 'string') return undefined;
+      return val.trim();
+    },
+    z.string()
+      .min(1, 'Từ khóa tìm kiếm phải có ít nhất 1 ký tự')
+      .max(200, 'Từ khóa tìm kiếm không được vượt quá 200 ký tự')
+      .optional()
   )
 }).strict({
-  message: 'Chỉ chấp nhận các tham số truy vấn hợp lệ: page, limit, province, sortBy'
+  message: 'Chỉ chấp nhận các tham số truy vấn hợp lệ: page, limit, province, sortBy, search'
 });

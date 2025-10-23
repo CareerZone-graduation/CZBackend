@@ -846,7 +846,7 @@ export const getSavedJobs = async (userId, options) => {
   };
 };
 export const getJobsByCompany = async (companyId, options = {}) => {
-  const { page = 1, limit = 10, province, sortBy, ...filters } = options;
+  const { page = 1, limit = 10, province, sortBy, search, ...filters } = options;
 
   // Find recruiter profile by company ID
   const recruiterProfile = await RecruiterProfile.findOne({
@@ -867,6 +867,15 @@ export const getJobsByCompany = async (companyId, options = {}) => {
   // Add province filter
   if (province) {
     query['location.province'] = province;
+  }
+
+  // Add search filter
+  if (search) {
+    query.$or = [
+      { title: { $regex: search, $options: 'i' } },
+      { description: { $regex: search, $options: 'i' } },
+      { requirements: { $regex: search, $options: 'i' } }
+    ];
   }
 
   // Sort options
