@@ -172,6 +172,7 @@ export const getUserSearchHistory = async (userId, { limit = 10, page = 1 } = {}
 /**
  * Delete a specific search history entry
  * Verifies that entry belongs to the user
+ * Optimized: Xóa nhanh, invalidate cache ở background
  * @param {string} userId - User ID
  * @param {string} entryId - Search history entry ID
  * @returns {Promise<void>}
@@ -194,11 +195,16 @@ export const deleteSearchHistory = async (userId, entryId) => {
       throw new ForbiddenError('Bạn không có quyền xóa lịch sử này');
     }
 
+    // Xóa entry từ database (await để đảm bảo xóa thành công)
     await SearchHistory.deleteOne({ _id: entryId });
     logger.info(`Deleted search history entry ${entryId} for user ${userId}`);
 
-    // Invalidate Redis cache
-    await invalidateUserCache(userId);
+    // Invalidate Redis cache ở background (không await)
+    // Nếu cache invalidation fail, không ảnh hưởng đến response
+    invalidateUserCache(userId).catch(error => {
+      logger.error('Background cache invalidation error:', error);
+    });
+
   } catch (error) {
     logger.error('Error deleting search history:', error);
     throw error;
