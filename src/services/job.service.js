@@ -15,6 +15,8 @@ import * as uploadService from './upload.service.js';
 import logger from '../utils/logger.js';
 import { logActivity } from './application.service.js';
 import { generateEmbeddingWithRetry } from '../utils/embedding.js';
+import { recordCreditTransaction } from './creditHistory.service.js';
+import { TRANSACTION_TYPES, TRANSACTION_CATEGORIES } from '../constants/index.js';
 
 /**
  * Tìm CandidateProfile từ userId và kiểm tra sự tồn tại
@@ -508,6 +510,31 @@ export const getApplicantCount = async (jobId, userId) => {
   // Trừ xu
   candidateUser.coinBalance -= VIEW_APPLICANT_COST;
   await candidateUser.save();
+
+  // Record credit transaction
+  try {
+    await recordCreditTransaction({
+      userId: candidateUser._id,
+      type: TRANSACTION_TYPES.USAGE,
+      category: TRANSACTION_CATEGORIES.JOB_VIEW,
+      amount: -VIEW_APPLICANT_COST,
+      description: `Xem số lượng ứng viên cho công việc "${job.title}"`,
+      referenceId: job._id,
+      referenceModel: 'Job',
+      metadata: {
+        jobTitle: job.title,
+        cost: VIEW_APPLICANT_COST
+      }
+    });
+  } catch (error) {
+    // Log error but don't block main operation
+    logger.error('Failed to record credit transaction for job view:', {
+      userId: candidateUser._id,
+      jobId: job._id,
+      error: error.message,
+      stack: error.stack
+    });
+  }
 
   // 3. Đếm số lượng ứng viên đã nộp đơn
   const applicantCount = await Application.countDocuments({ jobId });
@@ -2627,7 +2654,7 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
     console.log('No query provided, performing regular search with filters.');
     try {
       const preFilter = buildPreFilter(searchParams);
-      
+
       // Add distance filter if coordinates and distance are provided
       if (searchParams.latitude && searchParams.longitude && searchParams.distance) {
         preFilter['location.coordinates'] = {
@@ -2640,7 +2667,7 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
         };
       }
       console.log('Pre-filter applied:', preFilter);
-      
+
       const skip = (page - 1) * size;
 
       let [results, totalCount] = await Promise.all([
@@ -2656,7 +2683,7 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
           .lean(),
         Job.countDocuments(preFilter)
         // sau đó đưa company.name, logo trải phẳng trong results
-        
+
       ]);
 
       // Add isSaved status if userId is provided
@@ -2678,9 +2705,9 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
         const company = job.recruiterProfileId?.company || {};
         return {
           ...job,
-          company:{
-          name: company.name || null,
-          logo: company.logo || null
+          company: {
+            name: company.name || null,
+            logo: company.logo || null
           },
           recruiterProfileId: job.recruiterProfileId?._id || null // giữ lại id nếu cần
         };
@@ -3254,52 +3281,54 @@ export const getClustersFromDb = async (bounds, zoom) => {
         title: 1,
         geohash: {
           $substrBytes: [
-            { $function: {
-              body: function(coords) {
-                // Simple geohash implementation
-                const [lng, lat] = coords;
-                const base32 = '0123456789bcdefghjkmnpqrstuvwxyz';
-                let idx = 0;
-                let bit = 0;
-                let evenBit = true;
-                let geohash = '';
-                
-                let latMin = -90, latMax = 90;
-                let lngMin = -180, lngMax = 180;
-                
-                while (geohash.length < 12) {
-                  if (evenBit) {
-                    const lngMid = (lngMin + lngMax) / 2;
-                    if (lng > lngMid) {
-                      idx |= (1 << (4 - bit));
-                      lngMin = lngMid;
+            {
+              $function: {
+                body: function (coords) {
+                  // Simple geohash implementation
+                  const [lng, lat] = coords;
+                  const base32 = '0123456789bcdefghjkmnpqrstuvwxyz';
+                  let idx = 0;
+                  let bit = 0;
+                  let evenBit = true;
+                  let geohash = '';
+
+                  let latMin = -90, latMax = 90;
+                  let lngMin = -180, lngMax = 180;
+
+                  while (geohash.length < 12) {
+                    if (evenBit) {
+                      const lngMid = (lngMin + lngMax) / 2;
+                      if (lng > lngMid) {
+                        idx |= (1 << (4 - bit));
+                        lngMin = lngMid;
+                      } else {
+                        lngMax = lngMid;
+                      }
                     } else {
-                      lngMax = lngMid;
+                      const latMid = (latMin + latMax) / 2;
+                      if (lat > latMid) {
+                        idx |= (1 << (4 - bit));
+                        latMin = latMid;
+                      } else {
+                        latMax = latMid;
+                      }
                     }
-                  } else {
-                    const latMid = (latMin + latMax) / 2;
-                    if (lat > latMid) {
-                      idx |= (1 << (4 - bit));
-                      latMin = latMid;
+                    evenBit = !evenBit;
+
+                    if (bit < 4) {
+                      bit++;
                     } else {
-                      latMax = latMid;
+                      geohash += base32[idx];
+                      bit = 0;
+                      idx = 0;
                     }
                   }
-                  evenBit = !evenBit;
-                  
-                  if (bit < 4) {
-                    bit++;
-                  } else {
-                    geohash += base32[idx];
-                    bit = 0;
-                    idx = 0;
-                  }
-                }
-                return geohash;
-              },
-              args: ['$location.coordinates.coordinates'],
-              lang: 'js'
-            }},
+                  return geohash;
+                },
+                args: ['$location.coordinates.coordinates'],
+                lang: 'js'
+              }
+            },
             0,
             precision
           ]
@@ -3350,7 +3379,7 @@ export const getClustersFromDb = async (bounds, zoom) => {
       bounds,
       zoom
     });
-    
+
     // Fallback to simple bounds query without clustering
     return await findJobsInBounds({ ...bounds, limit: 100 }).then(jobs =>
       jobs.map(job => ({

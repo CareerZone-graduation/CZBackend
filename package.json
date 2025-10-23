@@ -16,7 +16,10 @@
     "start:all": "npm-run-all --parallel dev worker:notification worker:matching",
     "test": "cross-env NODE_ENV=test node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --detectOpenHandles --forceExit --no-cache",
     "normalize:locations": "node scripts/chuan-hoa-location-data.js",
-    "test:locations": "node scripts/test-location-normalization.js"
+    "test:locations": "node scripts/test-location-normalization.js",
+    "migrate:credit-history": "node scripts/migrateCreditHistory.js",
+    "migrate:credit-history:dry-run": "node scripts/migrateCreditHistory.js --dry-run",
+    "verify:credit-history": "node scripts/verifyCreditHistory.js"
   },
   "keywords": [
     "job",

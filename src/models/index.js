@@ -9,6 +9,7 @@ export { default as JobAlertSubscription } from './JobAlertSubscription.js';
 export { default as Notification } from './Notification.js';
 export { default as InterviewRoom } from './InterviewRoom.js';
 export { default as CoinRecharge } from './CoinRecharge.js';
+export { default as CreditTransaction } from './CreditTransaction.js';
 export { default as CV } from './CV.js';
 export { default as Conversation } from './Conversation.js';
 export { default as CandidateProfile } from './CandidateProfile.js';

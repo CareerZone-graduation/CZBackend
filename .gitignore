@@ -46,7 +46,6 @@ test-websocket-chat.html
 .ignore
 .kiro
 .kilocode
-scripts
 serviceAccountKey.json
 .env.lht
 .gitignore

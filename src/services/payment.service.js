@@ -6,6 +6,8 @@ import CoinRecharge from '../models/CoinRecharge.js';
 import User from '../models/User.js';
 import { BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
+import { recordCreditTransaction } from './creditHistory.service.js';
+import { TRANSACTION_TYPES, TRANSACTION_CATEGORIES } from '../constants/index.js';
 
 const { zalopay } = config;
 const COIN_CONVERSION_RATE = 100; // 1 coin = 100 VND
@@ -173,10 +175,38 @@ export const handleZaloPayCallback = async (apptransid, status) => {
         // Handle success case
         logger.info(`ZaloPay callback: Transaction ${apptransid} completed successfully.`);
         recharge = await CoinRecharge.findOneAndUpdate({ transactionCode: apptransid }, { status: 'SUCCESS' });
+        
         // cộng xu cho user
         await User.findByIdAndUpdate(recharge.userId, {
             $inc: { coinBalance: recharge.coinAmount },
         });
+
+        // Record credit transaction (non-blocking)
+        try {
+            await recordCreditTransaction({
+                userId: recharge.userId,
+                type: TRANSACTION_TYPES.DEPOSIT,
+                category: TRANSACTION_CATEGORIES.RECHARGE,
+                amount: recharge.coinAmount,
+                description: `Nạp ${recharge.coinAmount} xu qua ${recharge.paymentMethod}`,
+                referenceId: recharge._id,
+                referenceModel: 'CoinRecharge',
+                metadata: {
+                    paymentMethod: recharge.paymentMethod,
+                    amountPaid: recharge.amountPaid,
+                    transactionCode: recharge.transactionCode
+                }
+            });
+            logger.info(`Credit transaction recorded for user ${recharge.userId}, amount: ${recharge.coinAmount}`);
+        } catch (transactionError) {
+            // Log error but don't block payment completion
+            logger.error('Failed to record credit transaction:', {
+                userId: recharge.userId,
+                rechargeId: recharge._id,
+                error: transactionError.message,
+                stack: transactionError.stack
+            });
+        }
     } else {
         // Handle failure case
         logger.warn(`ZaloPay callback: Transaction ${apptransid} failed with status ${status}.`);
