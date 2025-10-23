@@ -24,7 +24,7 @@ export const saveSearchHistory = asyncHandler(async (req, res) => {
  */
 export const getUserSearchHistory = asyncHandler(async (req, res) => {
   const userId = req.user._id;
-  const { limit, page } = req.validatedQuery;
+  const { limit, page } = req.validatedQuery || req.query;
 
   const result = await searchHistoryService.getUserSearchHistory(userId, { limit, page });
 

@@ -56,10 +56,28 @@ export const createZaloPayOrder = async (userId, coins) => {
     orderRequestData.mac = CryptoJS.HmacSHA256(dataToMac, zalopay.key1).toString();
 
     try {
-        const { data: zaloPayResponse } = await axios.post(zalopay.create_order_url, null, {
-            params: orderRequestData,
-        });
+        // === BẮT ĐẦU SỬA ===
 
+        // 1. Chuyển đổi object thành chuỗi 'application/x-www-form-urlencoded'
+        const formBody = new URLSearchParams();
+        for (const key in orderRequestData) {
+            formBody.append(key, orderRequestData[key]);
+        }
+
+        // 2. Gửi 'formBody' trong tham số THỨ HAI (data), không phải tham số thứ ba (config)
+        const { data: zaloPayResponse } = await axios.post(
+            zalopay.create_order_url,
+            formBody, // Gửi data trong body
+            {
+                headers: {
+                    // 3. Đặt Content-Type rõ ràng (mặc dù URLSearchParams thường tự làm điều này)
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+            }
+        );
+        
+        // === KẾT THÚC SỬA ===
+        console.log("zaloPayResponse",orderRequestData,zaloPayResponse);
         if (zaloPayResponse.return_code !== 1) {
             logger.error('ZaloPay order creation failed:', zaloPayResponse);
             await CoinRecharge.findByIdAndUpdate(newRecharge._id, {

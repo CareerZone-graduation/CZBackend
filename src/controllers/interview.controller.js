@@ -8,7 +8,7 @@ import * as interviewService from '../services/interview.service.js';
  */
 export const getMyInterviews = asyncHandler(async (req, res) => {
   const recruiterId = req.user._id;
-  const { page, limit, status } = req.validatedQuery;
+  const { page, limit, status } = req.validatedQuery || req.query;
 
   const result = await interviewService.getRecruiterInterviews(recruiterId, { page, limit, status });
 
@@ -27,7 +27,7 @@ export const getMyInterviews = asyncHandler(async (req, res) => {
  */
 export const getMyCandidateInterviews = asyncHandler(async (req, res) => {
   const candidateId = req.user._id;
-  const { page, limit, status } = req.validatedQuery;
+  const { page, limit, status } = req.validatedQuery || req.query;
 
   const result = await interviewService.getCandidateInterviews(candidateId, { page, limit, status });
 

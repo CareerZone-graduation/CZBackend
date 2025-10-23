@@ -13,7 +13,7 @@ export const createJob = asyncHandler(async (req, res) => {
 });
 
 export const getAllJobs = asyncHandler(async (req, res) => {
-  const options = req.validatedQuery;
+  const options = req.validatedQuery || req.query;
   const result = await jobService.getAllJobs(options);
   res.status(200).json({
     success: true,
@@ -25,7 +25,7 @@ export const getAllJobs = asyncHandler(async (req, res) => {
 
 export const getMyJobs = asyncHandler(async (req, res) => {
   const userId = req.user._id;
-  const options = req.validatedQuery;
+  const options = req.validatedQuery || req.query;
   
   const result = await jobService.getJobsByRecruiter(userId, options);
   res.status(200).json({
@@ -121,7 +121,7 @@ export const unsaveJob = asyncHandler(async (req, res) => {
 
 export const getSavedJobs = asyncHandler(async (req, res) => {
   const userId = req.user._id;
-  const { search, ...options } = req.validatedQuery;
+  const { search, ...options } = req.validatedQuery || req.query;
 
   const result = await jobService.getSavedJobs(userId, { search, ...options });
 
@@ -145,7 +145,7 @@ export const getJobDetailsForRecruiter = asyncHandler(async (req, res) => {
 });
 
 export const hybridSearchJobs = asyncHandler(async (req, res) => {
-  const searchParams = { ...req.validatedQuery };
+  const searchParams = { ...req.validatedQuery || req.query };
   const userId = req.user ? req.user._id : null;
   const result = await jobService.hybridSearchJobs(searchParams, userId);
   res.status(200).json({
@@ -156,7 +156,7 @@ export const hybridSearchJobs = asyncHandler(async (req, res) => {
   });
 });
 export const autocompleteJobTitles = asyncHandler(async (req, res) => {
-  const { query, limit } = req.validatedQuery;
+  const { query, limit } = req.validatedQuery || req.query;
   console.log('Autocomplete query:', query, 'limit:', limit);
   const suggestions = await jobService.autocompleteJobTitles(query, limit);
   
@@ -168,7 +168,7 @@ export const autocompleteJobTitles = asyncHandler(async (req, res) => {
 });
 
 export const searchJobsOnMap = asyncHandler(async (req, res) => {
-  const bounds = req.validatedQuery;
+  const bounds = req.validatedQuery || req.query;
   const jobs = await jobService.findJobsInBounds(bounds);
   
   res.status(200).json({
@@ -179,7 +179,7 @@ export const searchJobsOnMap = asyncHandler(async (req, res) => {
 });
 
 export const getJobClusters = asyncHandler(async (req, res) => {
-  const { zoom, ...bounds } = req.validatedQuery;
+  const { zoom, ...bounds } = req.validatedQuery || req.query;
   const clusters = await jobService.getMapClusters(bounds, parseInt(zoom));
   
   res.status(200).json({

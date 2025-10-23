@@ -3,7 +3,7 @@ import * as notificationService from '../services/notification.service.js';
 
 export const getNotifications = asyncHandler(async (req, res) => {
   const userId = req.user._id;
-  const options = req.validatedQuery;
+  const options = req.validatedQuery || req.query;
   const result = await notificationService.getNotifications(userId, options);
 
   res.status(200).json({

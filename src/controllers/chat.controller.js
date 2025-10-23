@@ -17,7 +17,7 @@ import logger from '../utils/logger.js';
  */
 export const getMessagesInConversation = asyncHandler(async (req, res) => {
   const { conversationId } = req.params;
-  const { page, limit } = req.validatedQuery;
+  const { page, limit } = req.validatedQuery || req.query;
 
   const result = await chatService.getConversationMessages(
     req.user._id,

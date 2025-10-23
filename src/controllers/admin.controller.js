@@ -3,7 +3,7 @@ import * as adminService from '../services/admin.service.js';
 
 // Quản lý Tin tuyển dụng
 export const getJobs = asyncHandler(async (req, res) => {
-  const result = await adminService.getJobsForAdmin(req.validatedQuery);
+  const result = await adminService.getJobsForAdmin(req.validatedQuery || req.query);
   res.json({
     success: true,
     message: 'Lấy danh sách tin tuyển dụng thành công.',
@@ -40,7 +40,7 @@ export const rejectJob = asyncHandler(async (req, res) => {
 
 // Quản lý Người dùng
 export const getUsers = asyncHandler(async (req, res) => {
-  const result = await adminService.getUsersForAdmin(req.validatedQuery);
+  const result = await adminService.getUsersForAdmin(req.validatedQuery || req.query);
   res.json({
     success: true,
     message: 'Lấy danh sách người dùng thành công.',
@@ -59,7 +59,7 @@ export const updateUserStatus = asyncHandler(async (req, res) => {
 
 // Quản lý Công ty
 export const getCompanies = asyncHandler(async (req, res) => {
-  const result = await adminService.getCompaniesForAdmin(req.validatedQuery);
+  const result = await adminService.getCompaniesForAdmin(req.validatedQuery || req.query);
   res.json({
     success: true,
     message: 'Lấy danh sách công ty thành công.',

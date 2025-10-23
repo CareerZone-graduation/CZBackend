@@ -168,7 +168,7 @@ export const logout = asyncHandler(async (req, res) => {
 
 
 export const verifyEmail = asyncHandler(async (req, res) => {
-  const { token } = req.validatedQuery; // Use query params for token
+  const { token } = req.validatedQuery || req.query; // Use query params for token
   
   try {
     const result = await authService.verifyEmail(token);

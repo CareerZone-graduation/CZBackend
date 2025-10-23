@@ -42,8 +42,7 @@ export const handleZaloPayCallback = asyncHandler(async (req, res) => {
 //  tạm thời lấy redirect Url làm callback luôn
 
 export const handleZaloPayRedirect = asyncHandler(async (req, res) => {
-  const { apptransid, status } = req.validatedQuery;
-  console.log("ZaloPay redirect data:", req.validatedQuery);
+  const { apptransid, status } = req.validatedQuery || req.query;
   console.log(
     "Handling ZaloPay redirect for apptransid:",
     apptransid,

@@ -88,7 +88,7 @@ export const updateMyCompanyLogo = asyncHandler(async (req, res) => {
 // @route   GET /api/v1/companies
 // @access  Public
 export const getAllCompanies = asyncHandler(async (req, res) => {
-  const result = await companyService.getAllCompanies(req.validatedQuery);
+  const result = await companyService.getAllCompanies(req.validatedQuery || req.query);
   res.status(200).json({
     success: true,
     message: 'Lấy danh sách công ty thành công.',
@@ -114,7 +114,7 @@ export const getCompanyById = asyncHandler(async (req, res) => {
 // @access  Public
 export const getJobsByCompany = asyncHandler(async (req, res) => {
   const { id: companyId } = req.params;
-  const options = { ...req.validatedQuery, companyId };
+  const options = { ...req.validatedQuery || req.query, companyId };
   
   const result = await jobService.getJobsByCompany(companyId, options);
   
