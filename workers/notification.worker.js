@@ -56,12 +56,12 @@ async function processJobAlertNotification(payload) {
     // 1. Handle EMAIL notifications
     if (deliveryMethod === 'EMAIL' || deliveryMethod === 'BOTH') {
       const subject = NotificationTemplateService.generateSubject(jobs, subscription.keyword, frequency);
-      
+
       const templateData = {
-          user,
-          jobs,
-          subscription,
-          notificationId: notificationHistoryId
+        user,
+        jobs,
+        subscription,
+        notificationId: notificationHistoryId
       };
 
       const html = await NotificationTemplateService.generateEmailTemplate(templateType, templateData);
@@ -77,25 +77,25 @@ async function processJobAlertNotification(payload) {
 
     // 2. Handle IN-APP notifications
     if (deliveryMethod === 'APPLICATION' || deliveryMethod === 'BOTH') {
-        const title = NotificationTemplateService.generateSubject(jobs, subscription.keyword, frequency);
-        const message = `Có ${jobs.length} việc làm mới phù hợp với tìm kiếm của bạn cho từ khóa "${subscription.keyword}".`;
+      const title = NotificationTemplateService.generateSubject(jobs, subscription.keyword, frequency);
+      const message = `Có ${jobs.length} việc làm mới phù hợp với tìm kiếm của bạn cho từ khóa "${subscription.keyword}".`;
 
-        await Notification.create({
-            userId,
-            title,
-            message,
-            type: 'job_alert',
-            entity: {
-                type: 'JobAlertSubscription',
-                id: subscriptionId,
-            },
-            metadata: {
-                subscriptionId: subscriptionId.toString(),
-                jobIds: jobIds.map(j => j._id.toString()),
-                notificationHistoryId: notificationHistoryId.toString(),
-            },
-        });
-        logger.info(`In-app job alert created for user ${userId} for subscription ${subscriptionId}`);
+      await Notification.create({
+        userId,
+        title,
+        message,
+        type: 'job_alert',
+        entity: {
+          type: 'JobAlertSubscription',
+          id: subscriptionId,
+        },
+        metadata: {
+          subscriptionId: subscriptionId.toString(),
+          jobIds: jobIds.map(j => j._id.toString()),
+          notificationHistoryId: notificationHistoryId.toString(),
+        },
+      });
+      logger.info(`In-app job alert created for user ${userId} for subscription ${subscriptionId}`);
     }
 
   } catch (error) {
@@ -126,20 +126,20 @@ async function startWorker() {
     try {
       payload = JSON.parse(msg.content.toString());
       routingKey = msg.fields.routingKey;
-      
-      logger.info(`📨 Received task from [${routingKey}]`, { 
+
+      logger.info(`📨 Received task from [${routingKey}]`, {
         payloadType: payload.type,
         timestamp: new Date().toISOString()
       });
 
       // === ROUTING LOGIC - Điều phối message đến hàm service tương ứng ===
       switch (routingKey) {
-        
+
         // === Email Services ===
         case ROUTING_KEYS.EMAIL_SEND:
           await emailService.sendEmail(payload);
           break;
-        
+
         // === New Application - Tạo thông báo gộp cho nhà tuyển dụng ===
         case ROUTING_KEYS.NEW_APPLICATION:
           await notificationService.upsertRecruiterApplicantsRollup(payload);
@@ -162,7 +162,7 @@ async function startWorker() {
         case ROUTING_KEYS.INTERVIEW_CANCEL:
           await notificationService.createInterviewCanceledNotification(payload.data.interviewId);
           break;
-          /////////////////////////// chưa implement
+        /////////////////////////// chưa implement
         case ROUTING_KEYS.INTERVIEW_COMPLETE:
           // Xử lý qua hàm legacy cho các loại interview khác
           await notificationService.processLegacyNotification(payload);
@@ -193,7 +193,7 @@ async function startWorker() {
 
       // Acknowledge message thành công
       channel.ack(msg);
-      
+
       const processingTime = Date.now() - startTime;
       logger.info(`✅ Message processed successfully`, {
         routingKey,
@@ -202,7 +202,7 @@ async function startWorker() {
 
     } catch (error) {
       const processingTime = Date.now() - startTime;
-      
+
       logger.error('❌ Error processing message, sending to DLQ', {
         error: error.message,
         stack: error.stack,
@@ -220,7 +220,7 @@ async function startWorker() {
   // === Lắng nghe cả hai queue với cùng handler ===
   channel.consume(QUEUES.IMMEDIATE, messageHandler, { noAck: false });
   channel.consume(QUEUES.DIGEST, messageHandler, { noAck: false });
-  
+
   logger.info(`🎧 Worker is now consuming from queues: [${QUEUES.IMMEDIATE}, ${QUEUES.DIGEST}]`);
 }
 
@@ -235,7 +235,7 @@ async function handleStatusUpdate(payload) {
       // Tạo thông báo xác nhận cho ứng viên
       await notificationService.createApplicationSubmittedNotification(applicationId);
       break;
-    
+
     case 'RATING_UPDATE':
       // Cập nhật đánh giá ứng viên
       const newRating = payload.data.newRating;
@@ -248,14 +248,14 @@ async function handleStatusUpdate(payload) {
       await notificationService.createInterviewScheduledNotification(applicationId, interviewId);
       logger.info(`📋 Interview scheduled notification created`);
       break;
-    
-      //chưa implement
+
+    //chưa implement
     case 'PROFILE_VIEW':
       // Thông báo khi hồ sơ được xem
       await notificationService.createProfileViewNotification(payload);
       logger.info(`👀 Profile view notification created`);
       break;
-    
+
     default:
       // Fallback cho các loại status update khác
       logger.warn(`⚠️ Unknown STATUS_UPDATE type: ${payload.type}, using legacy handler`);
