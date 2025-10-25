@@ -2,6 +2,7 @@ import { CandidateProfile, User, Application } from '../models/index.js';
 import { NotFoundError, BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
 import * as uploadService from './upload.service.js';
+import { calculateProfileCompleteness, updateProfileCompleteness } from '../controllers/candidateOnboardingController.js';
 import mongoose from 'mongoose';
 
 /**
@@ -14,6 +15,20 @@ export const getProfile = async (userId) => {
     if (!profile) {
         throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
     }
+    
+    // Calculate and update profile completeness
+    const completeness = calculateProfileCompleteness(profile);
+    
+    // Update in database if changed
+    if (JSON.stringify(completeness) !== JSON.stringify(profile.profileCompleteness)) {
+        await CandidateProfile.findByIdAndUpdate(
+            profile._id,
+            { $set: { profileCompleteness: completeness } },
+            { new: true }
+        );
+        profile.profileCompleteness = completeness;
+    }
+    
     return profile;
 };
 

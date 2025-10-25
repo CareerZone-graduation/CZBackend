@@ -1,6 +1,7 @@
 import express from 'express';
 import passport from 'passport';
 import * as candidateController from '../controllers/candidate.controller.js';
+import * as candidateOnboardingController from '../controllers/candidateOnboardingController.js';
 import * as authMiddleware from '../middleware/auth.middleware.js';
 import * as validationMiddleware from '../middleware/validation.middleware.js';
 import * as uploadMiddleware from '../middleware/upload.middleware.js';
@@ -53,5 +54,11 @@ router.get(
     validationMiddleware.validateParams(applicationSchema.applicationIdParam),
     candidateController.getApplicationById
 );
+
+// Onboarding Routes
+router.get('/onboarding/status', candidateOnboardingController.getOnboardingStatus);
+router.patch('/onboarding/step', candidateOnboardingController.updateOnboardingStep);
+router.patch('/onboarding/skip', candidateOnboardingController.skipOnboarding);
+router.post('/onboarding/complete', candidateOnboardingController.completeOnboarding);
 
 export default router;
