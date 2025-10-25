@@ -122,6 +122,24 @@ const candidateProfileSchema = new mongoose.Schema({
     isDefault: { type: Boolean, default: false },
     uploadedAt: { type: Date, default: Date.now }
   }],
+  // Onboarding tracking
+  onboarding: {
+    isCompleted: { type: Boolean, default: false },
+    currentStep: { type: Number, default: 0, min: 0, max: 5 }, // 0-5 steps
+    completedSteps: [{ type: Number }], // Array of completed step numbers
+    skippedSteps: [{ type: Number }], // Array of skipped step numbers
+    completionPercentage: { type: Number, default: 0, min: 0, max: 100 },
+    lastUpdated: { type: Date, default: Date.now }
+  },
+  // Profile completeness tracking
+  profileCompleteness: {
+    hasBasicInfo: { type: Boolean, default: false },
+    hasExperience: { type: Boolean, default: false },
+    hasEducation: { type: Boolean, default: false },
+    hasSkills: { type: Boolean, default: false },
+    hasCV: { type: Boolean, default: false },
+    percentage: { type: Number, default: 0, min: 0, max: 100 }
+  }
 }, {
   timestamps: true
 });

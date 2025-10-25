@@ -2,6 +2,7 @@ import { CandidateProfile, User, Application } from '../models/index.js';
 import { NotFoundError, BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
 import * as uploadService from './upload.service.js';
+import { calculateProfileCompleteness, updateProfileCompleteness } from '../controllers/candidateOnboardingController.js';
 import mongoose from 'mongoose';
 
 /**
@@ -14,6 +15,20 @@ export const getProfile = async (userId) => {
     if (!profile) {
         throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
     }
+    
+    // Calculate and update profile completeness
+    const completeness = calculateProfileCompleteness(profile);
+    
+    // Update in database if changed
+    if (JSON.stringify(completeness) !== JSON.stringify(profile.profileCompleteness)) {
+        await CandidateProfile.findByIdAndUpdate(
+            profile._id,
+            { $set: { profileCompleteness: completeness } },
+            { new: true }
+        );
+        profile.profileCompleteness = completeness;
+    }
+    
     return profile;
 };
 
@@ -41,7 +56,7 @@ export const updateProfile = async (userId, updateData) => {
         { $set: profileUpdateData },
         { new: true, upsert: true, runValidators: true }
     ).select('fullname avatar phone bio skills educations experiences createdAt updatedAt')
-    .lean();
+        .lean();
 
     if (!updatedProfile) {
         throw new NotFoundError('Không tìm thấy hồ sơ để cập nhật.');
@@ -62,7 +77,7 @@ export const updateAvatar = async (userId, avatarUrl) => {
         { $set: { avatar: avatarUrl, userId } },
         { new: true, upsert: true }
     )
-    .select('fullname avatar phone bio skills educations experiences createdAt updatedAt').lean();
+        .select('fullname avatar phone bio skills educations experiences createdAt updatedAt').lean();
 
     return profile;
 };
@@ -186,6 +201,29 @@ export const deleteCv = async (userId, cvId) => {
 };
 
 /**
+ * Đổi tên CV đã upload
+ * @param {string} userId - ID của user
+ * @param {string} cvId - ID của CV
+ * @param {string} newName - Tên mới
+ * @returns {Promise<Array>}
+ */
+export const renameCv = async (userId, cvId, newName) => {
+    const profile = await CandidateProfile.findOne({ userId });
+    if (!profile) {
+        throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
+    }
+
+    const cv = profile.cvs.find(cv => cv._id.toString() === cvId);
+    if (!cv) {
+        throw new NotFoundError('Không tìm thấy CV.');
+    }
+
+    cv.name = newName;
+    await profile.save();
+    return profile.cvs;
+};
+
+/**
  * Lấy danh sách các đơn ứng tuyển của candidate
  * @param {string} userId ID của user
  * @param {Object} options Các tùy chọn lọc và phân trang
@@ -193,7 +231,7 @@ export const deleteCv = async (userId, cvId) => {
  */
 export const getMyApplications = async (userId, options = {}) => {
     logger.info('Getting applications for candidate', { userId, options });
-    
+
     // Lấy candidate profile để có candidateProfileId
     const candidateProfile = await CandidateProfile.findOne({ userId }).lean();
     if (!candidateProfile) {
@@ -207,7 +245,7 @@ export const getMyApplications = async (userId, options = {}) => {
 
     // Xây dựng query filter
     const filter = { candidateProfileId: candidateProfile._id };
-    
+
     if (options.status) {
         filter.status = options.status;
     }
@@ -223,11 +261,11 @@ export const getMyApplications = async (userId, options = {}) => {
     // Xử lý sort
     let sortOptions = { appliedAt: -1 }; // Default sort by newest first
     if (options.sort) {
-        const sortField = options.sort.startsWith('-') 
-            ? options.sort.substring(1) 
+        const sortField = options.sort.startsWith('-')
+            ? options.sort.substring(1)
             : options.sort;
         const sortDirection = options.sort.startsWith('-') ? -1 : 1;
-        
+
         if (['appliedAt', 'lastStatusUpdateAt'].includes(sortField)) {
             sortOptions = { [sortField]: sortDirection };
         }
@@ -251,11 +289,11 @@ export const getMyApplications = async (userId, options = {}) => {
         limit
     }
 
-    logger.info('Successfully retrieved applications for candidate', { 
-        userId, 
+    logger.info('Successfully retrieved applications for candidate', {
+        userId,
         candidateProfileId: candidateProfile._id,
         totalCount,
-        currentPageCount: applications.length 
+        currentPageCount: applications.length
     });
 
     return { data: applications, meta };
@@ -269,7 +307,7 @@ export const getMyApplications = async (userId, options = {}) => {
  */
 export const getApplicationById = async (userId, applicationId) => {
     logger.info('Getting application details for candidate', { userId, applicationId });
-    
+
     // Lấy candidate profile để có candidateProfileId
     const candidateProfile = await CandidateProfile.findOne({ userId }).lean();
     if (!candidateProfile) {
@@ -281,17 +319,17 @@ export const getApplicationById = async (userId, applicationId) => {
         _id: applicationId,
         candidateProfileId: candidateProfile._id
     })
-    .select('jobId status appliedAt lastStatusUpdateAt coverLetter submittedCV jobSnapshot candidateName candidateEmail candidatePhone candidateRating notes activityHistory isReapplied previousApplicationId')
-    .lean();
+        .select('jobId status appliedAt lastStatusUpdateAt coverLetter submittedCV jobSnapshot candidateName candidateEmail candidatePhone candidateRating notes activityHistory isReapplied previousApplicationId')
+        .lean();
 
     if (!application) {
         throw new NotFoundError('Không tìm thấy đơn ứng tuyển này.');
     }
 
-    logger.info('Successfully retrieved application details for candidate', { 
-        userId, 
+    logger.info('Successfully retrieved application details for candidate', {
+        userId,
         candidateProfileId: candidateProfile._id,
-        applicationId 
+        applicationId
     });
 
     return application;

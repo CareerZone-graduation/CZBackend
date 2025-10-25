@@ -40,6 +40,7 @@ import interviewRoutes from './routes/interview.route.js';
 import analyticsRoutes from './routes/analytics.route.js'; // [MỚI] Import route mới
 import sonioxRoutes from './routes/soniox.route.js'; // Soniox voice search API
 import searchHistoryRoutes from './routes/searchHistory.route.js'; // Search history API
+import viewHistoryRoutes from './routes/viewHistory.route.js'; // Job view history API
 import creditHistoryRoutes from './routes/creditHistory.route.js'; // Credit history API
 
 // 🚧 Middlewares
@@ -133,6 +134,7 @@ app.use('/api/interviews', interviewRoutes);
 app.use('/api/analytics', analyticsRoutes); // [MỚI] Thêm route mới vào app
 app.use('/api/soniox', sonioxRoutes); // Soniox voice search API
 app.use('/api/search-history', searchHistoryRoutes); // Search history API
+app.use('/api/job-view-history', viewHistoryRoutes); // Job view history API
 app.use('/api/credit-history', creditHistoryRoutes); // Credit history API
 
 // 404 & error

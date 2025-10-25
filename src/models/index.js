@@ -16,3 +16,4 @@ export { default as CandidateProfile } from './CandidateProfile.js';
 export { default as PendingNotification } from './PendingNotification.js';
 export { default as NotificationHistory } from './NotificationHistory.js';
 export { default as SearchHistory } from './SearchHistory.js';
+export { default as JobViewHistory } from './JobViewHistory.js';
