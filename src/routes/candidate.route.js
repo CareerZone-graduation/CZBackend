@@ -22,6 +22,10 @@ router
     .put(
         validationMiddleware.validateBody(userSchema.candidateProfilePartialSchema),
         candidateController.updateProfile
+    )
+    .patch(
+        validationMiddleware.validateBody(userSchema.candidateProfilePartialSchema),
+        candidateController.updateProfile
     );
 
 // Profile completeness endpoint
@@ -87,15 +91,15 @@ router.post('/onboarding/dismiss', candidateOnboardingController.dismissOnboardi
 
 // Job Recommendation Routes
 router.post(
-  '/recommendations/generate',
-  validationMiddleware.validateBody(recommendationSchema.generateRecommendationsSchema),
-  recommendationController.generateRecommendations
+    '/recommendations/generate',
+    validationMiddleware.validateBody(recommendationSchema.generateRecommendationsSchema),
+    recommendationController.generateRecommendations
 );
 
 router.get(
-  '/recommendations',
-  validationMiddleware.validateQuery(recommendationSchema.getRecommendationsQuerySchema),
-  recommendationController.getRecommendations
+    '/recommendations',
+    validationMiddleware.validateQuery(recommendationSchema.getRecommendationsQuerySchema),
+    recommendationController.getRecommendations
 );
 
 export default router;

@@ -50,13 +50,12 @@ export const updateProfile = async (userId, updateData) => {
     if (educations !== undefined) profileUpdateData.educations = educations;
     if (experiences !== undefined) profileUpdateData.experiences = experiences;
 
-    // Update the profile in CandidateProfile model
+    // Update the profile in CandidateProfile model (without .lean() to get _id)
     const updatedProfile = await CandidateProfile.findOneAndUpdate(
         { userId },
         { $set: profileUpdateData },
         { new: true, upsert: true, runValidators: true }
-    ).select('fullname avatar phone bio skills educations experiences createdAt updatedAt')
-        .lean();
+    ).select('fullname avatar phone bio skills educations experiences createdAt updatedAt');
 
     if (!updatedProfile) {
         throw new NotFoundError('Không tìm thấy hồ sơ để cập nhật.');
@@ -70,7 +69,8 @@ export const updateProfile = async (userId, updateData) => {
         updatedFields: Object.keys(profileUpdateData) 
     });
 
-    return updatedProfile;
+    // Convert to plain object before returning
+    return updatedProfile.toObject();
 };
 
 /**
@@ -85,14 +85,14 @@ export const updateAvatar = async (userId, avatarUrl) => {
         { $set: { avatar: avatarUrl, userId } },
         { new: true, upsert: true }
     )
-        .select('fullname avatar phone bio skills educations experiences createdAt updatedAt').lean();
+        .select('fullname avatar phone bio skills educations experiences createdAt updatedAt');
 
     // Recalculate profile completeness after avatar update
     await updateProfileCompleteness(profile._id);
 
     logger.info('Avatar updated and completeness recalculated', { userId });
 
-    return profile;
+    return profile.toObject();
 };
 
 /**

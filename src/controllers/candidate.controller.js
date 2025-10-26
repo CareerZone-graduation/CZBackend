@@ -85,10 +85,13 @@ export const updateProfile = asyncHandler(async (req, res) => {
     
     const updatedProfile = await candidateService.updateProfile(userId, req.body);
     
+    // Get updated completeness to return to frontend
+    const profileWithCompleteness = await candidateService.getProfile(userId);
+    
     res.status(200).json({
         success: true,
         message: 'Cập nhật hồ sơ thành công.',
-        data: updatedProfile,
+        data: profileWithCompleteness,
     });
 });
 
@@ -101,12 +104,15 @@ export const updateAvatar = asyncHandler(async (req, res) => {
     logger.info(`Uploading avatar for user: ${userId}`);
     const result = await uploadService.uploadToCloudinary(req.file.buffer, 'avatars');
     
-    const updatedProfile = await candidateService.updateAvatar(userId, result.secure_url);
+    await candidateService.updateAvatar(userId, result.secure_url);
+    
+    // Get updated profile with completeness to return to frontend
+    const profileWithCompleteness = await candidateService.getProfile(userId);
 
     res.status(200).json({
         success: true,
         message: 'Cập nhật ảnh đại diện thành công.',
-        data: updatedProfile,
+        data: profileWithCompleteness,
     });
 });
 
