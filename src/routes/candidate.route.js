@@ -2,6 +2,7 @@ import express from 'express';
 import passport from 'passport';
 import * as candidateController from '../controllers/candidate.controller.js';
 import * as candidateOnboardingController from '../controllers/candidateOnboardingController.js';
+import * as recommendationController from '../controllers/recommendation.controller.js';
 import * as authMiddleware from '../middleware/auth.middleware.js';
 import * as validationMiddleware from '../middleware/validation.middleware.js';
 import * as uploadMiddleware from '../middleware/upload.middleware.js';
@@ -9,6 +10,7 @@ import { z } from 'zod';
 import * as userSchema from '../schemas/user.schema.js';
 import * as commonSchema from '../schemas/common.schema.js';
 import * as applicationSchema from '../schemas/application.schema.js';
+import * as recommendationSchema from '../schemas/recommendation.schema.js';
 
 const router = express.Router();
 
@@ -21,6 +23,26 @@ router
         validationMiddleware.validateBody(userSchema.candidateProfilePartialSchema),
         candidateController.updateProfile
     );
+
+// Profile completeness endpoint
+router.get(
+    '/profile/completeness',
+    validationMiddleware.validateQuery(userSchema.profileCompletenessQuerySchema),
+    candidateController.getProfileCompleteness
+);
+
+// Profile preferences endpoint
+router.put(
+    '/profile/preferences',
+    validationMiddleware.validateBody(userSchema.profilePreferencesSchema),
+    candidateController.updateProfilePreferences
+);
+
+// Profile recommendations endpoint
+router.get(
+    '/profile/recommendations',
+    candidateController.getProfileRecommendations
+);
 
 router
     .route('/avatar')
@@ -55,10 +77,25 @@ router.get(
     candidateController.getApplicationById
 );
 
-// Onboarding Routes
+// Onboarding Routes - Simplified (no session needed)
 router.get('/onboarding/status', candidateOnboardingController.getOnboardingStatus);
-router.patch('/onboarding/step', candidateOnboardingController.updateOnboardingStep);
-router.patch('/onboarding/skip', candidateOnboardingController.skipOnboarding);
+router.get('/onboarding/recommendations', candidateOnboardingController.getRecommendations);
+router.put('/onboarding/update', candidateOnboardingController.updateProfileData);
+router.post('/onboarding/upload-avatar', uploadMiddleware.uploadAvatar, candidateOnboardingController.uploadAvatar);
 router.post('/onboarding/complete', candidateOnboardingController.completeOnboarding);
+router.post('/onboarding/dismiss', candidateOnboardingController.dismissOnboarding);
+
+// Job Recommendation Routes
+router.post(
+  '/recommendations/generate',
+  validationMiddleware.validateBody(recommendationSchema.generateRecommendationsSchema),
+  recommendationController.generateRecommendations
+);
+
+router.get(
+  '/recommendations',
+  validationMiddleware.validateQuery(recommendationSchema.getRecommendationsQuerySchema),
+  recommendationController.getRecommendations
+);
 
 export default router;

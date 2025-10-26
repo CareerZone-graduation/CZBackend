@@ -136,3 +136,64 @@ export const getApplicationById = asyncHandler(async (req, res) => {
         data: application
     });
 });
+
+/**
+ * Get profile completeness
+ * GET /api/candidate/profile/completeness
+ */
+export const getProfileCompleteness = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    const { recalculate } = req.validatedQuery || req.query;
+    
+    logger.info('Getting profile completeness', { userId, recalculate });
+    
+    const completeness = await candidateService.getProfileCompleteness(userId, recalculate);
+    
+    res.status(200).json({
+        success: true,
+        message: 'Lấy thông tin độ hoàn thiện hồ sơ thành công.',
+        data: completeness
+    });
+});
+
+/**
+ * Update profile preferences (salary, locations, work preferences)
+ * PUT /api/candidate/profile/preferences
+ */
+export const updateProfilePreferences = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    const preferences = req.body;
+    
+    logger.info('Updating profile preferences', { 
+        userId, 
+        hasExpectedSalary: !!preferences.expectedSalary,
+        hasPreferredLocations: !!preferences.preferredLocations,
+        hasWorkPreferences: !!preferences.workPreferences
+    });
+    
+    const updatedProfile = await candidateService.updateProfilePreferences(userId, preferences);
+    
+    res.status(200).json({
+        success: true,
+        message: 'Cập nhật thông tin ưu tiên thành công.',
+        data: updatedProfile
+    });
+});
+
+/**
+ * Get profile improvement recommendations
+ * GET /api/candidate/profile/recommendations
+ */
+export const getProfileRecommendations = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    
+    logger.info('Getting profile recommendations', { userId });
+    
+    const recommendations = await candidateService.getProfileRecommendations(userId);
+    
+    res.status(200).json({
+        success: true,
+        message: 'Lấy gợi ý cải thiện hồ sơ thành công.',
+        data: recommendations
+    });
+});

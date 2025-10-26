@@ -62,6 +62,14 @@ export const updateProfile = async (userId, updateData) => {
         throw new NotFoundError('Không tìm thấy hồ sơ để cập nhật.');
     }
 
+    // Recalculate profile completeness after update
+    await updateProfileCompleteness(updatedProfile._id);
+
+    logger.info('Profile updated and completeness recalculated', { 
+        userId, 
+        updatedFields: Object.keys(profileUpdateData) 
+    });
+
     return updatedProfile;
 };
 
@@ -78,6 +86,11 @@ export const updateAvatar = async (userId, avatarUrl) => {
         { new: true, upsert: true }
     )
         .select('fullname avatar phone bio skills educations experiences createdAt updatedAt').lean();
+
+    // Recalculate profile completeness after avatar update
+    await updateProfileCompleteness(profile._id);
+
+    logger.info('Avatar updated and completeness recalculated', { userId });
 
     return profile;
 };
@@ -333,4 +346,116 @@ export const getApplicationById = async (userId, applicationId) => {
     });
 
     return application;
+};
+
+/**
+ * Get profile completeness
+ * @param {string} userId
+ * @param {boolean} recalculate - Whether to force recalculation
+ * @returns {Promise<Object>}
+ */
+export const getProfileCompleteness = async (userId, recalculate = false) => {
+    const profile = await CandidateProfile.findOne({ userId });
+    
+    if (!profile) {
+        throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
+    }
+
+    // If recalculate is true or completeness is stale (older than 1 hour), recalculate
+    const shouldRecalculate = recalculate || 
+        !profile.profileCompleteness?.lastCalculated ||
+        (Date.now() - new Date(profile.profileCompleteness.lastCalculated).getTime()) > 3600000;
+
+    if (shouldRecalculate) {
+        const completeness = await updateProfileCompleteness(profile._id, profile);
+        return completeness;
+    }
+
+    return profile.profileCompleteness;
+};
+
+/**
+ * Get profile improvement recommendations
+ * @param {string} userId
+ * @returns {Promise<Object>}
+ */
+export const getProfileRecommendations = async (userId) => {
+    const profile = await CandidateProfile.findOne({ userId });
+    
+    if (!profile) {
+        throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
+    }
+
+    // Import the function from onboarding service
+    const { getProfileImprovementRecommendations } = await import('../services/onboarding.service.js');
+    
+    const recommendations = getProfileImprovementRecommendations(profile);
+    
+    logger.info('Profile recommendations generated', { 
+        userId, 
+        completeness: recommendations.completeness,
+        totalRecommendations: recommendations.summary.total
+    });
+
+    return recommendations;
+};
+
+/**
+ * Update profile preferences (salary, locations, work preferences)
+ * @param {string} userId
+ * @param {Object} preferences
+ * @returns {Promise<Object>}
+ */
+export const updateProfilePreferences = async (userId, preferences) => {
+    const profile = await CandidateProfile.findOne({ userId });
+    
+    if (!profile) {
+        throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
+    }
+
+    // Update expected salary
+    if (preferences.expectedSalary) {
+        profile.expectedSalary = {
+            ...profile.expectedSalary,
+            ...preferences.expectedSalary
+        };
+    }
+
+    // Update preferred locations
+    if (preferences.preferredLocations) {
+        profile.preferredLocations = preferences.preferredLocations;
+    }
+
+    // Update work preferences
+    if (preferences.workPreferences) {
+        if (!profile.workPreferences) {
+            profile.workPreferences = {};
+        }
+        
+        if (preferences.workPreferences.workTypes) {
+            profile.workPreferences.workTypes = preferences.workPreferences.workTypes;
+        }
+        
+        if (preferences.workPreferences.contractTypes) {
+            profile.workPreferences.contractTypes = preferences.workPreferences.contractTypes;
+        }
+        
+        if (preferences.workPreferences.experienceLevel) {
+            profile.workPreferences.experienceLevel = preferences.workPreferences.experienceLevel;
+        }
+    }
+
+    await profile.save({ validateModifiedOnly: true });
+
+    // Recalculate profile completeness after update
+    await updateProfileCompleteness(profile._id, profile);
+
+    logger.info('Profile preferences updated', { 
+        userId, 
+        hasExpectedSalary: !!preferences.expectedSalary,
+        hasPreferredLocations: !!preferences.preferredLocations,
+        hasWorkPreferences: !!preferences.workPreferences
+    });
+
+    return profile;
 };

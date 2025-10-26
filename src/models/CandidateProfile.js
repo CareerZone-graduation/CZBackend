@@ -122,23 +122,105 @@ const candidateProfileSchema = new mongoose.Schema({
     isDefault: { type: Boolean, default: false },
     uploadedAt: { type: Date, default: Date.now }
   }],
-  // Onboarding tracking
-  onboarding: {
-    isCompleted: { type: Boolean, default: false },
-    currentStep: { type: Number, default: 0, min: 0, max: 5 }, // 0-5 steps
-    completedSteps: [{ type: Number }], // Array of completed step numbers
-    skippedSteps: [{ type: Number }], // Array of skipped step numbers
-    completionPercentage: { type: Number, default: 0, min: 0, max: 100 },
-    lastUpdated: { type: Date, default: Date.now }
+  // Expected salary range
+  expectedSalary: {
+    min: {
+      type: Number,
+      default: 0,
+      min: [0, 'Minimum salary cannot be negative']
+    },
+    max: {
+      type: Number,
+      default: 0,
+      min: [0, 'Maximum salary cannot be negative'],
+      validate: {
+        validator: function (value) {
+          // Skip validation if min is not set or if this is a partial update
+          if (!this.expectedSalary || this.expectedSalary.min === undefined || this.expectedSalary.min === null) {
+            return true;
+          }
+          return value >= this.expectedSalary.min;
+        },
+        message: 'Maximum salary must be greater than or equal to minimum salary'
+      }
+    },
+    currency: {
+      type: String,
+      default: 'VND',
+      enum: ['VND', 'USD'],
+      trim: true
+    }
+  },
+  // Preferred work locations - Chỉ lưu tên province và district
+  preferredLocations: [{
+    province: {
+      type: String,
+      required: [true, 'Province is required'],
+      trim: true
+    },
+    district: {
+      type: String,
+      trim: true,
+      default: null // null = tất cả quận/huyện
+    }
+  }],
+  // Work preferences
+  workPreferences: {
+    workTypes: [{
+      type: String,
+      enum: ['ON_SITE', 'REMOTE', 'HYBRID'],
+      trim: true
+    }],
+    contractTypes: [{
+      type: String,
+      enum: ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERNSHIP', 'TEMPORARY', 'FREELANCE'],
+      trim: true
+    }],
+    experienceLevel: {
+      type: String,
+      enum: ['ENTRY_LEVEL', 'MID_LEVEL', 'SENIOR_LEVEL', 'EXECUTIVE', 'NO_EXPERIENCE', 'INTERN', 'FRESHER'],
+      trim: true
+    }
+  },
+  // Onboarding tracking - Đánh dấu user đã hoàn thành onboarding
+  onboardingCompleted: {
+    type: Boolean,
+    default: false
+  },
+  onboardingCompletedAt: {
+    type: Date
+  },
+  // Legacy onboarding status (giữ lại để backward compatibility)
+  onboardingStatus: {
+    completed: { type: Boolean, default: false },
+    currentStep: { type: Number, default: 0, min: 0, max: 5 },
+    completedSteps: [{ type: Number }],
+    skippedSteps: [{ type: Number }],
+    completedAt: { type: Date },
+    startedAt: { type: Date, default: Date.now }
   },
   // Profile completeness tracking
   profileCompleteness: {
+    percentage: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100
+    },
+    lastCalculated: {
+      type: Date,
+      default: Date.now
+    },
+    missingFields: [{
+      type: String,
+      trim: true
+    }],
+    // Legacy fields for backward compatibility
     hasBasicInfo: { type: Boolean, default: false },
     hasExperience: { type: Boolean, default: false },
     hasEducation: { type: Boolean, default: false },
     hasSkills: { type: Boolean, default: false },
-    hasCV: { type: Boolean, default: false },
-    percentage: { type: Number, default: 0, min: 0, max: 100 }
+    hasCV: { type: Boolean, default: false }
   }
 }, {
   timestamps: true
@@ -147,6 +229,23 @@ const candidateProfileSchema = new mongoose.Schema({
 // Index for better query performance
 candidateProfileSchema.index({ 'skills.name': 'text', bio: 'text' }); // Candidate-specific index
 candidateProfileSchema.index({ phone: 1 }); // Candidate-specific index
+candidateProfileSchema.index({ 'preferredLocations.province': 1 }); // For location-based queries
+candidateProfileSchema.index({ 'preferredLocations.coordinates': '2dsphere' }); // Geospatial index
+candidateProfileSchema.index({ 'workPreferences.workTypes': 1 }); // For work type filtering
+candidateProfileSchema.index({ 'workPreferences.contractTypes': 1 }); // For contract type filtering
+candidateProfileSchema.index({ 'workPreferences.experienceLevel': 1 }); // For experience level filtering
+candidateProfileSchema.index({ 'onboardingStatus.completed': 1 }); // For onboarding status queries
+candidateProfileSchema.index({ 'profileCompleteness.percentage': 1 }); // For completeness filtering
+
+// Pre-save hook to validate expectedSalary range
+candidateProfileSchema.pre('save', function(next) {
+  if (this.expectedSalary && this.expectedSalary.min !== undefined && this.expectedSalary.max !== undefined) {
+    if (this.expectedSalary.max < this.expectedSalary.min) {
+      return next(new Error('Maximum salary must be greater than or equal to minimum salary'));
+    }
+  }
+  next();
+});
 
 const CandidateProfile = mongoose.model('CandidateProfile', candidateProfileSchema);
 

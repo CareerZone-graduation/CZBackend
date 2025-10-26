@@ -226,3 +226,93 @@ export const getRechargeHistorySchema = z.object({
     page: z.string().regex(/^\d+$/, "Trang phải là một số").optional().default('1'),
     limit: z.string().regex(/^\d+$/, "Giới hạn phải là một số").optional().default('10'),
 });
+
+/**
+ * Location schema for preferred locations
+ */
+export const locationSchema = z.object({
+  province: z.string()
+    .min(1, 'Tỉnh/Thành phố không được để trống')
+    .trim(),
+  district: z.string()
+    .trim()
+    .optional(),
+  commune: z.string()
+    .trim()
+    .optional(),
+  coordinates: z.object({
+    type: z.literal('Point').default('Point'),
+    coordinates: z.array(z.number())
+      .length(2, 'Tọa độ phải có đúng 2 giá trị [longitude, latitude]')
+      .refine(
+        (coords) => coords[0] >= -180 && coords[0] <= 180 && coords[1] >= -90 && coords[1] <= 90,
+        'Tọa độ không hợp lệ'
+      )
+  }).optional()
+});
+
+/**
+ * Expected salary schema
+ */
+export const expectedSalarySchema = z.object({
+  min: z.number()
+    .min(0, 'Mức lương tối thiểu không được âm')
+    .optional(),
+  max: z.number()
+    .min(0, 'Mức lương tối đa không được âm')
+    .optional(),
+  currency: z.enum(['VND', 'USD'], {
+    errorMap: () => ({ message: 'Đơn vị tiền tệ phải là VND hoặc USD' })
+  }).default('VND')
+}).refine(
+  (data) => !data.min || !data.max || data.max >= data.min,
+  {
+    message: 'Mức lương tối đa phải lớn hơn hoặc bằng mức lương tối thiểu',
+    path: ['max']
+  }
+);
+
+/**
+ * Work preferences schema
+ */
+export const workPreferencesSchema = z.object({
+  workTypes: z.array(
+    z.enum(['ON_SITE', 'REMOTE', 'HYBRID'], {
+      errorMap: () => ({ message: 'Loại hình làm việc không hợp lệ' })
+    })
+  ).optional(),
+  contractTypes: z.array(
+    z.enum(['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERNSHIP', 'TEMPORARY', 'FREELANCE'], {
+      errorMap: () => ({ message: 'Loại hợp đồng không hợp lệ' })
+    })
+  ).optional(),
+  experienceLevel: z.enum(
+    ['ENTRY_LEVEL', 'MID_LEVEL', 'SENIOR_LEVEL', 'EXECUTIVE', 'NO_EXPERIENCE', 'INTERN', 'FRESHER'],
+    {
+      errorMap: () => ({ message: 'Mức độ kinh nghiệm không hợp lệ' })
+    }
+  ).optional()
+});
+
+/**
+ * Profile preferences update schema
+ * For PUT /api/candidate/profile/preferences
+ */
+export const profilePreferencesSchema = z.object({
+  expectedSalary: expectedSalarySchema.optional(),
+  preferredLocations: z.array(locationSchema)
+    .max(10, 'Không được vượt quá 10 địa điểm ưa thích')
+    .optional(),
+  workPreferences: workPreferencesSchema.optional()
+});
+
+/**
+ * Profile completeness query schema
+ * For GET /api/candidate/profile/completeness
+ */
+export const profileCompletenessQuerySchema = z.object({
+  recalculate: z.enum(['true', 'false'])
+    .transform(val => val === 'true')
+    .optional()
+    .default('false')
+});
