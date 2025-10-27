@@ -14,12 +14,8 @@ export const skillSchema = z.object({
     .min(1, 'Tên kỹ năng không được để trống')
     .max(100, 'Tên kỹ năng không được dài quá 100 ký tự')
     .trim(),
-  level: z.enum(['Beginner', 'Intermediate', 'Advanced', 'Expert', ''], {
-    errorMap: () => ({ message: 'Mức độ kỹ năng không hợp lệ' })
-  }).default('').optional(),
-  category: z.enum(['Technical', 'Soft Skills', 'Language', 'Other', ''], {
-    errorMap: () => ({ message: 'Danh mục kỹ năng không hợp lệ' })
-  }).default('').optional()
+  level: z.enum(['Beginner', 'Intermediate', 'Advanced', 'Expert']).nullable().optional(),
+  category: z.enum(['Technical', 'Soft Skills', 'Language', 'Other']).nullable().optional()
 });
 
 /**
@@ -212,6 +208,27 @@ export const userProfileSchema = z.object({
   educations: z.array(educationSchema).optional(),
   experiences: z.array(experienceSchema).optional(),
   cvs: z.array(cvSchema).optional(),
+  // Contact & Social Links
+  address: z.string()
+    .max(300, 'Địa chỉ không được dài quá 300 ký tự')
+    .trim()
+    .optional()
+    .transform(val => val === '' ? undefined : val),
+  website: z.string()
+    .max(200, 'Website không được dài quá 200 ký tự')
+    .trim()
+    .optional()
+    .transform(val => val === '' ? undefined : val),
+  linkedin: z.string()
+    .max(200, 'LinkedIn URL không được dài quá 200 ký tự')
+    .trim()
+    .optional()
+    .transform(val => val === '' ? undefined : val),
+  github: z.string()
+    .max(200, 'Github URL không được dài quá 200 ký tự')
+    .trim()
+    .optional()
+    .transform(val => val === '' ? undefined : val),
   // Recruiter-specific fields
   contact: z.string()
     .max(200, 'Thông tin liên hệ không được dài quá 200 ký tự')
@@ -250,7 +267,24 @@ export const candidateProfileSchema = z.object({
     .default([]),
   projects: z.array(projectSchema)
     .max(10, 'Không được vượt quá 10 dự án')
-    .default([])
+    .default([]),
+  // Contact & Social Links
+  address: z.string()
+    .max(300, 'Địa chỉ không được dài quá 300 ký tự')
+    .trim()
+    .default(''),
+  website: z.string()
+    .max(200, 'Website không được dài quá 200 ký tự')
+    .trim()
+    .default(''),
+  linkedin: z.string()
+    .max(200, 'LinkedIn URL không được dài quá 200 ký tự')
+    .trim()
+    .default(''),
+  github: z.string()
+    .max(200, 'Github URL không được dài quá 200 ký tự')
+    .trim()
+    .default('')
 }).strict();
 
 /**
@@ -285,6 +319,27 @@ export const updateUserProfileSchema = z.object({
   educations: z.array(educationSchema).optional(),
   experiences: z.array(experienceSchema).optional(),
   cvs: z.array(cvSchema).optional(),
+  // Contact & Social Links
+  address: z.string()
+    .max(300, 'Địa chỉ không được dài quá 300 ký tự')
+    .trim()
+    .optional()
+    .transform(val => val === '' ? undefined : val),
+  website: z.string()
+    .max(200, 'Website không được dài quá 200 ký tự')
+    .trim()
+    .optional()
+    .transform(val => val === '' ? undefined : val),
+  linkedin: z.string()
+    .max(200, 'LinkedIn URL không được dài quá 200 ký tự')
+    .trim()
+    .optional()
+    .transform(val => val === '' ? undefined : val),
+  github: z.string()
+    .max(200, 'Github URL không được dài quá 200 ký tự')
+    .trim()
+    .optional()
+    .transform(val => val === '' ? undefined : val),
   // Recruiter-specific fields
   contact: z.string()
     .max(200, 'Thông tin liên hệ không được dài quá 200 ký tự')

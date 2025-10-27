@@ -364,7 +364,7 @@ candidateProfileSchema.index({ 'onboardingStatus.completed': 1 }); // For onboar
 candidateProfileSchema.index({ 'profileCompleteness.percentage': 1 }); // For completeness filtering
 
 // Pre-save hook to validate expectedSalary range
-candidateProfileSchema.pre('save', function(next) {
+candidateProfileSchema.pre('save', function (next) {
   if (this.expectedSalary && this.expectedSalary.min !== undefined && this.expectedSalary.max !== undefined) {
     if (this.expectedSalary.max < this.expectedSalary.min) {
       return next(new Error('Maximum salary must be greater than or equal to minimum salary'));
