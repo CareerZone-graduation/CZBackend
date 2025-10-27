@@ -244,6 +244,12 @@ export const candidateProfileSchema = z.object({
     .default([]),
   experiences: z.array(experienceSchema)
     .max(15, 'Không được vượt quá 15 kinh nghiệm')
+    .default([]),
+  certificates: z.array(certificateSchema)
+    .max(10, 'Không được vượt quá 10 chứng chỉ')
+    .default([]),
+  projects: z.array(projectSchema)
+    .max(10, 'Không được vượt quá 10 dự án')
     .default([])
 }).strict();
 
