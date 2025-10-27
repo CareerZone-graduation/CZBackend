@@ -136,8 +136,8 @@ export const userProfileSchema = z.object({
   // Candidate-specific fields
   avatar: z.string().trim().optional(),
   phone: z.string()
-  .regex(/^[\+]?[\d]{1,15}$/, 'Số điện thoại không hợp lệ') // Cho phép bắt đầu bằng 0 và tối đa 15 chữ số
-  .optional(),
+    .regex(/^[\+]?[\d]{1,15}$/, 'Số điện thoại không hợp lệ') // Cho phép bắt đầu bằng 0 và tối đa 15 chữ số
+    .optional(),
   bio: z.string()
     .max(1000, 'Mô tả không được dài quá 1000 ký tự')
     .trim()
@@ -223,8 +223,8 @@ export const updateUserProfileSchema = z.object({
 });
 
 export const getRechargeHistorySchema = z.object({
-    page: z.string().regex(/^\d+$/, "Trang phải là một số").optional().default('1'),
-    limit: z.string().regex(/^\d+$/, "Giới hạn phải là một số").optional().default('10'),
+  page: z.string().regex(/^\d+$/, "Trang phải là một số").optional().default('1'),
+  limit: z.string().regex(/^\d+$/, "Giới hạn phải là một số").optional().default('10'),
 });
 
 /**
@@ -236,19 +236,8 @@ export const locationSchema = z.object({
     .trim(),
   district: z.string()
     .trim()
-    .optional(),
-  commune: z.string()
-    .trim()
-    .optional(),
-  coordinates: z.object({
-    type: z.literal('Point').default('Point'),
-    coordinates: z.array(z.number())
-      .length(2, 'Tọa độ phải có đúng 2 giá trị [longitude, latitude]')
-      .refine(
-        (coords) => coords[0] >= -180 && coords[0] <= 180 && coords[1] >= -90 && coords[1] <= 90,
-        'Tọa độ không hợp lệ'
-      )
-  }).optional()
+    .nullable()
+    .optional()
 });
 
 /**

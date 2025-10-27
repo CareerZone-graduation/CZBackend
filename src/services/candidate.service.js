@@ -422,7 +422,7 @@ export const updateProfilePreferences = async (userId, preferences) => {
     }
 
     // Update preferred locations
-    if (preferences.preferredLocations) {
+    if (preferences.preferredLocations !== undefined) {
         profile.preferredLocations = preferences.preferredLocations;
     }
 

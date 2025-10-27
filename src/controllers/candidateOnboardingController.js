@@ -73,6 +73,12 @@ export const getRecommendations = asyncHandler(async (req, res) => {
 const transformProfileData = (profileData) => {
   const transformed = { ...profileData };
 
+  // Transform fullName → fullname (frontend camelCase → backend lowercase)
+  if (transformed.fullName) {
+    transformed.fullname = transformed.fullName;
+    delete transformed.fullName;
+  }
+
   // Transform skills: array of strings → array of { name: string }
   if (transformed.skills && Array.isArray(transformed.skills)) {
     transformed.skills = transformed.skills.map(skill => {
