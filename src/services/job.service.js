@@ -341,7 +341,6 @@ export const getJobById = async (jobId, userId = null) => {
   }
 
   const job = jobDoc.toObject();
-  logger.info(job);
 
   // Kiểm tra xem user có phải là candidate và job có được lưu/apply không
   let isSaved = false;
