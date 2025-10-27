@@ -15,10 +15,10 @@ export const getProfile = async (userId) => {
     if (!profile) {
         throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
     }
-    
+
     // Calculate and update profile completeness
     const completeness = calculateProfileCompleteness(profile);
-    
+
     // Update in database if changed
     if (JSON.stringify(completeness) !== JSON.stringify(profile.profileCompleteness)) {
         await CandidateProfile.findByIdAndUpdate(
@@ -28,7 +28,7 @@ export const getProfile = async (userId) => {
         );
         profile.profileCompleteness = completeness;
     }
-    
+
     return profile;
 };
 
@@ -64,9 +64,9 @@ export const updateProfile = async (userId, updateData) => {
     // Recalculate profile completeness after update
     await updateProfileCompleteness(updatedProfile._id);
 
-    logger.info('Profile updated and completeness recalculated', { 
-        userId, 
-        updatedFields: Object.keys(profileUpdateData) 
+    logger.info('Profile updated and completeness recalculated', {
+        userId,
+        updatedFields: Object.keys(profileUpdateData)
     });
 
     // Convert to plain object before returning
@@ -356,13 +356,13 @@ export const getApplicationById = async (userId, applicationId) => {
  */
 export const getProfileCompleteness = async (userId, recalculate = false) => {
     const profile = await CandidateProfile.findOne({ userId });
-    
+
     if (!profile) {
         throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
     }
 
     // If recalculate is true or completeness is stale (older than 1 hour), recalculate
-    const shouldRecalculate = recalculate || 
+    const shouldRecalculate = recalculate ||
         !profile.profileCompleteness?.lastCalculated ||
         (Date.now() - new Date(profile.profileCompleteness.lastCalculated).getTime()) > 3600000;
 
@@ -381,18 +381,18 @@ export const getProfileCompleteness = async (userId, recalculate = false) => {
  */
 export const getProfileRecommendations = async (userId) => {
     const profile = await CandidateProfile.findOne({ userId });
-    
+
     if (!profile) {
         throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
     }
 
     // Import the function from onboarding service
     const { getProfileImprovementRecommendations } = await import('../services/onboarding.service.js');
-    
+
     const recommendations = getProfileImprovementRecommendations(profile);
-    
-    logger.info('Profile recommendations generated', { 
-        userId, 
+
+    logger.info('Profile recommendations generated', {
+        userId,
         completeness: recommendations.completeness,
         totalRecommendations: recommendations.summary.total
     });
@@ -408,7 +408,7 @@ export const getProfileRecommendations = async (userId) => {
  */
 export const updateProfilePreferences = async (userId, preferences) => {
     const profile = await CandidateProfile.findOne({ userId });
-    
+
     if (!profile) {
         throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
     }
@@ -431,15 +431,15 @@ export const updateProfilePreferences = async (userId, preferences) => {
         if (!profile.workPreferences) {
             profile.workPreferences = {};
         }
-        
+
         if (preferences.workPreferences.workTypes) {
             profile.workPreferences.workTypes = preferences.workPreferences.workTypes;
         }
-        
+
         if (preferences.workPreferences.contractTypes) {
             profile.workPreferences.contractTypes = preferences.workPreferences.contractTypes;
         }
-        
+
         if (preferences.workPreferences.experienceLevel) {
             profile.workPreferences.experienceLevel = preferences.workPreferences.experienceLevel;
         }
@@ -450,8 +450,8 @@ export const updateProfilePreferences = async (userId, preferences) => {
     // Recalculate profile completeness after update
     await updateProfileCompleteness(profile._id, profile);
 
-    logger.info('Profile preferences updated', { 
-        userId, 
+    logger.info('Profile preferences updated', {
+        userId,
         hasExpectedSalary: !!preferences.expectedSalary,
         hasPreferredLocations: !!preferences.preferredLocations,
         hasWorkPreferences: !!preferences.workPreferences
