@@ -162,13 +162,19 @@ Content-Type: application/json
 - `phone`
 - `avatar`
 - `bio`
+- `address`
 - `skills`
 - `experiences`
 - `educations`
+- `certificates`
+- `projects`
 - `expectedSalary`
 - `preferredLocations`
 - `workPreferences`
 - `experienceLevel`
+- `linkedin`
+- `github`
+- `website`
 
 #### 4. Bỏ qua nhắc nhở onboarding
 ```http
@@ -323,18 +329,29 @@ refetch(); // Refresh completeness
 
 ### Trọng số các phần (Total = 100%)
 
-- **Basic Info (25%)**: fullname, phone, bio, avatar
-- **Skills (20%)**: Ít nhất 3 kỹ năng
-- **Preferences (20%)**: expectedSalary, preferredLocations, workTypes
-- **Experience (15%)**: Kinh nghiệm làm việc
-- **Education (10%)**: Học vấn
-- **CV (10%)**: CV đã upload
+**3 Bước bắt buộc (70%):**
+- **Basic Info (25%)**: fullname, phone, preferredLocations
+- **Skills (25%)**: Ít nhất 3 kỹ năng
+- **Preferences (20%)**: expectedSalary, workTypes, contractTypes
+
+**Bước tùy chọn (30%):**
+- **Bio (5%)**: Giới thiệu bản thân
+- **Avatar (5%)**: Ảnh đại diện
+- **Experience (5%)**: Kinh nghiệm làm việc
+- **Education (5%)**: Học vấn
+- **Certificates (5%)**: Chứng chỉ chuyên môn
+- **Projects (5%)**: Dự án đã thực hiện
+
+**Không tính điểm:**
+- Social Links (linkedin, github, website)
+- CV uploads
 
 ### Ngưỡng quan trọng
 
-- **< 60%**: Không thể nhận gợi ý việc làm (needsOnboarding = true)
-- **60-79%**: Có thể nhận gợi ý nhưng chưa tối ưu
-- **80-99%**: Hồ sơ tốt (isWellCompleted = true)
+- **< 70%**: Chưa hoàn thành 3 bước bắt buộc (needsOnboarding = true)
+- **70-79%**: Có thể nhận gợi ý việc làm (canGenerateRecommendations = true)
+- **80-89%**: Hồ sơ tốt (isWellCompleted = true)
+- **90-99%**: Hồ sơ rất tốt
 - **100%**: Hoàn thiện (isFullyCompleted = true)
 
 ## Migration từ API cũ

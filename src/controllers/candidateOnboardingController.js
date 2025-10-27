@@ -121,10 +121,10 @@ export const updateProfileData = asyncHandler(async (req, res) => {
 
   // Update các trường được gửi lên
   const allowedFields = [
-    'fullname', 'phone', 'avatar', 'bio',
-    'skills', 'experiences', 'educations',
+    'fullname', 'phone', 'avatar', 'bio', 'address',
+    'skills', 'experiences', 'educations', 'certificates', 'projects',
     'expectedSalary', 'preferredLocations', 'workPreferences',
-    'experienceLevel'
+    'experienceLevel', 'linkedin', 'github', 'website'
   ];
 
   for (const field of allowedFields) {

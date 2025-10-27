@@ -26,30 +26,31 @@ export const calculateProfileCompleteness = (profile) => {
 
   // Define weights for each section (total = 100%)
   const weights = {
-    basicInfo: 30,      // Essential: fullname, phone, preferredLocations (từ bước 1)
-    skills: 30,         // Critical for job matching (từ bước 2)
+    basicInfo: 25,      // Essential: fullname, phone, preferredLocations (từ bước 1)
+    skills: 25,         // Critical for job matching (từ bước 2)
     preferences: 20,    // Important: salary, work preferences (từ bước 3)
-    bio: 5,             // Nice to have
-    avatar: 5,          // Nice to have
-    experience: 3,      // Optional for freshers
-    education: 3,       // Optional
-    certificates: 2,    // Optional - chứng chỉ
-    projects: 2,        // Optional - dự án
+    bio: 5,             // Nice to have (bước 1)
+    avatar: 5,          // Nice to have (bước 1)
+    experience: 5,      // Optional for freshers (bước 4)
+    education: 5,       // Optional (bước 4)
+    certificates: 5,    // Optional - chứng chỉ (bước 5)
+    projects: 5,        // Optional - dự án (bước 5)
     socialLinks: 0,     // Optional - không tính điểm (linkedin, github, website)
     cv: 0               // Không bắt buộc trong onboarding
   };
 
   // Check completeness for each section with detailed breakdown
-  // Basic Info (30%): fullname + phone + preferredLocations (bước 1)
+  // Basic Info (25%): fullname + phone + preferredLocations (bước 1)
   const basicInfoComplete = !!(profile.fullname && profile.phone && profile.preferredLocations?.length > 0);
 
-  // Skills (30%): >= 3 skills (bước 2)
+  // Skills (25%): >= 3 skills (bước 2)
   const skillsComplete = profile.skills?.length >= 3;
 
-  // Preferences (20%): salary + workTypes (bước 3)
+  // Preferences (20%): salary + workTypes + contractTypes (bước 3)
   const preferencesComplete = !!(
     profile.expectedSalary?.min > 0 &&
-    profile.workPreferences?.workTypes?.length > 0
+    profile.workPreferences?.workTypes?.length > 0 &&
+    profile.workPreferences?.contractTypes?.length > 0
   );
 
   // Optional fields
@@ -81,7 +82,7 @@ export const calculateProfileCompleteness = (profile) => {
   const missingFields = [];
   const recommendations = [];
 
-  // Basic Info (30%) - Bước 1: fullname, phone, preferredLocations
+  // Basic Info (25%) - Bước 1: fullname, phone, preferredLocations
   if (checks.hasBasicInfo) {
     percentage += weights.basicInfo;
   } else {
@@ -99,7 +100,7 @@ export const calculateProfileCompleteness = (profile) => {
     }
   }
 
-  // Bio (5%) - Optional
+  // Bio (5%) - Optional (bước 1)
   if (checks.hasBio) {
     percentage += weights.bio;
   } else {
@@ -107,7 +108,7 @@ export const calculateProfileCompleteness = (profile) => {
     recommendations.push('Viết giới thiệu ngắn về bản thân');
   }
 
-  // Avatar (5%) - Optional
+  // Avatar (5%) - Optional (bước 1)
   if (checks.hasAvatar) {
     percentage += weights.avatar;
   } else {
@@ -115,7 +116,7 @@ export const calculateProfileCompleteness = (profile) => {
     recommendations.push('Tải lên ảnh đại diện');
   }
 
-  // Skills (30%) - Bước 2: >= 3 skills
+  // Skills (25%) - Bước 2: >= 3 skills
   if (checks.hasSkills) {
     percentage += weights.skills;
   } else {
@@ -128,7 +129,7 @@ export const calculateProfileCompleteness = (profile) => {
     }
   }
 
-  // Preferences (20%) - Bước 3: salary + workTypes
+  // Preferences (20%) - Bước 3: salary + workTypes + contractTypes
   if (checks.hasPreferences) {
     percentage += weights.preferences;
   } else {
@@ -138,11 +139,15 @@ export const calculateProfileCompleteness = (profile) => {
     }
     if (!profile.workPreferences?.workTypes?.length) {
       missingFields.push('workTypes');
-      recommendations.push('Chọn hình thức làm việc (Full-time, Part-time, Remote, Hybrid)');
+      recommendations.push('Chọn hình thức làm việc (Remote, Hybrid, On-site)');
+    }
+    if (!profile.workPreferences?.contractTypes?.length) {
+      missingFields.push('contractTypes');
+      recommendations.push('Chọn loại hợp đồng (Full-time, Part-time, Contract, v.v.)');
     }
   }
 
-  // Experience (3%) - Optional
+  // Experience (5%) - Optional (bước 4)
   if (checks.hasExperience) {
     percentage += weights.experience;
   } else {
@@ -150,7 +155,7 @@ export const calculateProfileCompleteness = (profile) => {
     recommendations.push('Thêm kinh nghiệm làm việc (không bắt buộc)');
   }
 
-  // Education (3%) - Optional
+  // Education (5%) - Optional (bước 4)
   if (checks.hasEducation) {
     percentage += weights.education;
   } else {
@@ -158,7 +163,7 @@ export const calculateProfileCompleteness = (profile) => {
     recommendations.push('Thêm thông tin học vấn (không bắt buộc)');
   }
 
-  // Certificates (2%) - Optional
+  // Certificates (5%) - Optional (bước 5)
   if (checks.hasCertificates) {
     percentage += weights.certificates;
   } else {
@@ -166,7 +171,7 @@ export const calculateProfileCompleteness = (profile) => {
     recommendations.push('Thêm chứng chỉ chuyên môn (không bắt buộc)');
   }
 
-  // Projects (2%) - Optional
+  // Projects (5%) - Optional (bước 5)
   if (checks.hasProjects) {
     percentage += weights.projects;
   } else {
@@ -177,14 +182,18 @@ export const calculateProfileCompleteness = (profile) => {
   // Add threshold-based recommendations
   const finalPercentage = Math.round(percentage);
 
-  // Hoàn thành 3 bước onboarding = 80% (30% + 30% + 20%)
-  // Còn 20% là optional fields (bio, avatar, experience, education)
-  if (finalPercentage < 80) {
-    recommendations.unshift('⚠️ Vui lòng hoàn thành 3 bước onboarding để sử dụng đầy đủ tính năng');
+  // Hoàn thành 3 bước bắt buộc = 70% (25% + 25% + 20%)
+  // Bước 4 (Experience + Education) = 10%
+  // Bước 5 (Certificates + Projects) = 10%
+  // Bio + Avatar = 10%
+  if (finalPercentage < 70) {
+    recommendations.unshift('⚠️ Vui lòng hoàn thành 3 bước bắt buộc để sử dụng đầy đủ tính năng');
+  } else if (finalPercentage < 80) {
+    recommendations.unshift('💡 Thêm kinh nghiệm và học vấn để tăng cơ hội tìm việc');
   } else if (finalPercentage < 90) {
-    recommendations.unshift('💡 Hoàn thiện thêm để tăng cơ hội tìm việc');
+    recommendations.unshift('🎯 Thêm chứng chỉ và dự án để nổi bật hơn');
   } else if (finalPercentage < 100) {
-    recommendations.unshift('🎯 Hồ sơ gần hoàn thiện! Hoàn thành các mục còn lại');
+    recommendations.unshift('🌟 Hồ sơ gần hoàn thiện! Hoàn thành các mục còn lại');
   } else {
     recommendations.unshift('✅ Hồ sơ đã hoàn thiện 100%!');
   }
@@ -196,9 +205,9 @@ export const calculateProfileCompleteness = (profile) => {
     ...checks,
     lastCalculated: new Date(),
     // Threshold flags for easy checking
-    // Hoàn thành 3 bước onboarding = 80% → không cần onboarding nữa
-    canGenerateRecommendations: finalPercentage >= 80,
-    isWellCompleted: finalPercentage >= 90,
+    // Hoàn thành 3 bước bắt buộc = 70% → có thể nhận gợi ý việc làm
+    canGenerateRecommendations: finalPercentage >= 70,
+    isWellCompleted: finalPercentage >= 80,
     isFullyCompleted: finalPercentage === 100
   };
 };
@@ -314,6 +323,15 @@ export const getProfileImprovementRecommendations = (profile) => {
     });
   }
 
+  if (!profile.workPreferences?.contractTypes?.length) {
+    recommendations.important.push({
+      field: 'contractTypes',
+      message: 'Chọn loại hợp đồng mong muốn',
+      action: 'Cập nhật loại hợp đồng',
+      impact: 'Lọc việc làm theo loại hợp đồng (Full-time/Part-time/Contract)'
+    });
+  }
+
   // Optional items (nice to have)
   if (!profile.avatar) {
     recommendations.optional.push({
@@ -393,7 +411,7 @@ export const getProfileImprovementRecommendations = (profile) => {
 
 /**
  * Validate step data based on step ID
- * @param {Number} stepId - Step ID (1-3)
+ * @param {Number} stepId - Step ID (1-5)
  * @param {Object} stepData - Data to validate
  * @returns {Object} - Validated data
  */
@@ -405,10 +423,14 @@ export const validateStepData = (stepId, stepData) => {
   switch (stepId) {
     case 1: // Basic Info Step
       return validateBasicInfoStep(stepData);
-    case 2: // Skills & Experience Step
-      return validateSkillsExperienceStep(stepData);
+    case 2: // Skills Step
+      return validateSkillsStep(stepData);
     case 3: // Salary & Preferences Step
       return validateSalaryPreferencesStep(stepData);
+    case 4: // Experience & Education Step
+      return validateExperienceEducationStep(stepData);
+    case 5: // Certificates & Projects Step
+      return validateCertificatesProjectsStep(stepData);
     default:
       throw new BadRequestError('Step ID không hợp lệ');
   }
@@ -452,11 +474,11 @@ const validateBasicInfoStep = (data) => {
 };
 
 /**
- * Validate skills and experience step data
+ * Validate skills step data
  * @param {Object} data
  * @returns {Object}
  */
-const validateSkillsExperienceStep = (data) => {
+const validateSkillsStep = (data) => {
   const validated = {};
 
   if (data.skills) {
@@ -468,6 +490,17 @@ const validateSkillsExperienceStep = (data) => {
     }
     validated.skills = data.skills;
   }
+
+  return validated;
+};
+
+/**
+ * Validate experience and education step data
+ * @param {Object} data
+ * @returns {Object}
+ */
+const validateExperienceEducationStep = (data) => {
+  const validated = {};
 
   if (data.experienceLevel) {
     const validLevels = ['ENTRY_LEVEL', 'MID_LEVEL', 'SENIOR_LEVEL', 'EXECUTIVE', 'NO_EXPERIENCE', 'INTERN', 'FRESHER'];
@@ -489,6 +522,43 @@ const validateSkillsExperienceStep = (data) => {
       throw new BadRequestError('Học vấn phải là mảng');
     }
     validated.educations = data.educations;
+  }
+
+  return validated;
+};
+
+/**
+ * Validate certificates and projects step data
+ * @param {Object} data
+ * @returns {Object}
+ */
+const validateCertificatesProjectsStep = (data) => {
+  const validated = {};
+
+  if (data.certificates) {
+    if (!Array.isArray(data.certificates)) {
+      throw new BadRequestError('Chứng chỉ phải là mảng');
+    }
+    validated.certificates = data.certificates;
+  }
+
+  if (data.projects) {
+    if (!Array.isArray(data.projects)) {
+      throw new BadRequestError('Dự án phải là mảng');
+    }
+    validated.projects = data.projects;
+  }
+
+  if (data.linkedin) {
+    validated.linkedin = data.linkedin;
+  }
+
+  if (data.github) {
+    validated.github = data.github;
+  }
+
+  if (data.website) {
+    validated.website = data.website;
   }
 
   return validated;
@@ -574,14 +644,8 @@ export const saveStepDataToProfile = async (userId, stepId, stepData) => {
         if (validatedData.preferredLocations) profile.preferredLocations = validatedData.preferredLocations;
         break;
 
-      case 2: // Skills & Experience
+      case 2: // Skills
         if (validatedData.skills) profile.skills = validatedData.skills;
-        if (validatedData.experienceLevel) {
-          if (!profile.workPreferences) profile.workPreferences = {};
-          profile.workPreferences.experienceLevel = validatedData.experienceLevel;
-        }
-        if (validatedData.experiences) profile.experiences = validatedData.experiences;
-        if (validatedData.educations) profile.educations = validatedData.educations;
         break;
 
       case 3: // Salary & Preferences
@@ -595,6 +659,23 @@ export const saveStepDataToProfile = async (userId, stepId, stepData) => {
             profile.workPreferences.contractTypes = validatedData.workPreferences.contractTypes;
           }
         }
+        break;
+
+      case 4: // Experience & Education
+        if (validatedData.experienceLevel) {
+          if (!profile.workPreferences) profile.workPreferences = {};
+          profile.workPreferences.experienceLevel = validatedData.experienceLevel;
+        }
+        if (validatedData.experiences) profile.experiences = validatedData.experiences;
+        if (validatedData.educations) profile.educations = validatedData.educations;
+        break;
+
+      case 5: // Certificates & Projects
+        if (validatedData.certificates) profile.certificates = validatedData.certificates;
+        if (validatedData.projects) profile.projects = validatedData.projects;
+        if (validatedData.linkedin) profile.linkedin = validatedData.linkedin;
+        if (validatedData.github) profile.github = validatedData.github;
+        if (validatedData.website) profile.website = validatedData.website;
         break;
     }
 
@@ -658,7 +739,9 @@ const getSkipImpactMessage = (stepId) => {
   const messages = {
     1: 'Bỏ qua thông tin cơ bản có thể làm giảm chất lượng gợi ý việc làm. Bạn có thể hoàn thiện sau.',
     2: 'Không có thông tin kỹ năng sẽ khiến hệ thống khó gợi ý việc làm phù hợp với bạn.',
-    3: 'Thiếu thông tin mức lương và điều kiện làm việc có thể dẫn đến gợi ý không đúng kỳ vọng của bạn.'
+    3: 'Thiếu thông tin mức lương và điều kiện làm việc có thể dẫn đến gợi ý không đúng kỳ vọng của bạn.',
+    4: 'Bỏ qua kinh nghiệm và học vấn có thể làm giảm cơ hội được nhà tuyển dụng chú ý.',
+    5: 'Chứng chỉ và dự án giúp bạn nổi bật hơn, nhưng không bắt buộc.'
   };
   return messages[stepId] || 'Bỏ qua bước này có thể ảnh hưởng đến trải nghiệm của bạn.';
 };
@@ -690,8 +773,10 @@ export const manageOnboardingSession = async (candidateId, metadata = {}) => {
 
     const steps = [
       { stepId: 1, name: 'Thông tin cơ bản', completed: false, skipped: false, data: {} },
-      { stepId: 2, name: 'Kỹ năng và kinh nghiệm', completed: false, skipped: false, data: {} },
-      { stepId: 3, name: 'Mức lương và điều kiện làm việc', completed: false, skipped: false, data: {} }
+      { stepId: 2, name: 'Kỹ năng', completed: false, skipped: false, data: {} },
+      { stepId: 3, name: 'Mức lương và điều kiện làm việc', completed: false, skipped: false, data: {} },
+      { stepId: 4, name: 'Kinh nghiệm và học vấn', completed: false, skipped: false, data: {} },
+      { stepId: 5, name: 'Chứng chỉ và dự án', completed: false, skipped: false, data: {} }
     ];
 
     session = await OnboardingSession.create({
