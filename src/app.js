@@ -42,6 +42,7 @@ import sonioxRoutes from './routes/soniox.route.js'; // Soniox voice search API
 import searchHistoryRoutes from './routes/searchHistory.route.js'; // Search history API
 import viewHistoryRoutes from './routes/viewHistory.route.js'; // Job view history API
 import creditHistoryRoutes from './routes/creditHistory.route.js'; // Credit history API
+import sharePreviewRoutes from './routes/sharePreview.route.js'; // Facebook share preview
 
 // 🚧 Middlewares
 import * as errorMiddleware from './middleware/error.middleware.js';
@@ -136,6 +137,7 @@ app.use('/api/soniox', sonioxRoutes); // Soniox voice search API
 app.use('/api/search-history', searchHistoryRoutes); // Search history API
 app.use('/api/job-view-history', viewHistoryRoutes); // Job view history API
 app.use('/api/credit-history', creditHistoryRoutes); // Credit history API
+app.use('/api/share-preview', sharePreviewRoutes); // Facebook share preview
 
 // 404 & error
 app.use(notFoundMiddleware.notFound);

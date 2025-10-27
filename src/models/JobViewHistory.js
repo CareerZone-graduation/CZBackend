@@ -4,20 +4,17 @@ const jobViewHistorySchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: [true, 'User ID is required'],
-    index: true
+    required: [true, 'User ID is required']
   },
   jobId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Job',
-    required: [true, 'Job ID is required'],
-    index: true
+    required: [true, 'Job ID is required']
   },
   viewedAt: {
     type: Date,
     required: [true, 'Viewed timestamp is required'],
-    default: Date.now,
-    index: true
+    default: Date.now
   }
 }, {
   timestamps: true
@@ -25,7 +22,6 @@ const jobViewHistorySchema = new mongoose.Schema({
 
 // Indexes for better query performance
 jobViewHistorySchema.index({ userId: 1, viewedAt: -1 }); // Query user history sorted by time
-jobViewHistorySchema.index({ userId: 1, jobId: 1 }); // Check if user viewed a job
 jobViewHistorySchema.index({ jobId: 1 }); // Stats per job
 jobViewHistorySchema.index({ viewedAt: 1 }); // For cleanup/expiration
 

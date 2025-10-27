@@ -17,3 +17,5 @@ export { default as PendingNotification } from './PendingNotification.js';
 export { default as NotificationHistory } from './NotificationHistory.js';
 export { default as SearchHistory } from './SearchHistory.js';
 export { default as JobViewHistory } from './JobViewHistory.js';
+export { default as OnboardingSession } from './OnboardingSession.js';
+export { default as JobRecommendation } from './JobRecommendation.js';

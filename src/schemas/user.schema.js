@@ -13,7 +13,9 @@ export const skillSchema = z.object({
   name: z.string()
     .min(1, 'Tên kỹ năng không được để trống')
     .max(100, 'Tên kỹ năng không được dài quá 100 ký tự')
-    .trim()
+    .trim(),
+  level: z.enum(['Beginner', 'Intermediate', 'Advanced', 'Expert']).nullable().optional(),
+  category: z.enum(['Technical', 'Soft Skills', 'Language', 'Other']).nullable().optional()
 });
 
 /**
@@ -56,6 +58,14 @@ export const educationSchema = z.object({
   type: z.string()
     .max(50, 'Loại học vấn không được dài quá 50 ký tự')
     .trim()
+    .optional(),
+  location: z.string()
+    .max(200, 'Địa điểm không được dài quá 200 ký tự')
+    .trim()
+    .optional(),
+  honors: z.string()
+    .max(500, 'Danh hiệu không được dài quá 500 ký tự')
+    .trim()
     .optional()
 });
 
@@ -85,7 +95,11 @@ export const experienceSchema = z.object({
   description: z.string()
     .max(2000, 'Mô tả không được dài quá 2000 ký tự')
     .trim()
-    .optional()
+    .optional(),
+  responsibilities: z.array(z.string().max(500, 'Trách nhiệm không được dài quá 500 ký tự')).optional(),
+  location: z.string().max(200, 'Địa điểm không được dài quá 200 ký tự').trim().optional(),
+  isCurrentJob: z.boolean().optional(),
+  achievements: z.array(z.string().max(500, 'Thành tựu không được dài quá 500 ký tự')).optional()
 });
 
 /**
@@ -106,6 +120,54 @@ export const cvSchema = z.object({
     .min(1, 'Đường dẫn CV không được để trống')
     .trim(),
   active: z.boolean().default(true).optional()
+});
+
+/**
+ * Certificate request validation schema
+ */
+export const certificateSchema = z.object({
+  certificateId: z.string().optional(),
+  name: z.string()
+    .min(1, 'Tên chứng chỉ không được để trống')
+    .max(200, 'Tên chứng chỉ không được dài quá 200 ký tự')
+    .trim(),
+  issuer: z.string()
+    .min(1, 'Tổ chức cấp không được để trống')
+    .max(200, 'Tổ chức cấp không được dài quá 200 ký tự')
+    .trim(),
+  issueDate: z.string()
+    .min(1, 'Ngày cấp không được để trống'),
+  expiryDate: z.string().optional(),
+  credentialId: z.string()
+    .max(100, 'ID chứng chỉ không được dài quá 100 ký tự')
+    .trim()
+    .optional(),
+  url: z.string()
+    .max(500, 'URL không được dài quá 500 ký tự')
+    .trim()
+    .optional()
+});
+
+/**
+ * Project request validation schema
+ */
+export const projectSchema = z.object({
+  projectId: z.string().optional(),
+  name: z.string()
+    .min(1, 'Tên dự án không được để trống')
+    .max(200, 'Tên dự án không được dài quá 200 ký tự')
+    .trim(),
+  description: z.string()
+    .max(1000, 'Mô tả không được dài quá 1000 ký tự')
+    .trim()
+    .optional(),
+  url: z.string()
+    .max(500, 'URL không được dài quá 500 ký tự')
+    .trim()
+    .optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  technologies: z.array(z.string().max(100, 'Tên công nghệ không được dài quá 100 ký tự')).optional()
 });
 
 /**
@@ -136,8 +198,8 @@ export const userProfileSchema = z.object({
   // Candidate-specific fields
   avatar: z.string().trim().optional(),
   phone: z.string()
-  .regex(/^[\+]?[\d]{1,15}$/, 'Số điện thoại không hợp lệ') // Cho phép bắt đầu bằng 0 và tối đa 15 chữ số
-  .optional(),
+    .regex(/^[\+]?[\d]{1,15}$/, 'Số điện thoại không hợp lệ') // Cho phép bắt đầu bằng 0 và tối đa 15 chữ số
+    .optional(),
   bio: z.string()
     .max(1000, 'Mô tả không được dài quá 1000 ký tự')
     .trim()
@@ -146,6 +208,27 @@ export const userProfileSchema = z.object({
   educations: z.array(educationSchema).optional(),
   experiences: z.array(experienceSchema).optional(),
   cvs: z.array(cvSchema).optional(),
+  // Contact & Social Links
+  address: z.string()
+    .max(300, 'Địa chỉ không được dài quá 300 ký tự')
+    .trim()
+    .optional()
+    .transform(val => val === '' ? undefined : val),
+  website: z.string()
+    .max(200, 'Website không được dài quá 200 ký tự')
+    .trim()
+    .optional()
+    .transform(val => val === '' ? undefined : val),
+  linkedin: z.string()
+    .max(200, 'LinkedIn URL không được dài quá 200 ký tự')
+    .trim()
+    .optional()
+    .transform(val => val === '' ? undefined : val),
+  github: z.string()
+    .max(200, 'Github URL không được dài quá 200 ký tự')
+    .trim()
+    .optional()
+    .transform(val => val === '' ? undefined : val),
   // Recruiter-specific fields
   contact: z.string()
     .max(200, 'Thông tin liên hệ không được dài quá 200 ký tự')
@@ -178,7 +261,30 @@ export const candidateProfileSchema = z.object({
     .default([]),
   experiences: z.array(experienceSchema)
     .max(15, 'Không được vượt quá 15 kinh nghiệm')
-    .default([])
+    .default([]),
+  certificates: z.array(certificateSchema)
+    .max(10, 'Không được vượt quá 10 chứng chỉ')
+    .default([]),
+  projects: z.array(projectSchema)
+    .max(10, 'Không được vượt quá 10 dự án')
+    .default([]),
+  // Contact & Social Links
+  address: z.string()
+    .max(300, 'Địa chỉ không được dài quá 300 ký tự')
+    .trim()
+    .default(''),
+  website: z.string()
+    .max(200, 'Website không được dài quá 200 ký tự')
+    .trim()
+    .default(''),
+  linkedin: z.string()
+    .max(200, 'LinkedIn URL không được dài quá 200 ký tự')
+    .trim()
+    .default(''),
+  github: z.string()
+    .max(200, 'Github URL không được dài quá 200 ký tự')
+    .trim()
+    .default('')
 }).strict();
 
 /**
@@ -213,6 +319,27 @@ export const updateUserProfileSchema = z.object({
   educations: z.array(educationSchema).optional(),
   experiences: z.array(experienceSchema).optional(),
   cvs: z.array(cvSchema).optional(),
+  // Contact & Social Links
+  address: z.string()
+    .max(300, 'Địa chỉ không được dài quá 300 ký tự')
+    .trim()
+    .optional()
+    .transform(val => val === '' ? undefined : val),
+  website: z.string()
+    .max(200, 'Website không được dài quá 200 ký tự')
+    .trim()
+    .optional()
+    .transform(val => val === '' ? undefined : val),
+  linkedin: z.string()
+    .max(200, 'LinkedIn URL không được dài quá 200 ký tự')
+    .trim()
+    .optional()
+    .transform(val => val === '' ? undefined : val),
+  github: z.string()
+    .max(200, 'Github URL không được dài quá 200 ký tự')
+    .trim()
+    .optional()
+    .transform(val => val === '' ? undefined : val),
   // Recruiter-specific fields
   contact: z.string()
     .max(200, 'Thông tin liên hệ không được dài quá 200 ký tự')
@@ -223,6 +350,85 @@ export const updateUserProfileSchema = z.object({
 });
 
 export const getRechargeHistorySchema = z.object({
-    page: z.string().regex(/^\d+$/, "Trang phải là một số").optional().default('1'),
-    limit: z.string().regex(/^\d+$/, "Giới hạn phải là một số").optional().default('10'),
+  page: z.string().regex(/^\d+$/, "Trang phải là một số").optional().default('1'),
+  limit: z.string().regex(/^\d+$/, "Giới hạn phải là một số").optional().default('10'),
+});
+
+/**
+ * Location schema for preferred locations
+ */
+export const locationSchema = z.object({
+  province: z.string()
+    .min(1, 'Tỉnh/Thành phố không được để trống')
+    .trim(),
+  district: z.string()
+    .trim()
+    .nullable()
+    .optional()
+});
+
+/**
+ * Expected salary schema
+ */
+export const expectedSalarySchema = z.object({
+  min: z.number()
+    .min(0, 'Mức lương tối thiểu không được âm')
+    .optional(),
+  max: z.number()
+    .min(0, 'Mức lương tối đa không được âm')
+    .optional(),
+  currency: z.enum(['VND', 'USD'], {
+    errorMap: () => ({ message: 'Đơn vị tiền tệ phải là VND hoặc USD' })
+  }).default('VND')
+}).refine(
+  (data) => !data.min || !data.max || data.max >= data.min,
+  {
+    message: 'Mức lương tối đa phải lớn hơn hoặc bằng mức lương tối thiểu',
+    path: ['max']
+  }
+);
+
+/**
+ * Work preferences schema
+ */
+export const workPreferencesSchema = z.object({
+  workTypes: z.array(
+    z.enum(['ON_SITE', 'REMOTE', 'HYBRID'], {
+      errorMap: () => ({ message: 'Loại hình làm việc không hợp lệ' })
+    })
+  ).optional(),
+  contractTypes: z.array(
+    z.enum(['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERNSHIP', 'TEMPORARY', 'FREELANCE'], {
+      errorMap: () => ({ message: 'Loại hợp đồng không hợp lệ' })
+    })
+  ).optional(),
+  experienceLevel: z.enum(
+    ['ENTRY_LEVEL', 'MID_LEVEL', 'SENIOR_LEVEL', 'EXECUTIVE', 'NO_EXPERIENCE', 'INTERN', 'FRESHER'],
+    {
+      errorMap: () => ({ message: 'Mức độ kinh nghiệm không hợp lệ' })
+    }
+  ).optional()
+});
+
+/**
+ * Profile preferences update schema
+ * For PUT /api/candidate/profile/preferences
+ */
+export const profilePreferencesSchema = z.object({
+  expectedSalary: expectedSalarySchema.optional(),
+  preferredLocations: z.array(locationSchema)
+    .max(10, 'Không được vượt quá 10 địa điểm ưa thích')
+    .optional(),
+  workPreferences: workPreferencesSchema.optional()
+});
+
+/**
+ * Profile completeness query schema
+ * For GET /api/candidate/profile/completeness
+ */
+export const profileCompletenessQuerySchema = z.object({
+  recalculate: z.enum(['true', 'false'])
+    .transform(val => val === 'true')
+    .optional()
+    .default('false')
 });

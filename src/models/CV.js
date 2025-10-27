@@ -77,7 +77,7 @@ const cvSchema = new mongoose.Schema({
       startDate: String,
       endDate: String,
       gpa: String,
-      honors: String,
+      honors: String, // Honors/awards as string
       description: String,
     }],
 

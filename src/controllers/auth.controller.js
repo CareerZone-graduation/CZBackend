@@ -5,6 +5,7 @@ import config from '../config/index.js';
 import { OAuth2Client } from 'google-auth-library';
 import { CandidateProfile, User, RecruiterProfile } from '../models/index.js';
 import logger from '../utils/logger.js';
+import * as onboardingService from '../services/onboarding.service.js';
 
 const client = new OAuth2Client(config.GOOGLE_CLIENT_ID);
 
@@ -42,6 +43,26 @@ export const login = asyncHandler(async (req, res) => {
         maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
+    // Kiểm tra profile completeness cho candidate
+    let profileCompleteness = null;
+    if (req.user.role === 'candidate') {
+        try {
+            const profile = await CandidateProfile.findOne({ userId: req.user._id });
+            if (profile) {
+                const completeness = await onboardingService.updateProfileCompleteness(profile._id, profile);
+                profileCompleteness = {
+                    percentage: completeness.percentage,
+                    needsOnboarding: !profile.onboardingCompleted,
+                    onboardingCompleted: profile.onboardingCompleted,
+                    canGenerateRecommendations: completeness.canGenerateRecommendations,
+                    missingFieldsCount: completeness.missingFields?.length || 0
+                };
+            }
+        } catch (error) {
+            logger.error('Error checking profile completeness on login:', error);
+        }
+    }
+
     res.json({
         success: true,
         message: 'Đăng nhập thành công',
@@ -53,6 +74,7 @@ export const login = asyncHandler(async (req, res) => {
             active: req.user.active,
             isEmailVerified: req.user.isEmailVerified,
         },
+        profileCompleteness
     });
 });
 
@@ -114,6 +136,26 @@ export const googleLogin = asyncHandler(async (req, res) => {
         maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
+    // Kiểm tra profile completeness cho candidate
+    let profileCompleteness = null;
+    if (user.role === 'candidate') {
+        try {
+            const profile = await CandidateProfile.findOne({ userId: user._id });
+            if (profile) {
+                const completeness = await onboardingService.updateProfileCompleteness(profile._id, profile);
+                profileCompleteness = {
+                    percentage: completeness.percentage,
+                    needsOnboarding: !profile.onboardingCompleted,
+                    onboardingCompleted: profile.onboardingCompleted,
+                    canGenerateRecommendations: completeness.canGenerateRecommendations,
+                    missingFieldsCount: completeness.missingFields?.length || 0
+                };
+            }
+        } catch (error) {
+            logger.error('Error checking profile completeness on Google login:', error);
+        }
+    }
+
     res.json({
         success: true,
         message: 'Đăng nhập bằng Google thành công.',
@@ -125,6 +167,7 @@ export const googleLogin = asyncHandler(async (req, res) => {
             active: user.active,
             isEmailVerified: true,
         },
+        profileCompleteness
     });
 });
 

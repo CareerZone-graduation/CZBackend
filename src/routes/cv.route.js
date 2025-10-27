@@ -27,6 +27,9 @@ router.post('/:id/duplicate', cvController.duplicateCv);
 // Route tạo CV từ template
 router.post('/from-template', cvController.createCvFromTemplate);
 
+// Route tạo CV từ profile data
+router.post('/from-profile', cvController.createCvFromProfile);
+
 // Route export PDF (POST method like the sample)
 router.get('/:id/export-pdf', cvController.exportPdf);
 

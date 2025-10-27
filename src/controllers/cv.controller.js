@@ -89,6 +89,118 @@ export const createCvFromTemplate = async (req, res) => {
 };
 
 /**
+ * @desc    Create a new CV from profile data
+ * @route   POST /api/cvs/from-profile
+ * @access  Private
+ */
+export const createCvFromProfile = async (req, res) => {
+  const { templateId, title } = req.body;
+
+  if (!templateId) {
+    return res.status(400).json({
+      success: false,
+      message: "Template ID is required",
+    });
+  }
+
+  // Import CandidateProfile model
+  const { CandidateProfile } = await import('../models/index.js');
+  
+  // Get candidate profile
+  const profile = await CandidateProfile.findOne({ userId: req.user._id }).lean();
+  
+  if (!profile) {
+    return res.status(404).json({
+      success: false,
+      message: "Không tìm thấy hồ sơ ứng viên. Vui lòng hoàn thiện hồ sơ trước.",
+    });
+  }
+
+  // Map profile data to CV format
+  const cvData = {
+    personalInfo: {
+      fullName: profile.fullname || '',
+      email: req.user.email || '',
+      phone: profile.phone || '',
+      address: profile.address || '',
+      website: profile.website || '',
+      linkedin: profile.linkedin || '',
+      github: profile.github || '',
+      profileImage: profile.avatar || '',
+    },
+    professionalSummary: profile.bio || '',
+    workExperience: (profile.experiences || []).map(exp => ({
+      position: exp.position || '',
+      company: exp.company || '',
+      location: exp.location || '',
+      startDate: exp.startDate || '',
+      endDate: exp.endDate || '',
+      isCurrentJob: exp.isCurrentJob || false,
+      description: exp.description || '',
+      achievements: exp.achievements || exp.responsibilities || [],
+    })),
+    education: (profile.educations || []).map(edu => ({
+      degree: edu.degree || '',
+      institution: edu.school || '',
+      fieldOfStudy: edu.major || '',
+      location: edu.location || '',
+      startDate: edu.startDate || '',
+      endDate: edu.endDate || '',
+      gpa: edu.gpa || '',
+      honors: edu.honors || '',
+      description: edu.description || '',
+    })),
+    skills: (profile.skills || []).map(skill => ({
+      name: skill.name || '',
+      level: skill.level || '',
+      category: skill.category || 'Technical',
+    })),
+    projects: (profile.projects || []).map(project => ({
+      name: project.name || '',
+      description: project.description || '',
+      url: project.url || '',
+      startDate: project.startDate || '',
+      endDate: project.endDate || '',
+      technologies: project.technologies || [],
+    })),
+    certificates: (profile.certificates || []).map(cert => ({
+      name: cert.name || '',
+      issuer: cert.issuer || '',
+      issueDate: cert.issueDate || '',
+      expiryDate: cert.expiryDate || '',
+      credentialId: cert.credentialId || '',
+      url: cert.url || '',
+    })),
+    sectionOrder: [
+      "summary",
+      "experience",
+      "education",
+      "skills",
+      "projects",
+      "certificates",
+    ],
+    hiddenSections: [],
+    template: templateId,
+  };
+
+  // Create new CV with profile data
+  const newCv = new CV({
+    userId: req.user._id,
+    templateId,
+    title: title || `${profile.fullname || 'My'} CV`,
+    cvData,
+  });
+
+  const createdCv = await newCv.save();
+
+  res.status(201).json({
+    success: true,
+    message: "Tạo CV từ hồ sơ thành công.",
+    data: createdCv,
+  });
+};
+
+/**
  * @desc    Get CV by ID
  * @route   GET /api/cvs/:id
  * @access  Private
