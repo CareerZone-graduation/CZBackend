@@ -13,7 +13,13 @@ export const skillSchema = z.object({
   name: z.string()
     .min(1, 'Tên kỹ năng không được để trống')
     .max(100, 'Tên kỹ năng không được dài quá 100 ký tự')
-    .trim()
+    .trim(),
+  level: z.enum(['Beginner', 'Intermediate', 'Advanced', 'Expert', ''], {
+    errorMap: () => ({ message: 'Mức độ kỹ năng không hợp lệ' })
+  }).default('').optional(),
+  category: z.enum(['Technical', 'Soft Skills', 'Language', 'Other', ''], {
+    errorMap: () => ({ message: 'Danh mục kỹ năng không hợp lệ' })
+  }).default('').optional()
 });
 
 /**
@@ -56,6 +62,14 @@ export const educationSchema = z.object({
   type: z.string()
     .max(50, 'Loại học vấn không được dài quá 50 ký tự')
     .trim()
+    .optional(),
+  location: z.string()
+    .max(200, 'Địa điểm không được dài quá 200 ký tự')
+    .trim()
+    .optional(),
+  honors: z.string()
+    .max(500, 'Danh hiệu không được dài quá 500 ký tự')
+    .trim()
     .optional()
 });
 
@@ -85,7 +99,11 @@ export const experienceSchema = z.object({
   description: z.string()
     .max(2000, 'Mô tả không được dài quá 2000 ký tự')
     .trim()
-    .optional()
+    .optional(),
+  responsibilities: z.array(z.string().max(500, 'Trách nhiệm không được dài quá 500 ký tự')).optional(),
+  location: z.string().max(200, 'Địa điểm không được dài quá 200 ký tự').trim().optional(),
+  isCurrentJob: z.boolean().optional(),
+  achievements: z.array(z.string().max(500, 'Thành tựu không được dài quá 500 ký tự')).optional()
 });
 
 /**
@@ -106,6 +124,54 @@ export const cvSchema = z.object({
     .min(1, 'Đường dẫn CV không được để trống')
     .trim(),
   active: z.boolean().default(true).optional()
+});
+
+/**
+ * Certificate request validation schema
+ */
+export const certificateSchema = z.object({
+  certificateId: z.string().optional(),
+  name: z.string()
+    .min(1, 'Tên chứng chỉ không được để trống')
+    .max(200, 'Tên chứng chỉ không được dài quá 200 ký tự')
+    .trim(),
+  issuer: z.string()
+    .min(1, 'Tổ chức cấp không được để trống')
+    .max(200, 'Tổ chức cấp không được dài quá 200 ký tự')
+    .trim(),
+  issueDate: z.string()
+    .min(1, 'Ngày cấp không được để trống'),
+  expiryDate: z.string().optional(),
+  credentialId: z.string()
+    .max(100, 'ID chứng chỉ không được dài quá 100 ký tự')
+    .trim()
+    .optional(),
+  url: z.string()
+    .max(500, 'URL không được dài quá 500 ký tự')
+    .trim()
+    .optional()
+});
+
+/**
+ * Project request validation schema
+ */
+export const projectSchema = z.object({
+  projectId: z.string().optional(),
+  name: z.string()
+    .min(1, 'Tên dự án không được để trống')
+    .max(200, 'Tên dự án không được dài quá 200 ký tự')
+    .trim(),
+  description: z.string()
+    .max(1000, 'Mô tả không được dài quá 1000 ký tự')
+    .trim()
+    .optional(),
+  url: z.string()
+    .max(500, 'URL không được dài quá 500 ký tự')
+    .trim()
+    .optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  technologies: z.array(z.string().max(100, 'Tên công nghệ không được dài quá 100 ký tự')).optional()
 });
 
 /**

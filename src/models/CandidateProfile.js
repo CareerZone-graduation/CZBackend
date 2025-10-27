@@ -6,6 +6,18 @@ const skillSchema = new mongoose.Schema({
     required: [true, 'Skill name is required'],
     trim: true,
     maxlength: [100, 'Skill name cannot exceed 100 characters']
+  },
+  level: {
+    type: String,
+    enum: ['Beginner', 'Intermediate', 'Advanced', 'Expert', ''],
+    default: '',
+    trim: true
+  },
+  category: {
+    type: String,
+    enum: ['Technical', 'Soft Skills', 'Language', 'Other', ''],
+    default: '',
+    trim: true
   }
 }, { _id: true });
 
@@ -49,6 +61,16 @@ const educationSchema = new mongoose.Schema({
     type: String,
     trim: true,
     maxlength: [50, 'Type cannot exceed 50 characters'] // e.g., "High School", "Bachelor's", "Master's"
+  },
+  location: {
+    type: String,
+    trim: true,
+    maxlength: [200, 'Location cannot exceed 200 characters']
+  },
+  honors: {
+    type: String,
+    trim: true,
+    maxlength: [500, 'Honors cannot exceed 500 characters']
   }
 }, { _id: true });
 
@@ -82,9 +104,90 @@ const experienceSchema = new mongoose.Schema({
     type: String,
     trim: true,
     maxlength: [500, 'Responsibility cannot exceed 500 characters']
+  }],
+  location: {
+    type: String,
+    trim: true,
+    maxlength: [200, 'Location cannot exceed 200 characters']
+  },
+  isCurrentJob: {
+    type: Boolean,
+    default: false
+  },
+  achievements: [{
+    type: String,
+    trim: true,
+    maxlength: [500, 'Achievement cannot exceed 500 characters']
   }]
 }, { _id: true });
 
+
+// Certificate Schema
+const certificateSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: [true, 'Certificate name is required'],
+    trim: true,
+    maxlength: [200, 'Certificate name cannot exceed 200 characters']
+  },
+  issuer: {
+    type: String,
+    required: [true, 'Issuer is required'],
+    trim: true,
+    maxlength: [200, 'Issuer cannot exceed 200 characters']
+  },
+  issueDate: {
+    type: String,
+    required: [true, 'Issue date is required']
+  },
+  expiryDate: {
+    type: String,
+    trim: true
+  },
+  credentialId: {
+    type: String,
+    trim: true,
+    maxlength: [100, 'Credential ID cannot exceed 100 characters']
+  },
+  url: {
+    type: String,
+    trim: true,
+    maxlength: [500, 'URL cannot exceed 500 characters']
+  }
+}, { _id: true });
+
+// Project Schema
+const projectSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: [true, 'Project name is required'],
+    trim: true,
+    maxlength: [200, 'Project name cannot exceed 200 characters']
+  },
+  description: {
+    type: String,
+    trim: true,
+    maxlength: [1000, 'Description cannot exceed 1000 characters']
+  },
+  url: {
+    type: String,
+    trim: true,
+    maxlength: [500, 'URL cannot exceed 500 characters']
+  },
+  startDate: {
+    type: String,
+    trim: true
+  },
+  endDate: {
+    type: String,
+    trim: true
+  },
+  technologies: [{
+    type: String,
+    trim: true,
+    maxlength: [100, 'Technology name cannot exceed 100 characters']
+  }]
+}, { _id: true });
 
 const candidateProfileSchema = new mongoose.Schema({
   fullname: {
@@ -112,9 +215,32 @@ const candidateProfileSchema = new mongoose.Schema({
     trim: true,
     maxlength: [1000, 'Bio cannot exceed 1000 characters']
   },
+  // Contact & Social Links
+  address: {
+    type: String,
+    trim: true,
+    maxlength: [300, 'Address cannot exceed 300 characters']
+  },
+  website: {
+    type: String,
+    trim: true,
+    maxlength: [200, 'Website cannot exceed 200 characters']
+  },
+  linkedin: {
+    type: String,
+    trim: true,
+    maxlength: [200, 'LinkedIn URL cannot exceed 200 characters']
+  },
+  github: {
+    type: String,
+    trim: true,
+    maxlength: [200, 'Github URL cannot exceed 200 characters']
+  },
   skills: [skillSchema],
   educations: [educationSchema],
   experiences: [experienceSchema],
+  certificates: [certificateSchema],
+  projects: [projectSchema],
   cvs: [{
     name: { type: String, required: true },
     path: { type: String, required: true },

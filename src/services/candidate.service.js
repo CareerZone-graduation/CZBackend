@@ -39,23 +39,37 @@ export const getProfile = async (userId) => {
  * @returns {Promise<Object>}
  */
 export const updateProfile = async (userId, updateData) => {
-    const { fullname, phone, bio, skills, educations, experiences } = updateData;
+    const { 
+        fullname, phone, bio, skills, educations, experiences,
+        address, website, linkedin, github, certificates, projects,
+        expectedSalary, preferredLocations, workPreferences
+    } = updateData;
 
     // Prepare data for database update - only set provided fields
     const profileUpdateData = {};
     if (fullname !== undefined) profileUpdateData.fullname = fullname;
     if (phone !== undefined) profileUpdateData.phone = phone;
     if (bio !== undefined) profileUpdateData.bio = bio;
+    if (address !== undefined) profileUpdateData.address = address;
+    if (website !== undefined) profileUpdateData.website = website;
+    if (linkedin !== undefined) profileUpdateData.linkedin = linkedin;
+    if (github !== undefined) profileUpdateData.github = github;
     if (skills !== undefined) profileUpdateData.skills = skills;
     if (educations !== undefined) profileUpdateData.educations = educations;
     if (experiences !== undefined) profileUpdateData.experiences = experiences;
+    if (certificates !== undefined) profileUpdateData.certificates = certificates;
+    if (projects !== undefined) profileUpdateData.projects = projects;
+    if (expectedSalary !== undefined) profileUpdateData.expectedSalary = expectedSalary;
+    if (preferredLocations !== undefined) profileUpdateData.preferredLocations = preferredLocations;
+    if (workPreferences !== undefined) profileUpdateData.workPreferences = workPreferences;
 
     // Update the profile in CandidateProfile model (without .lean() to get _id)
+    // Note: Don't use .select() here because it doesn't include nested array fields properly
     const updatedProfile = await CandidateProfile.findOneAndUpdate(
         { userId },
         { $set: profileUpdateData },
         { new: true, upsert: true, runValidators: true }
-    ).select('fullname avatar phone bio skills educations experiences createdAt updatedAt');
+    );
 
     if (!updatedProfile) {
         throw new NotFoundError('Không tìm thấy hồ sơ để cập nhật.');
@@ -84,8 +98,7 @@ export const updateAvatar = async (userId, avatarUrl) => {
         { userId: userId },
         { $set: { avatar: avatarUrl, userId } },
         { new: true, upsert: true }
-    )
-        .select('fullname avatar phone bio skills educations experiences createdAt updatedAt');
+    );
 
     // Recalculate profile completeness after avatar update
     await updateProfileCompleteness(profile._id);

@@ -31,29 +31,35 @@ export const calculateProfileCompleteness = (profile) => {
     preferences: 20,    // Important: salary, work preferences (từ bước 3)
     bio: 5,             // Nice to have
     avatar: 5,          // Nice to have
-    experience: 5,      // Optional for freshers
-    education: 5,       // Optional
+    experience: 3,      // Optional for freshers
+    education: 3,       // Optional
+    certificates: 2,    // Optional - chứng chỉ
+    projects: 2,        // Optional - dự án
+    socialLinks: 0,     // Optional - không tính điểm (linkedin, github, website)
     cv: 0               // Không bắt buộc trong onboarding
   };
 
   // Check completeness for each section with detailed breakdown
   // Basic Info (30%): fullname + phone + preferredLocations (bước 1)
   const basicInfoComplete = !!(profile.fullname && profile.phone && profile.preferredLocations?.length > 0);
-  
+
   // Skills (30%): >= 3 skills (bước 2)
   const skillsComplete = profile.skills?.length >= 3;
-  
+
   // Preferences (20%): salary + workTypes (bước 3)
   const preferencesComplete = !!(
     profile.expectedSalary?.min > 0 &&
     profile.workPreferences?.workTypes?.length > 0
   );
-  
+
   // Optional fields
   const hasBio = !!profile.bio;
   const hasAvatar = !!profile.avatar;
   const experienceComplete = profile.experiences?.length > 0;
   const educationComplete = profile.educations?.length > 0;
+  const certificatesComplete = profile.certificates?.length > 0;
+  const projectsComplete = profile.projects?.length > 0;
+  const hasSocialLinks = !!(profile.linkedin || profile.github || profile.website);
   const cvComplete = profile.cvs?.length > 0;
 
   const checks = {
@@ -64,6 +70,9 @@ export const calculateProfileCompleteness = (profile) => {
     hasAvatar,
     hasExperience: experienceComplete,
     hasEducation: educationComplete,
+    hasCertificates: certificatesComplete,
+    hasProjects: projectsComplete,
+    hasSocialLinks,
     hasCV: cvComplete
   };
 
@@ -89,7 +98,7 @@ export const calculateProfileCompleteness = (profile) => {
       recommendations.push('Chọn địa điểm làm việc mong muốn');
     }
   }
-  
+
   // Bio (5%) - Optional
   if (checks.hasBio) {
     percentage += weights.bio;
@@ -97,7 +106,7 @@ export const calculateProfileCompleteness = (profile) => {
     missingFields.push('bio');
     recommendations.push('Viết giới thiệu ngắn về bản thân');
   }
-  
+
   // Avatar (5%) - Optional
   if (checks.hasAvatar) {
     percentage += weights.avatar;
@@ -133,7 +142,7 @@ export const calculateProfileCompleteness = (profile) => {
     }
   }
 
-  // Experience (5%) - Optional
+  // Experience (3%) - Optional
   if (checks.hasExperience) {
     percentage += weights.experience;
   } else {
@@ -141,7 +150,7 @@ export const calculateProfileCompleteness = (profile) => {
     recommendations.push('Thêm kinh nghiệm làm việc (không bắt buộc)');
   }
 
-  // Education (5%) - Optional
+  // Education (3%) - Optional
   if (checks.hasEducation) {
     percentage += weights.education;
   } else {
@@ -149,9 +158,25 @@ export const calculateProfileCompleteness = (profile) => {
     recommendations.push('Thêm thông tin học vấn (không bắt buộc)');
   }
 
+  // Certificates (2%) - Optional
+  if (checks.hasCertificates) {
+    percentage += weights.certificates;
+  } else {
+    missingFields.push('certificates');
+    recommendations.push('Thêm chứng chỉ chuyên môn (không bắt buộc)');
+  }
+
+  // Projects (2%) - Optional
+  if (checks.hasProjects) {
+    percentage += weights.projects;
+  } else {
+    missingFields.push('projects');
+    recommendations.push('Thêm dự án đã thực hiện (không bắt buộc)');
+  }
+
   // Add threshold-based recommendations
   const finalPercentage = Math.round(percentage);
-  
+
   // Hoàn thành 3 bước onboarding = 80% (30% + 30% + 20%)
   // Còn 20% là optional fields (bio, avatar, experience, education)
   if (finalPercentage < 80) {
@@ -187,18 +212,18 @@ export const calculateProfileCompleteness = (profile) => {
 export const updateProfileCompleteness = async (profileId, profile = null) => {
   try {
     const profileData = profile || await CandidateProfile.findById(profileId);
-    
+
     if (!profileData) {
       throw new NotFoundError('Không tìm thấy hồ sơ');
     }
 
     const completeness = calculateProfileCompleteness(profileData);
-    
+
     profileData.profileCompleteness = completeness;
     await profileData.save();
 
-    logger.info('Profile completeness updated', { 
-      profileId, 
+    logger.info('Profile completeness updated', {
+      profileId,
       percentage: completeness.percentage,
       missingFieldsCount: completeness.missingFields.length
     });
@@ -217,7 +242,7 @@ export const updateProfileCompleteness = async (profileId, profile = null) => {
  */
 export const getProfileImprovementRecommendations = (profile) => {
   const completeness = calculateProfileCompleteness(profile);
-  
+
   const recommendations = {
     critical: [],  // Must have for job recommendations (60% threshold)
     important: [], // Significantly improves matching
@@ -323,6 +348,33 @@ export const getProfileImprovementRecommendations = (profile) => {
       message: 'Tải lên CV',
       action: 'Upload CV',
       impact: 'Dễ dàng ứng tuyển nhanh chóng'
+    });
+  }
+
+  if (!profile.certificates?.length) {
+    recommendations.optional.push({
+      field: 'certificates',
+      message: 'Thêm chứng chỉ chuyên môn',
+      action: 'Cập nhật chứng chỉ',
+      impact: 'Chứng minh năng lực và tăng uy tín'
+    });
+  }
+
+  if (!profile.projects?.length) {
+    recommendations.optional.push({
+      field: 'projects',
+      message: 'Thêm dự án đã thực hiện',
+      action: 'Cập nhật dự án',
+      impact: 'Thể hiện kinh nghiệm thực tế'
+    });
+  }
+
+  if (!profile.linkedin && !profile.github && !profile.website) {
+    recommendations.optional.push({
+      field: 'socialLinks',
+      message: 'Thêm liên kết mạng xã hội (LinkedIn, Github, Website)',
+      action: 'Cập nhật liên kết',
+      impact: 'Giúp nhà tuyển dụng tìm hiểu thêm về bạn'
     });
   }
 
@@ -452,19 +504,19 @@ const validateSalaryPreferencesStep = (data) => {
 
   if (data.expectedSalary) {
     const { min, max, currency } = data.expectedSalary;
-    
+
     if (min !== undefined && (typeof min !== 'number' || min < 0)) {
       throw new BadRequestError('Mức lương tối thiểu không hợp lệ');
     }
-    
+
     if (max !== undefined && (typeof max !== 'number' || max < 0)) {
       throw new BadRequestError('Mức lương tối đa không hợp lệ');
     }
-    
+
     if (min !== undefined && max !== undefined && max < min) {
       throw new BadRequestError('Mức lương tối đa phải lớn hơn hoặc bằng mức lương tối thiểu');
     }
-    
+
     if (currency && !['VND', 'USD'].includes(currency)) {
       throw new BadRequestError('Đơn vị tiền tệ không hợp lệ');
     }
@@ -474,14 +526,14 @@ const validateSalaryPreferencesStep = (data) => {
 
   if (data.workPreferences) {
     const { workTypes, contractTypes } = data.workPreferences;
-    
+
     if (workTypes) {
       const validWorkTypes = ['ON_SITE', 'REMOTE', 'HYBRID'];
       if (!Array.isArray(workTypes) || !workTypes.every(t => validWorkTypes.includes(t))) {
         throw new BadRequestError('Loại hình làm việc không hợp lệ');
       }
     }
-    
+
     if (contractTypes) {
       const validContractTypes = ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERNSHIP', 'TEMPORARY', 'FREELANCE'];
       if (!Array.isArray(contractTypes) || !contractTypes.every(t => validContractTypes.includes(t))) {
@@ -505,7 +557,7 @@ const validateSalaryPreferencesStep = (data) => {
 export const saveStepDataToProfile = async (userId, stepId, stepData) => {
   try {
     const profile = await CandidateProfile.findOne({ userId });
-    
+
     if (!profile) {
       throw new NotFoundError('Không tìm thấy hồ sơ');
     }
@@ -567,22 +619,22 @@ export const saveStepDataToProfile = async (userId, stepId, stepData) => {
 export const handleSkipStep = async (userId, stepId, reason = null) => {
   try {
     const profile = await CandidateProfile.findOne({ userId });
-    
+
     if (!profile) {
       throw new NotFoundError('Không tìm thấy hồ sơ');
     }
 
     // Get impact message
     const impactMessage = getSkipImpactMessage(stepId);
-    
+
     // Calculate impact on profile completeness
     const currentCompleteness = calculateProfileCompleteness(profile);
-    
-    logger.info('Step skipped', { 
-      userId, 
-      stepId, 
+
+    logger.info('Step skipped', {
+      userId,
+      stepId,
       reason,
-      currentCompleteness: currentCompleteness.percentage 
+      currentCompleteness: currentCompleteness.percentage
     });
 
     return {
@@ -626,16 +678,16 @@ export const manageOnboardingSession = async (candidateId, metadata = {}) => {
     }).sort({ startedAt: -1 });
 
     if (session) {
-      logger.info('Resuming existing onboarding session', { 
-        candidateId, 
-        sessionId: session.sessionId 
+      logger.info('Resuming existing onboarding session', {
+        candidateId,
+        sessionId: session.sessionId
       });
       return session;
     }
 
     // Create new session
     const { v4: uuidv4 } = await import('uuid');
-    
+
     const steps = [
       { stepId: 1, name: 'Thông tin cơ bản', completed: false, skipped: false, data: {} },
       { stepId: 2, name: 'Kỹ năng và kinh nghiệm', completed: false, skipped: false, data: {} },
@@ -650,9 +702,9 @@ export const manageOnboardingSession = async (candidateId, metadata = {}) => {
       metadata
     });
 
-    logger.info('Created new onboarding session', { 
-      candidateId, 
-      sessionId: session.sessionId 
+    logger.info('Created new onboarding session', {
+      candidateId,
+      sessionId: session.sessionId
     });
 
     return session;
@@ -669,7 +721,7 @@ export const manageOnboardingSession = async (candidateId, metadata = {}) => {
  */
 export const getOnboardingSession = async (sessionId) => {
   const session = await OnboardingSession.findOne({ sessionId });
-  
+
   if (!session) {
     throw new NotFoundError('Không tìm thấy phiên onboarding');
   }
@@ -684,7 +736,7 @@ export const getOnboardingSession = async (sessionId) => {
  */
 export const completeOnboardingSession = async (sessionId) => {
   const session = await OnboardingSession.findOne({ sessionId });
-  
+
   if (!session) {
     throw new NotFoundError('Không tìm thấy phiên onboarding');
   }
@@ -705,7 +757,7 @@ export const completeOnboardingSession = async (sessionId) => {
  */
 export const abandonOnboardingSession = async (sessionId) => {
   const session = await OnboardingSession.findOne({ sessionId });
-  
+
   if (!session) {
     throw new NotFoundError('Không tìm thấy phiên onboarding');
   }
