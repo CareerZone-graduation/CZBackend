@@ -19,3 +19,4 @@ export { default as SearchHistory } from './SearchHistory.js';
 export { default as JobViewHistory } from './JobViewHistory.js';
 export { default as OnboardingSession } from './OnboardingSession.js';
 export { default as JobRecommendation } from './JobRecommendation.js';
+export { default as TalentPool } from './TalentPool.js';
