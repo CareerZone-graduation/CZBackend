@@ -53,6 +53,14 @@ export const createJob = async (userId, jobData) => {
     throw new BadRequestError('Nhà tuyển dụng phải liên kết với một công ty để đăng tin.');
   }
 
+  // Kiểm tra số dư xu
+  const user = await User.findById(userId);
+  const JOB_POST_COST = 100; // Chi phí đăng tin tuyển dụng
+  
+  if (user.coinBalance < JOB_POST_COST) {
+    throw new BadRequestError(`Không đủ xu để đăng tin. Cần ${JOB_POST_COST} xu, bạn hiện có ${user.coinBalance} xu.`);
+  }
+
   // Xử lý trường hợp sử dụng địa chỉ công ty
   let finalJobData = { ...jobData };
 
@@ -80,6 +88,21 @@ export const createJob = async (userId, jobData) => {
   const newJob = await Job.create({
     ...finalJobData,
     recruiterProfileId: recruiterProfile._id,
+  });
+
+  // Trừ xu và ghi nhận giao dịch
+  user.coinBalance -= JOB_POST_COST;
+  await user.save();
+
+  // Ghi nhận giao dịch
+  await recordCreditTransaction({
+    userId: user._id,
+    type: TRANSACTION_TYPES.USAGE,
+    category: TRANSACTION_CATEGORIES.JOB_POST,
+    amount: -JOB_POST_COST,
+    description: `Đăng tin tuyển dụng: ${newJob.title}`,
+    referenceId: newJob._id,
+    referenceModel: 'Job'
   });
 
   // Gửi sự kiện JOB_CREATED đến Kafka
