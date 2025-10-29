@@ -114,4 +114,41 @@ export const getStats = asyncHandler(async (req, res) => {
   });
 });
 
+// Quản lý Jobs của Công ty
+export const getCompanyJobs = asyncHandler(async (req, res) => {
+  const result = await adminService.getCompanyJobs(req.params.id, req.validatedQuery || req.query);
+  res.json({
+    success: true,
+    message: 'Lấy danh sách tin tuyển dụng của công ty thành công.',
+    ...result
+  });
+});
+
+export const updateJobStatusByAdmin = asyncHandler(async (req, res) => {
+  const data = await adminService.updateJobStatusByAdmin(req.params.id, req.body.status);
+  res.json({
+    success: true,
+    message: 'Cập nhật trạng thái tin tuyển dụng thành công.',
+    data
+  });
+});
+
+export const activateJob = asyncHandler(async (req, res) => {
+  const data = await adminService.activateJob(req.params.id);
+  res.json({
+    success: true,
+    message: 'Kích hoạt tin tuyển dụng thành công.',
+    data
+  });
+});
+
+export const deactivateJob = asyncHandler(async (req, res) => {
+  const data = await adminService.deactivateJob(req.params.id);
+  res.json({
+    success: true,
+    message: 'Vô hiệu hóa tin tuyển dụng thành công.',
+    data
+  });
+});
+
 

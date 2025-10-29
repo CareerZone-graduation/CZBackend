@@ -16,17 +16,17 @@ export const getJobsForAdmin = async (queryParams) => {
     const searchFilter = [
       { title: { $regex: search, $options: 'i' } }
     ];
-    
+
     const matchingCompanies = await RecruiterProfile.find({
       'company.name': { $regex: search, $options: 'i' }
     }).select('_id');
-    
+
     if (matchingCompanies.length > 0) {
       searchFilter.push({
         recruiterProfileId: { $in: matchingCompanies.map(c => c._id) }
       });
     }
-    
+
     filter.$or = searchFilter;
   }
 
@@ -35,7 +35,7 @@ export const getJobsForAdmin = async (queryParams) => {
     const companyProfiles = await RecruiterProfile.find({
       'company.name': { $regex: company, $options: 'i' }
     }).select('_id');
-    
+
     if (companyProfiles.length > 0) {
       filter.recruiterProfileId = { $in: companyProfiles.map(c => c._id) };
     } else {
@@ -148,7 +148,7 @@ export const getJobDetail = async (jobId) => {
     ...job,
     analytics: {
       applicationStats: stats
-        }
+    }
   };
 };
 
@@ -158,11 +158,11 @@ export const approveJob = async (jobId) => {
     { approved: true },
     { new: true }
   );
-  
+
   if (!updatedJob) {
     throw new NotFoundError('Tin tuyển dụng không tồn tại.');
   }
-  
+
   return updatedJob;
 };
 
@@ -172,11 +172,11 @@ export const rejectJob = async (jobId) => {
     { approved: false, status: 'INACTIVE' },
     { new: true }
   );
-  
+
   if (!updatedJob) {
     throw new NotFoundError('Tin tuyển dụng không tồn tại.');
   }
-  
+
   return updatedJob;
 };
 
@@ -184,56 +184,56 @@ export const rejectJob = async (jobId) => {
 
 export const getUsersForAdmin = async (queryParams) => {
   const { page = 1, limit = 10, search, status, role, companyRegistration, sort = '-createdAt' } = queryParams;
-  
+
   const filter = {};
-  
+
   // Tìm kiếm theo email hoặc fullname
   if (search) {
     const userFilter = [
       { email: { $regex: search, $options: 'i' } }
     ];
-    
+
     // Tìm trong RecruiterProfile (fullname) nếu không phải chỉ candidate
     if (role !== 'candidate') {
       const matchingRecruiters = await RecruiterProfile.find({
         fullname: { $regex: search, $options: 'i' }
       }).select('userId');
-      
+
       if (matchingRecruiters.length > 0) {
         userFilter.push({
           _id: { $in: matchingRecruiters.map(r => r.userId) }
         });
       }
     }
-    
+
     // Tìm trong CandidateProfile (fullname) nếu không phải chỉ recruiter
     if (role !== 'recruiter') {
       const matchingCandidates = await CandidateProfile.find({
         fullname: { $regex: search, $options: 'i' }
       }).select('userId');
-      
+
       if (matchingCandidates.length > 0) {
         userFilter.push({
           _id: { $in: matchingCandidates.map(c => c.userId) }
         });
       }
     }
-    
+
     filter.$or = userFilter;
   }
-  
+
   // Lọc theo trạng thái
   if (status === 'active') {
     filter.active = true;
   } else if (status === 'banned') {
     filter.active = false;
   }
-  
+
   // Lọc theo role
   if (role) {
     filter.role = role;
   }
-  
+
   // Lọc theo company registration status (chỉ áp dụng cho recruiter)
   let companyFilteredUserIds = null;
   if (companyRegistration && role === 'recruiter') {
@@ -254,7 +254,7 @@ export const getUsersForAdmin = async (queryParams) => {
       }).select('userId').lean();
       companyFilteredUserIds = recruitersWithoutCompany.map(r => r.userId);
     }
-    
+
     // Nếu có filter company registration, thêm vào filter chính
     if (companyFilteredUserIds) {
       if (filter.$or) {
@@ -269,9 +269,9 @@ export const getUsersForAdmin = async (queryParams) => {
       }
     }
   }
-  
+
   const skip = (page - 1) * limit;
-  
+
   const [users, total] = await Promise.all([
     User.find(filter)
       .select('email role active createdAt')
@@ -281,17 +281,17 @@ export const getUsersForAdmin = async (queryParams) => {
       .lean(),
     User.countDocuments(filter)
   ]);
-  
+
   // Lấy thông tin fullname và company registration status cho tất cả users
   const userIds = users.map(u => u._id);
   const recruiterProfiles = await RecruiterProfile.find({
     userId: { $in: userIds }
   }).select('userId fullname company.name').lean();
-  
+
   const candidateProfiles = await CandidateProfile.find({
     userId: { $in: userIds }
   }).select('userId fullname').lean();
-  
+
   // Map fullname và hasCompany từ RecruiterProfile
   const recruiterMap = recruiterProfiles.reduce((acc, profile) => {
     acc[profile.userId.toString()] = {
@@ -300,12 +300,12 @@ export const getUsersForAdmin = async (queryParams) => {
     };
     return acc;
   }, {});
-  
+
   const candidateMap = candidateProfiles.reduce((acc, profile) => {
     acc[profile.userId.toString()] = profile.fullname;
     return acc;
   }, {});
-  
+
   // Tạo cấu trúc cố định cho tất cả users
   const usersWithFullname = users.map(user => {
     const baseUser = {
@@ -315,7 +315,7 @@ export const getUsersForAdmin = async (queryParams) => {
       active: user.active,
       createdAt: user.createdAt
     };
-    
+
     if (user.role === 'recruiter') {
       const recruiterInfo = recruiterMap[user._id.toString()];
       return {
@@ -330,9 +330,9 @@ export const getUsersForAdmin = async (queryParams) => {
       };
     }
   });
-  
+
   const totalPages = Math.ceil(total / limit);
-  
+
   return {
     meta: {
       currentPage: page,
@@ -348,34 +348,34 @@ export const updateUserStatus = async (userId, statusData) => {
   if (statusData.status === 'admin') {
     throw new BadRequestError('Không thể thay đổi trạng thái của admin.');
   }
-  
+
   const isActive = statusData.status === 'active';
-  
+
   const updatedUser = await User.findByIdAndUpdate(
     userId,
     { active: isActive },
     { new: true }
   ).select('email role active');
-  
+
   if (!updatedUser) {
     throw new NotFoundError('Người dùng không tồn tại.');
   }
-  
+
   return updatedUser;
 };
 
 export const getUserDetail = async (userId) => {
   const userObjectId = new mongoose.Types.ObjectId(userId);
-  
+
   // Fetch user basic info
   const user = await User.findById(userObjectId)
     .select('email role active createdAt')
     .lean();
-  
+
   if (!user) {
     throw new NotFoundError('Người dùng không tồn tại.');
   }
-  
+
   // Base response structure
   const userDetail = {
     _id: user._id,
@@ -384,23 +384,23 @@ export const getUserDetail = async (userId) => {
     active: user.active,
     createdAt: user.createdAt
   };
-  
+
   // If user is a candidate
   if (user.role === 'candidate') {
     // Fetch candidate profile with profileCompleteness
     const candidateProfile = await CandidateProfile.findOne({ userId: userObjectId })
       .select('fullname avatar dateOfBirth gender phone address cvs profileCompleteness')
       .lean();
-    
+
     // Use existing profileCompleteness calculation from the profile
     // This matches the calculation in /api/candidate/my-profile
     const profileCompleteness = candidateProfile?.profileCompleteness?.percentage || 0;
-    
+
     // Count both uploaded CVs and template CVs
     const uploadedCVCount = candidateProfile?.cvs?.length || 0;
     const templateCVCount = await CV.countDocuments({ userId: userObjectId });
     const totalCVCount = uploadedCVCount + templateCVCount;
-    
+
     // Fetch application statistics
     const applicationStats = await Application.aggregate([
       { $match: { candidateProfileId: candidateProfile?._id } },
@@ -418,13 +418,13 @@ export const getUserDetail = async (userId) => {
         }
       }
     ]);
-    
+
     // Fetch most recent application
     const recentApplication = await Application.findOne({ candidateProfileId: candidateProfile?._id })
       .sort({ createdAt: -1 })
       .select('createdAt')
       .lean();
-    
+
     const stats = applicationStats[0] || {
       total: 0,
       pending: 0,
@@ -435,12 +435,12 @@ export const getUserDetail = async (userId) => {
       rejected: 0,
       withdrawn: 0
     };
-    
+
     // Calculate acceptance rate
-    const acceptanceRate = stats.total > 0 
-      ? Math.round((stats.accepted / stats.total) * 100) 
+    const acceptanceRate = stats.total > 0
+      ? Math.round((stats.accepted / stats.total) * 100)
       : 0;
-    
+
     return {
       ...userDetail,
       profile: {
@@ -463,14 +463,14 @@ export const getUserDetail = async (userId) => {
       }
     };
   }
-  
+
   // If user is a recruiter
   if (user.role === 'recruiter') {
     // Fetch recruiter profile
     const recruiterProfile = await RecruiterProfile.findOne({ userId: userObjectId })
-      .select('fullname company')
+      .select('_id fullname company')
       .lean();
-    
+
     // Fetch job posting statistics
     const jobStats = await Job.aggregate([
       { $match: { recruiterProfileId: recruiterProfile?._id } },
@@ -485,16 +485,16 @@ export const getUserDetail = async (userId) => {
         }
       }
     ]);
-    
+
     // Fetch most recent job posting
     const recentJob = await Job.findOne({ recruiterProfileId: recruiterProfile?._id })
       .sort({ createdAt: -1 })
       .select('createdAt')
       .lean();
-    
+
     // Fetch application statistics for recruiter's jobs
     const applicationStats = await Application.aggregate([
-      { 
+      {
         $lookup: {
           from: 'jobs',
           localField: 'jobId',
@@ -517,7 +517,7 @@ export const getUserDetail = async (userId) => {
         }
       }
     ]);
-    
+
     const stats = jobStats[0] || {
       total: 0,
       active: 0,
@@ -525,7 +525,7 @@ export const getUserDetail = async (userId) => {
       expired: 0,
       pending: 0
     };
-    
+
     const appStats = applicationStats[0] || {
       totalApplications: 0,
       pending: 0,
@@ -535,9 +535,10 @@ export const getUserDetail = async (userId) => {
       accepted: 0,
       rejected: 0
     };
-    
+
     return {
       ...userDetail,
+      recruiterProfileId: recruiterProfile?._id || null,
       profile: {
         fullname: recruiterProfile?.fullname || null,
         hasCompany: !!(recruiterProfile?.company?.name)
@@ -569,7 +570,7 @@ export const getUserDetail = async (userId) => {
       applicationStats: appStats
     };
   }
-  
+
   // For admin or other roles
   return userDetail;
 };
@@ -635,7 +636,7 @@ export const getCompaniesForAdmin = async (queryParams) => {
       .lean(),
     RecruiterProfile.countDocuments(filter),
   ]);
-  
+
   // Tạo cấu trúc response cố định cho hồ sơ nhà tuyển dụng
   const formattedData = recruiterProfiles.map(profile => ({
     _id: profile._id,
@@ -672,9 +673,9 @@ export const getCompaniesForAdmin = async (queryParams) => {
     profileCreatedAt: profile.createdAt,
     profileUpdatedAt: profile.updatedAt
   }));
-  
+
   const totalPages = Math.ceil(total / limit);
-  
+
   return {
     meta: {
       currentPage: page,
@@ -694,7 +695,7 @@ export const getCompanyDetail = async (companyId) => {
       select: 'email active createdAt'
     })
     .lean();
-  
+
   if (!recruiterProfile) {
     throw new NotFoundError('Hồ sơ nhà tuyển dụng không tồn tại.');
   }
@@ -741,7 +742,7 @@ export const getCompanyDetail = async (companyId) => {
 
   const appStats = applicationStats[0] || { totalApplications: 0, pending: 0, accepted: 0, rejected: 0 };
   const rechargeSummary = rechargeStats[0] || { totalAmountPaid: 0, totalCoinsRecharged: 0, rechargeCount: 0, lastRechargeDate: null };
-  
+
   // Trả về cấu trúc chi tiết đầy đủ
   return {
     _id: recruiterProfile._id,
@@ -761,7 +762,7 @@ export const getCompanyDetail = async (companyId) => {
       businessRegistrationUrl: recruiterProfile.company?.businessRegistrationUrl || null,
       size: recruiterProfile.company?.size || null,
       website: recruiterProfile.company?.website || null,
-      location:{
+      location: {
         province: recruiterProfile.company?.location?.province || null,
         district: recruiterProfile.company?.location?.district || null,
         commune: recruiterProfile.company?.location?.commune || null
@@ -771,7 +772,9 @@ export const getCompanyDetail = async (companyId) => {
         email: recruiterProfile.company?.contactInfo?.email || null,
         phone: recruiterProfile.company?.contactInfo?.phone || null
       },
-      verified: recruiterProfile.company?.verified || false
+      verified: recruiterProfile.company?.verified || false,
+      status: recruiterProfile.company?.status || null,
+      rejectReason: recruiterProfile.company?.rejectReason || null
     },
     jobStats: {
       totalJobs,
@@ -935,14 +938,14 @@ export const getAdminStats = async () => {
     Application.countDocuments(),
     RecruiterProfile.countDocuments({ 'company.verified': true }),
     RecruiterProfile.countDocuments({ 'company.verified': false }),
-    RecruiterProfile.countDocuments({ 
+    RecruiterProfile.countDocuments({
       'company.status': 'pending'
     }),
     // --- LOGIC MỚI ---
     RecruiterProfile.countDocuments({ 'company.name': { $exists: false } }),
     User.countDocuments({ active: false })
   ]);
-  
+
   return {
     overview: {
       totalUsers,
@@ -954,7 +957,7 @@ export const getAdminStats = async () => {
       recruiters: totalRecruiters,
       total: totalUsers,
       // --- DỮ LIỆU MỚI ---
-      banned: bannedUsers 
+      banned: bannedUsers
     },
     jobs: {
       pending: pendingJobs,
@@ -967,7 +970,154 @@ export const getAdminStats = async () => {
       pending: pendingCompanies,
       total: verifiedCompanies + unverifiedCompanies,
       // --- DỮ LIỆU MỚI ---
-      recruitersWithoutCompany: recruitersWithoutCompany 
+      recruitersWithoutCompany: recruitersWithoutCompany
     }
   };
+};
+
+// === QUẢN LÝ JOBS CỦA CÔNG TY ===
+
+export const getCompanyJobs = async (companyId, queryParams) => {
+  const { page = 1, limit = 20, status, search, sort = 'createdAt_desc' } = queryParams;
+
+  // Verify company exists
+  const recruiterProfile = await RecruiterProfile.findById(companyId);
+  if (!recruiterProfile) {
+    throw new NotFoundError('Hồ sơ nhà tuyển dụng không tồn tại.');
+  }
+
+  const filter = { recruiterProfileId: new mongoose.Types.ObjectId(companyId) };
+
+  // Filter by status
+  if (status && status !== 'all') {
+    if (status === 'active') {
+      filter.status = 'ACTIVE';
+      filter.approved = true;
+    } else if (status === 'expired') {
+      filter.status = 'EXPIRED';
+    } else if (status === 'pending') {
+      filter.approved = false;
+    } else if (status === 'inactive') {
+      filter.status = 'INACTIVE';
+    }
+  }
+
+  // Search by title
+  if (search) {
+    filter.title = { $regex: search, $options: 'i' };
+  }
+
+  // Sort options
+  const sortOptions = {};
+  switch (sort) {
+    case 'createdAt_asc':
+      sortOptions.createdAt = 1;
+      break;
+    case 'createdAt_desc':
+      sortOptions.createdAt = -1;
+      break;
+    case 'expiresAt_asc':
+      sortOptions.expiresAt = 1;
+      break;
+    case 'expiresAt_desc':
+      sortOptions.expiresAt = -1;
+      break;
+    default:
+      sortOptions.createdAt = -1;
+  }
+
+  const skip = (page - 1) * limit;
+
+  const [jobs, total] = await Promise.all([
+    Job.find(filter)
+      .select('title status approved createdAt expiresAt location salary')
+      .sort(sortOptions)
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    Job.countDocuments(filter)
+  ]);
+
+  // Get application counts for each job
+  const jobIds = jobs.map(job => job._id);
+  const applicationCounts = await Application.aggregate([
+    { $match: { jobId: { $in: jobIds } } },
+    { $group: { _id: '$jobId', count: { $sum: 1 } } }
+  ]);
+
+  const applicationCountMap = applicationCounts.reduce((acc, item) => {
+    acc[item._id.toString()] = item.count;
+    return acc;
+  }, {});
+
+  const jobsWithCounts = jobs.map(job => ({
+    ...job,
+    applicationCount: applicationCountMap[job._id.toString()] || 0
+  }));
+
+  const totalPages = Math.ceil(total / limit);
+
+  return {
+    meta: {
+      currentPage: page,
+      totalPages,
+      totalItems: total,
+      itemsPerPage: limit
+    },
+    data: jobsWithCounts
+  };
+};
+
+export const updateJobStatusByAdmin = async (jobId, status) => {
+  const validStatuses = ['ACTIVE', 'INACTIVE', 'EXPIRED'];
+
+  if (!validStatuses.includes(status)) {
+    throw new BadRequestError('Trạng thái không hợp lệ.');
+  }
+
+  const updatedJob = await Job.findByIdAndUpdate(
+    jobId,
+    { status },
+    { new: true }
+  );
+
+  if (!updatedJob) {
+    throw new NotFoundError('Tin tuyển dụng không tồn tại.');
+  }
+
+  return updatedJob;
+};
+
+export const activateJob = async (jobId) => {
+  const job = await Job.findById(jobId);
+
+  if (!job) {
+    throw new NotFoundError('Tin tuyển dụng không tồn tại.');
+  }
+
+  // Update status and extend expiration if needed
+  const updatedJob = await Job.findByIdAndUpdate(
+    jobId,
+    {
+      status: 'ACTIVE',
+      approved: true
+    },
+    { new: true }
+  );
+
+  return updatedJob;
+};
+
+export const deactivateJob = async (jobId) => {
+  const updatedJob = await Job.findByIdAndUpdate(
+    jobId,
+    { status: 'INACTIVE' },
+    { new: true }
+  );
+
+  if (!updatedJob) {
+    throw new NotFoundError('Tin tuyển dụng không tồn tại.');
+  }
+
+  return updatedJob;
 };

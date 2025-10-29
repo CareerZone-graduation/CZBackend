@@ -78,3 +78,15 @@ export const adminCompaniesQuerySchema = z.object({
 export const userStatusSchema = z.object({
   status: z.enum(['active', 'banned']),
 });
+
+export const companyJobsQuerySchema = z.object({
+  page: z.string().optional(),
+  limit: z.string().optional(),
+  status: z.enum(['all', 'active', 'expired', 'pending', 'inactive']).optional(),
+  search: z.string().optional(),
+  sort: z.enum(['createdAt_asc', 'createdAt_desc', 'expiresAt_asc', 'expiresAt_desc']).optional().default('createdAt_desc'),
+});
+
+export const jobStatusSchema = z.object({
+  status: z.enum(['ACTIVE', 'INACTIVE', 'EXPIRED']),
+});

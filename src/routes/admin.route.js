@@ -98,4 +98,35 @@ router
   .route('/stats')
   .get(adminController.getStats);
 
+// Quản lý Jobs của Công ty
+router
+  .route('/companies/:id/jobs')
+  .get(
+    validationMiddleware.validateParams(adminSchema.idParamsSchema),
+    validationMiddleware.validateQuery(adminSchema.companyJobsQuerySchema),
+    adminController.getCompanyJobs
+  );
+
+router
+  .route('/jobs/:id/status')
+  .patch(
+    validationMiddleware.validateParams(adminSchema.idParamsSchema),
+    validationMiddleware.validateBody(adminSchema.jobStatusSchema),
+    adminController.updateJobStatusByAdmin
+  );
+
+router
+  .route('/jobs/:id/activate')
+  .patch(
+    validationMiddleware.validateParams(adminSchema.idParamsSchema),
+    adminController.activateJob
+  );
+
+router
+  .route('/jobs/:id/deactivate')
+  .patch(
+    validationMiddleware.validateParams(adminSchema.idParamsSchema),
+    adminController.deactivateJob
+  );
+
 export default router;
