@@ -48,6 +48,13 @@ router
   );
 
 router
+  .route('/users/:id')
+  .get(
+    validationMiddleware.validateParams(adminSchema.idParamsSchema),
+    adminController.getUserDetail
+  );
+
+router
   .route('/users/:id/status')
   .patch(
     validationMiddleware.validateParams(adminSchema.idParamsSchema),

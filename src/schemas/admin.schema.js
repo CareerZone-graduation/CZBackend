@@ -28,6 +28,7 @@ export const adminUsersQuerySchema = z.object({
   search: z.string().optional(),
   status: z.enum(['active', 'banned']).optional(),
   role: z.enum(['candidate', 'recruiter']).optional(),
+  companyRegistration: z.enum(['registered', 'not-registered']).optional(),
   sort: z.string().optional().default('-createdAt'),
 });
 export const adminCompaniesQuerySchema = z.object({

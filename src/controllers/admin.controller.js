@@ -57,6 +57,15 @@ export const updateUserStatus = asyncHandler(async (req, res) => {
   });
 });
 
+export const getUserDetail = asyncHandler(async (req, res) => {
+  const data = await adminService.getUserDetail(req.params.id);
+  res.json({
+    success: true,
+    message: 'Lấy chi tiết người dùng thành công.',
+    data
+  });
+});
+
 // Quản lý Công ty
 export const getCompanies = asyncHandler(async (req, res) => {
   const result = await adminService.getCompaniesForAdmin(req.validatedQuery || req.query);

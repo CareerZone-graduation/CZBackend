@@ -1,4 +1,4 @@
-import { Job, User, RecruiterProfile, CandidateProfile, Application, CoinRecharge } from '../models/index.js';
+import { Job, User, RecruiterProfile, CandidateProfile, Application, CoinRecharge, CV } from '../models/index.js';
 import { NotFoundError, BadRequestError, UnauthorizedError } from '../utils/AppError.js';
 import mongoose from 'mongoose';
 import * as queueService from './queue.service.js';
@@ -183,7 +183,7 @@ export const rejectJob = async (jobId) => {
 // === QUẢN LÝ NGƯỜI DÙNG ===
 
 export const getUsersForAdmin = async (queryParams) => {
-  const { page = 1, limit = 10, search, status, role, sort = '-createdAt' } = queryParams;
+  const { page = 1, limit = 10, search, status, role, companyRegistration, sort = '-createdAt' } = queryParams;
   
   const filter = {};
   
@@ -234,6 +234,42 @@ export const getUsersForAdmin = async (queryParams) => {
     filter.role = role;
   }
   
+  // Lọc theo company registration status (chỉ áp dụng cho recruiter)
+  let companyFilteredUserIds = null;
+  if (companyRegistration && role === 'recruiter') {
+    if (companyRegistration === 'registered') {
+      // Tìm recruiters có company.name
+      const recruitersWithCompany = await RecruiterProfile.find({
+        'company.name': { $exists: true, $ne: null, $ne: '' }
+      }).select('userId').lean();
+      companyFilteredUserIds = recruitersWithCompany.map(r => r.userId);
+    } else if (companyRegistration === 'not-registered') {
+      // Tìm recruiters không có company.name
+      const recruitersWithoutCompany = await RecruiterProfile.find({
+        $or: [
+          { 'company.name': { $exists: false } },
+          { 'company.name': null },
+          { 'company.name': '' }
+        ]
+      }).select('userId').lean();
+      companyFilteredUserIds = recruitersWithoutCompany.map(r => r.userId);
+    }
+    
+    // Nếu có filter company registration, thêm vào filter chính
+    if (companyFilteredUserIds) {
+      if (filter.$or) {
+        // Nếu đã có $or từ search, cần kết hợp với $and
+        filter.$and = [
+          { $or: filter.$or },
+          { _id: { $in: companyFilteredUserIds } }
+        ];
+        delete filter.$or;
+      } else {
+        filter._id = { $in: companyFilteredUserIds };
+      }
+    }
+  }
+  
   const skip = (page - 1) * limit;
   
   const [users, total] = await Promise.all([
@@ -246,19 +282,22 @@ export const getUsersForAdmin = async (queryParams) => {
     User.countDocuments(filter)
   ]);
   
-  // Lấy thông tin fullname cho tất cả users
+  // Lấy thông tin fullname và company registration status cho tất cả users
   const userIds = users.map(u => u._id);
   const recruiterProfiles = await RecruiterProfile.find({
     userId: { $in: userIds }
-  }).select('userId fullname').lean();
+  }).select('userId fullname company.name').lean();
   
   const candidateProfiles = await CandidateProfile.find({
     userId: { $in: userIds }
   }).select('userId fullname').lean();
   
-  // Map fullname từ cả RecruiterProfile và CandidateProfile
+  // Map fullname và hasCompany từ RecruiterProfile
   const recruiterMap = recruiterProfiles.reduce((acc, profile) => {
-    acc[profile.userId.toString()] = profile.fullname;
+    acc[profile.userId.toString()] = {
+      fullname: profile.fullname,
+      hasCompany: !!(profile.company && profile.company.name)
+    };
     return acc;
   }, {});
   
@@ -268,16 +307,29 @@ export const getUsersForAdmin = async (queryParams) => {
   }, {});
   
   // Tạo cấu trúc cố định cho tất cả users
-  const usersWithFullname = users.map(user => ({
-    _id: user._id,
-    email: user.email,
-    role: user.role,
-    active: user.active,
-    createdAt: user.createdAt,
-    fullname: user.role === 'recruiter' 
-      ? recruiterMap[user._id.toString()] || null 
-      : candidateMap[user._id.toString()] || null
-  }));
+  const usersWithFullname = users.map(user => {
+    const baseUser = {
+      _id: user._id,
+      email: user.email,
+      role: user.role,
+      active: user.active,
+      createdAt: user.createdAt
+    };
+    
+    if (user.role === 'recruiter') {
+      const recruiterInfo = recruiterMap[user._id.toString()];
+      return {
+        ...baseUser,
+        fullname: recruiterInfo?.fullname || null,
+        hasCompany: recruiterInfo?.hasCompany || false
+      };
+    } else {
+      return {
+        ...baseUser,
+        fullname: candidateMap[user._id.toString()] || null
+      };
+    }
+  });
   
   const totalPages = Math.ceil(total / limit);
   
@@ -310,6 +362,216 @@ export const updateUserStatus = async (userId, statusData) => {
   }
   
   return updatedUser;
+};
+
+export const getUserDetail = async (userId) => {
+  const userObjectId = new mongoose.Types.ObjectId(userId);
+  
+  // Fetch user basic info
+  const user = await User.findById(userObjectId)
+    .select('email role active createdAt')
+    .lean();
+  
+  if (!user) {
+    throw new NotFoundError('Người dùng không tồn tại.');
+  }
+  
+  // Base response structure
+  const userDetail = {
+    _id: user._id,
+    email: user.email,
+    role: user.role,
+    active: user.active,
+    createdAt: user.createdAt
+  };
+  
+  // If user is a candidate
+  if (user.role === 'candidate') {
+    // Fetch candidate profile with profileCompleteness
+    const candidateProfile = await CandidateProfile.findOne({ userId: userObjectId })
+      .select('fullname avatar dateOfBirth gender phone address cvs profileCompleteness')
+      .lean();
+    
+    // Use existing profileCompleteness calculation from the profile
+    // This matches the calculation in /api/candidate/my-profile
+    const profileCompleteness = candidateProfile?.profileCompleteness?.percentage || 0;
+    
+    // Count both uploaded CVs and template CVs
+    const uploadedCVCount = candidateProfile?.cvs?.length || 0;
+    const templateCVCount = await CV.countDocuments({ userId: userObjectId });
+    const totalCVCount = uploadedCVCount + templateCVCount;
+    
+    // Fetch application statistics
+    const applicationStats = await Application.aggregate([
+      { $match: { candidateProfileId: candidateProfile?._id } },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          pending: { $sum: { $cond: [{ $eq: ['$status', 'PENDING'] }, 1, 0] } },
+          reviewing: { $sum: { $cond: [{ $eq: ['$status', 'REVIEWING'] }, 1, 0] } },
+          scheduled_interview: { $sum: { $cond: [{ $eq: ['$status', 'SCHEDULED_INTERVIEW'] }, 1, 0] } },
+          interviewed: { $sum: { $cond: [{ $eq: ['$status', 'INTERVIEWED'] }, 1, 0] } },
+          accepted: { $sum: { $cond: [{ $eq: ['$status', 'ACCEPTED'] }, 1, 0] } },
+          rejected: { $sum: { $cond: [{ $eq: ['$status', 'REJECTED'] }, 1, 0] } },
+          withdrawn: { $sum: { $cond: [{ $eq: ['$status', 'WITHDRAWN'] }, 1, 0] } }
+        }
+      }
+    ]);
+    
+    // Fetch most recent application
+    const recentApplication = await Application.findOne({ candidateProfileId: candidateProfile?._id })
+      .sort({ createdAt: -1 })
+      .select('createdAt')
+      .lean();
+    
+    const stats = applicationStats[0] || {
+      total: 0,
+      pending: 0,
+      reviewing: 0,
+      scheduled_interview: 0,
+      interviewed: 0,
+      accepted: 0,
+      rejected: 0,
+      withdrawn: 0
+    };
+    
+    // Calculate acceptance rate
+    const acceptanceRate = stats.total > 0 
+      ? Math.round((stats.accepted / stats.total) * 100) 
+      : 0;
+    
+    return {
+      ...userDetail,
+      profile: {
+        fullname: candidateProfile?.fullname || null,
+        avatar: candidateProfile?.avatar || null,
+        dateOfBirth: candidateProfile?.dateOfBirth || null,
+        gender: candidateProfile?.gender || null,
+        phone: candidateProfile?.phone || null,
+        address: candidateProfile?.address || null,
+        cvCount: totalCVCount,
+        uploadedCVCount: uploadedCVCount,
+        templateCVCount: templateCVCount,
+        profileCompleteness,
+        profileCompletenessDetails: candidateProfile?.profileCompleteness || null
+      },
+      applicationStats: {
+        ...stats,
+        acceptanceRate,
+        mostRecentApplication: recentApplication?.createdAt || null
+      }
+    };
+  }
+  
+  // If user is a recruiter
+  if (user.role === 'recruiter') {
+    // Fetch recruiter profile
+    const recruiterProfile = await RecruiterProfile.findOne({ userId: userObjectId })
+      .select('fullname company')
+      .lean();
+    
+    // Fetch job posting statistics
+    const jobStats = await Job.aggregate([
+      { $match: { recruiterProfileId: recruiterProfile?._id } },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          active: { $sum: { $cond: [{ $eq: ['$status', 'ACTIVE'] }, 1, 0] } },
+          inactive: { $sum: { $cond: [{ $eq: ['$status', 'INACTIVE'] }, 1, 0] } },
+          expired: { $sum: { $cond: [{ $eq: ['$status', 'EXPIRED'] }, 1, 0] } },
+          pending: { $sum: { $cond: [{ $eq: ['$approved', false] }, 1, 0] } }
+        }
+      }
+    ]);
+    
+    // Fetch most recent job posting
+    const recentJob = await Job.findOne({ recruiterProfileId: recruiterProfile?._id })
+      .sort({ createdAt: -1 })
+      .select('createdAt')
+      .lean();
+    
+    // Fetch application statistics for recruiter's jobs
+    const applicationStats = await Application.aggregate([
+      { 
+        $lookup: {
+          from: 'jobs',
+          localField: 'jobId',
+          foreignField: '_id',
+          as: 'job'
+        }
+      },
+      { $unwind: '$job' },
+      { $match: { 'job.recruiterProfileId': recruiterProfile?._id } },
+      {
+        $group: {
+          _id: null,
+          totalApplications: { $sum: 1 },
+          pending: { $sum: { $cond: [{ $eq: ['$status', 'PENDING'] }, 1, 0] } },
+          reviewing: { $sum: { $cond: [{ $eq: ['$status', 'REVIEWING'] }, 1, 0] } },
+          scheduled_interview: { $sum: { $cond: [{ $eq: ['$status', 'SCHEDULED_INTERVIEW'] }, 1, 0] } },
+          interviewed: { $sum: { $cond: [{ $eq: ['$status', 'INTERVIEWED'] }, 1, 0] } },
+          accepted: { $sum: { $cond: [{ $eq: ['$status', 'ACCEPTED'] }, 1, 0] } },
+          rejected: { $sum: { $cond: [{ $eq: ['$status', 'REJECTED'] }, 1, 0] } }
+        }
+      }
+    ]);
+    
+    const stats = jobStats[0] || {
+      total: 0,
+      active: 0,
+      inactive: 0,
+      expired: 0,
+      pending: 0
+    };
+    
+    const appStats = applicationStats[0] || {
+      totalApplications: 0,
+      pending: 0,
+      reviewing: 0,
+      scheduled_interview: 0,
+      interviewed: 0,
+      accepted: 0,
+      rejected: 0
+    };
+    
+    return {
+      ...userDetail,
+      profile: {
+        fullname: recruiterProfile?.fullname || null,
+        hasCompany: !!(recruiterProfile?.company?.name)
+      },
+      company: recruiterProfile?.company ? {
+        name: recruiterProfile.company.name || null,
+        about: recruiterProfile.company.about || null,
+        logo: recruiterProfile.company.logo || null,
+        industry: recruiterProfile.company.industry || null,
+        size: recruiterProfile.company.size || null,
+        website: recruiterProfile.company.website || null,
+        location: {
+          province: recruiterProfile.company.location?.province || null,
+          district: recruiterProfile.company.location?.district || null,
+          commune: recruiterProfile.company.location?.commune || null
+        },
+        address: recruiterProfile.company.address || null,
+        contactInfo: {
+          email: recruiterProfile.company.contactInfo?.email || null,
+          phone: recruiterProfile.company.contactInfo?.phone || null
+        },
+        verified: recruiterProfile.company.verified || false,
+        status: recruiterProfile.company.status || null
+      } : null,
+      jobStats: {
+        ...stats,
+        mostRecentJob: recentJob?.createdAt || null
+      },
+      applicationStats: appStats
+    };
+  }
+  
+  // For admin or other roles
+  return userDetail;
 };
 
 // === QUẢN LÝ CÔNG TY ===

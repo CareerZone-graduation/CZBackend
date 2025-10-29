@@ -43,6 +43,7 @@ import searchHistoryRoutes from './routes/searchHistory.route.js'; // Search his
 import viewHistoryRoutes from './routes/viewHistory.route.js'; // Job view history API
 import creditHistoryRoutes from './routes/creditHistory.route.js'; // Credit history API
 import sharePreviewRoutes from './routes/sharePreview.route.js'; // Facebook share preview
+import talentPoolRoutes from './routes/talentPool.route.js'; // Talent pool management
 
 // 🚧 Middlewares
 import * as errorMiddleware from './middleware/error.middleware.js';
@@ -138,6 +139,7 @@ app.use('/api/search-history', searchHistoryRoutes); // Search history API
 app.use('/api/job-view-history', viewHistoryRoutes); // Job view history API
 app.use('/api/credit-history', creditHistoryRoutes); // Credit history API
 app.use('/api/share-preview', sharePreviewRoutes); // Facebook share preview
+app.use('/api/talent-pool', talentPoolRoutes); // Talent pool management
 
 // 404 & error
 app.use(notFoundMiddleware.notFound);
