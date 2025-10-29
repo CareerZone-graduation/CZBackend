@@ -2,6 +2,7 @@ import { CandidateProfile, Job, JobRecommendation } from '../models/index.js';
 import { NotFoundError, BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
 import ngeohash from 'ngeohash';
+import { RECOMMENDATION_SCORING, CATEGORY_LABELS } from '../constants/jobCategories.js';
 
 /**
  * Calculate distance between two coordinates using Haversine formula
@@ -94,6 +95,55 @@ const filterBySkills = (candidateSkills, jobs) => {
   });
 
   return { matchedJobs, reasons };
+};
+
+/**
+ * Filter jobs based on preferred categories (ngành nghề)
+ * @param {Array} preferredCategories - Array of preferred category strings
+ * @param {Array} jobs - Array of job documents
+ * @returns {Object} Object with matched jobs and reasons
+ */
+const filterByCategory = (preferredCategories, jobs) => {
+  if (!preferredCategories || preferredCategories.length === 0) {
+    return { matchedJobs: [], reasons: {} };
+  }
+
+  const matchedJobs = [];
+  const reasons = {};
+
+  jobs.forEach(job => {
+    if (!job.category) {
+      return;
+    }
+
+    // Check if job category matches any of user's preferred categories
+    if (preferredCategories.includes(job.category)) {
+      const categoryScore = RECOMMENDATION_SCORING.CATEGORY_MATCH;
+
+      matchedJobs.push({
+        job,
+        categoryScore
+      });
+
+      reasons[job._id.toString()] = reasons[job._id.toString()] || [];
+      reasons[job._id.toString()].push({
+        type: 'category_match',
+        value: `Đúng ngành nghề: ${getCategoryLabel(job.category)}`,
+        weight: categoryScore
+      });
+    }
+  });
+
+  return { matchedJobs, reasons };
+};
+
+/**
+ * Get Vietnamese label for category
+ * @param {String} category - Category code
+ * @returns {String} Vietnamese label
+ */
+const getCategoryLabel = (category) => {
+  return CATEGORY_LABELS[category] || category;
 };
 
 /**
@@ -342,21 +392,73 @@ export const generateRecommendations = async (userId, options = {}) => {
     throw new BadRequestError('Hồ sơ chưa đủ 60% để tạo gợi ý việc làm. Vui lòng hoàn thiện hồ sơ.');
   }
 
-  // Build base query for active jobs
-  const baseQuery = {
+  // Build optimized query with $or conditions for matching criteria
+  const matchQuery = {
     status: 'ACTIVE',
-    moderationStatus: 'APPROVED',
-    deadline: { $gte: new Date() }
+    deadline: { $gte: new Date() },
+    $or: []
   };
 
-  // Get all active jobs
-  const allJobs = await Job.find(baseQuery)
+  // Add category filter to query
+  if (profile.preferredCategories && profile.preferredCategories.length > 0) {
+    matchQuery.$or.push({ category: { $in: profile.preferredCategories } });
+  }
+
+  // Add skills filter to query
+  if (profile.skills && profile.skills.length > 0) {
+    const skillNames = profile.skills.map(s => s.name);
+    matchQuery.$or.push({ 
+      skills: { 
+        $elemMatch: { 
+          name: { $in: skillNames } 
+        } 
+      } 
+    });
+  }
+
+  // Add location filter to query
+  if (profile.preferredLocations && profile.preferredLocations.length > 0) {
+    const locationConditions = profile.preferredLocations.map(loc => {
+      const condition = { 'location.province': loc.province };
+      if (loc.district) {
+        condition['location.district'] = loc.district;
+      }
+      return condition;
+    });
+    matchQuery.$or.push({ $or: locationConditions });
+  }
+
+  // Add work type filter to query
+  if (profile.workPreferences?.workTypes && profile.workPreferences.workTypes.length > 0) {
+    matchQuery.$or.push({ workType: { $in: profile.workPreferences.workTypes } });
+  }
+
+  // Add contract type filter to query
+  if (profile.workPreferences?.contractTypes && profile.workPreferences.contractTypes.length > 0) {
+    matchQuery.$or.push({ type: { $in: profile.workPreferences.contractTypes } });
+  }
+
+  // If no criteria specified, fall back to all active jobs
+  if (matchQuery.$or.length === 0) {
+    delete matchQuery.$or;
+  }
+
+  logger.info('Built optimized query', { 
+    userId,
+    queryConditions: matchQuery.$or?.length || 0,
+    hasCategories: !!profile.preferredCategories?.length,
+    hasSkills: !!profile.skills?.length,
+    hasLocations: !!profile.preferredLocations?.length
+  });
+
+  // Get matching jobs with optimized query
+  const allJobs = await Job.find(matchQuery)
     .select('title description requirements location address type workType minSalary maxSalary experience category skills deadline recruiterProfileId')
     .populate('recruiterProfileId', 'fullname company')
     .lean();
 
   if (allJobs.length === 0) {
-    logger.info('No active jobs found for recommendations');
+    logger.info('No matching jobs found for recommendations');
     return {
       recommendations: [],
       total: 0,
@@ -364,9 +466,10 @@ export const generateRecommendations = async (userId, options = {}) => {
     };
   }
 
-  logger.info(`Found ${allJobs.length} active jobs to filter`);
+  logger.info(`Found ${allJobs.length} matching jobs after database filtering`);
 
-  // Apply filters
+  // Apply detailed scoring filters (still need these for scoring calculation)
+  const categoryFilter = filterByCategory(profile.preferredCategories, allJobs);
   const skillFilter = filterBySkills(profile.skills, allJobs);
   const locationFilter = filterByLocation(profile.preferredLocations, allJobs, options.maxDistance);
   const salaryFilter = filterBySalary(profile.expectedSalary, allJobs);
@@ -393,13 +496,14 @@ export const generateRecommendations = async (userId, options = {}) => {
     });
   };
 
+  processMatches(categoryFilter.matchedJobs, 'categoryScore');
   processMatches(skillFilter.matchedJobs, 'skillScore');
   processMatches(locationFilter.matchedJobs, 'locationScore');
   processMatches(salaryFilter.matchedJobs, 'salaryScore');
   processMatches(workPrefFilter.matchedJobs, 'workPreferenceScore');
 
   // Merge all reasons
-  Object.assign(allReasons, skillFilter.reasons, locationFilter.reasons, salaryFilter.reasons, workPrefFilter.reasons);
+  Object.assign(allReasons, categoryFilter.reasons, skillFilter.reasons, locationFilter.reasons, salaryFilter.reasons, workPrefFilter.reasons);
 
   // Convert to array and sort by score
   const recommendations = Array.from(jobScores.values())
@@ -420,27 +524,29 @@ export const generateRecommendations = async (userId, options = {}) => {
       : 0
   });
 
-  // Save recommendations to database
-  if (recommendations.length > 0) {
-    const bulkOps = recommendations.map(rec => ({
-      updateOne: {
-        filter: {
+  // Save only top recommendations to database (limit to reduce storage)
+  const MAX_RECOMMENDATIONS_TO_SAVE = 100; // Chỉ lưu top 100 recommendations
+  const topRecommendations = recommendations.slice(0, MAX_RECOMMENDATIONS_TO_SAVE);
+
+  if (topRecommendations.length > 0) {
+    // Delete old recommendations for this candidate first
+    await JobRecommendation.deleteMany({ candidateId: profile._id });
+    
+    // Insert new recommendations
+    const bulkOps = topRecommendations.map(rec => ({
+      insertOne: {
+        document: {
           candidateId: profile._id,
-          jobId: rec.job._id
-        },
-        update: {
-          $set: {
-            score: rec.score,
-            reasons: rec.reasons,
-            generatedAt: new Date()
-          }
-        },
-        upsert: true
+          jobId: rec.job._id,
+          score: rec.score,
+          reasons: rec.reasons,
+          generatedAt: new Date()
+        }
       }
     }));
 
     await JobRecommendation.bulkWrite(bulkOps);
-    logger.info(`Saved ${recommendations.length} recommendations to database`);
+    logger.info(`Saved top ${topRecommendations.length} recommendations to database (out of ${recommendations.length} total)`);
   }
 
   return {
@@ -476,54 +582,54 @@ export const getRecommendations = async (userId, options = {}) => {
   const limit = Math.min(parseInt(options.limit) || 20, 50);
   const skip = (page - 1) * limit;
 
-  // Get recommendations from database
-  const [recommendations, totalCount] = await Promise.all([
-    JobRecommendation.find({ candidateId: profile._id })
-      .sort({ score: -1, generatedAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .populate({
-        path: 'jobId',
-        select: 'title description location address type workType minSalary maxSalary experience category skills deadline recruiterProfileId status',
-        populate: {
-          path: 'recruiterProfileId',
-          select: 'fullname company'
-        }
-      })
-      .lean(),
-    JobRecommendation.countDocuments({ candidateId: profile._id })
-  ]);
+  // First, get all recommendations with populated jobs to filter correctly
+  const allRecommendations = await JobRecommendation.find({ candidateId: profile._id })
+    .sort({ score: -1, generatedAt: -1 })
+    .populate({
+      path: 'jobId',
+      select: 'title description location address type workType minSalary maxSalary experience category skills deadline recruiterProfileId status',
+      populate: {
+        path: 'recruiterProfileId',
+        select: 'fullname company'
+      }
+    })
+    .lean();
 
   // Filter out recommendations where job no longer exists or is inactive
-  const validRecommendations = recommendations.filter(rec => 
+  const validRecommendations = allRecommendations.filter(rec => 
     rec.jobId && 
     rec.jobId.status === 'ACTIVE' &&
     new Date(rec.jobId.deadline) >= new Date()
   );
 
+  // Apply pagination to valid recommendations
+  const totalValidCount = validRecommendations.length;
+  const paginatedRecommendations = validRecommendations.slice(skip, skip + limit);
+
   logger.info('Retrieved recommendations', {
     userId,
-    total: totalCount,
+    totalInDb: allRecommendations.length,
+    totalValid: totalValidCount,
     page,
-    returned: validRecommendations.length
+    returned: paginatedRecommendations.length
   });
 
   return {
-    jobs: validRecommendations.map(rec => ({
-      ...rec.jobId,
-      recommendationScore: rec.score,
-      recommendationReasons: rec.reasons,
-      recommendedAt: rec.generatedAt
+    jobs: paginatedRecommendations.map(rec => ({
+      jobId: rec.jobId,
+      score: rec.score,
+      reasons: rec.reasons,
+      generatedAt: rec.generatedAt
     })),
     pagination: {
       currentPage: page,
-      totalPages: Math.ceil(totalCount / limit),
-      totalItems: totalCount,
+      totalPages: Math.ceil(totalValidCount / limit),
+      totalItems: totalValidCount,
       limit,
-      hasMore: page * limit < totalCount
+      hasMore: page * limit < totalValidCount
     },
-    lastUpdated: validRecommendations.length > 0 
-      ? validRecommendations[0].generatedAt 
+    lastUpdated: paginatedRecommendations.length > 0 
+      ? paginatedRecommendations[0].generatedAt 
       : null
   };
 };

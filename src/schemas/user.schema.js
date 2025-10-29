@@ -411,7 +411,7 @@ export const workPreferencesSchema = z.object({
 });
 
 /**
- * Profile preferences update schema
+ * Profile preferences schema
  * For PUT /api/candidate/profile/preferences
  */
 export const profilePreferencesSchema = z.object({
@@ -419,7 +419,19 @@ export const profilePreferencesSchema = z.object({
   preferredLocations: z.array(locationSchema)
     .max(10, 'Không được vượt quá 10 địa điểm ưa thích')
     .optional(),
-  workPreferences: workPreferencesSchema.optional()
+  workPreferences: workPreferencesSchema.optional(),
+  preferredCategories: z.array(
+    z.enum([
+      'IT', 'SOFTWARE_DEVELOPMENT', 'DATA_SCIENCE', 'MACHINE_LEARNING', 'WEB_DEVELOPMENT',
+      'SALES', 'MARKETING', 'ACCOUNTING', 'GRAPHIC_DESIGN', 'CONTENT_WRITING',
+      'MEDICAL', 'TEACHING', 'ENGINEERING', 'PRODUCTION', 'LOGISTICS',
+      'HOSPITALITY', 'REAL_ESTATE', 'LAW', 'FINANCE', 'HUMAN_RESOURCES',
+      'CUSTOMER_SERVICE', 'ADMINISTRATION', 'MANAGEMENT', 'OTHER'
+    ])
+  )
+    .min(1, 'Vui lòng chọn ít nhất 1 ngành nghề')
+    .max(5, 'Không được chọn quá 5 ngành nghề')
+    .optional()
 });
 
 /**

@@ -174,7 +174,8 @@ export const updateProfilePreferences = asyncHandler(async (req, res) => {
         userId, 
         hasExpectedSalary: !!preferences.expectedSalary,
         hasPreferredLocations: !!preferences.preferredLocations,
-        hasWorkPreferences: !!preferences.workPreferences
+        hasWorkPreferences: !!preferences.workPreferences,
+        hasPreferredCategories: !!preferences.preferredCategories
     });
     
     const updatedProfile = await candidateService.updateProfilePreferences(userId, preferences);

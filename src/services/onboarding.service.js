@@ -26,9 +26,10 @@ export const calculateProfileCompleteness = (profile) => {
 
   // Define weights for each section (total = 100%)
   const weights = {
-    basicInfo: 25,      // Essential: fullname, phone, preferredLocations (từ bước 1)
-    skills: 25,         // Critical for job matching (từ bước 2)
-    preferences: 20,    // Important: salary, work preferences (từ bước 3)
+    basicInfo: 20,      // Essential: fullname, phone, preferredLocations (từ bước 1)
+    skills: 20,         // Critical for job matching (từ bước 2)
+    categories: 15,     // NEW: Job categories preference (ngành nghề mong muốn)
+    preferences: 15,    // Important: salary, work preferences (từ bước 3)
     bio: 5,             // Nice to have (bước 1)
     avatar: 5,          // Nice to have (bước 1)
     experience: 5,      // Optional for freshers (bước 4)
@@ -40,13 +41,16 @@ export const calculateProfileCompleteness = (profile) => {
   };
 
   // Check completeness for each section with detailed breakdown
-  // Basic Info (25%): fullname + phone + preferredLocations (bước 1)
+  // Basic Info (20%): fullname + phone + preferredLocations (bước 1)
   const basicInfoComplete = !!(profile.fullname && profile.phone && profile.preferredLocations?.length > 0);
 
-  // Skills (25%): >= 3 skills (bước 2)
+  // Skills (20%): >= 3 skills (bước 2)
   const skillsComplete = profile.skills?.length >= 3;
 
-  // Preferences (20%): salary + workTypes + contractTypes (bước 3)
+  // Categories (15%): >= 1 preferred category (ngành nghề - bước 2 mới)
+  const categoriesComplete = profile.preferredCategories?.length >= 1;
+
+  // Preferences (15%): salary + workTypes + contractTypes (bước 3)
   const preferencesComplete = !!(
     profile.expectedSalary?.min > 0 &&
     profile.workPreferences?.workTypes?.length > 0 &&
@@ -66,6 +70,7 @@ export const calculateProfileCompleteness = (profile) => {
   const checks = {
     hasBasicInfo: basicInfoComplete,
     hasSkills: skillsComplete,
+    hasCategories: categoriesComplete,
     hasPreferences: preferencesComplete,
     hasBio,
     hasAvatar,
@@ -116,7 +121,7 @@ export const calculateProfileCompleteness = (profile) => {
     recommendations.push('Tải lên ảnh đại diện');
   }
 
-  // Skills (25%) - Bước 2: >= 3 skills
+  // Skills (20%) - Bước 2: >= 3 skills
   if (checks.hasSkills) {
     percentage += weights.skills;
   } else {
@@ -129,7 +134,15 @@ export const calculateProfileCompleteness = (profile) => {
     }
   }
 
-  // Preferences (20%) - Bước 3: salary + workTypes + contractTypes
+  // Categories (15%) - Bước 2: >= 1 preferred category (ngành nghề)
+  if (checks.hasCategories) {
+    percentage += weights.categories;
+  } else {
+    missingFields.push('preferredCategories');
+    recommendations.push('Chọn ít nhất 1 ngành nghề mong muốn');
+  }
+
+  // Preferences (15%) - Bước 3: salary + workTypes + contractTypes
   if (checks.hasPreferences) {
     percentage += weights.preferences;
   } else {

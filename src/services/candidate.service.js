@@ -458,6 +458,11 @@ export const updateProfilePreferences = async (userId, preferences) => {
         }
     }
 
+    // Update preferred categories (remove duplicates)
+    if (preferences.preferredCategories !== undefined) {
+        profile.preferredCategories = [...new Set(preferences.preferredCategories)];
+    }
+
     await profile.save({ validateModifiedOnly: true });
 
     // Recalculate profile completeness after update
@@ -467,7 +472,8 @@ export const updateProfilePreferences = async (userId, preferences) => {
         userId,
         hasExpectedSalary: !!preferences.expectedSalary,
         hasPreferredLocations: !!preferences.preferredLocations,
-        hasWorkPreferences: !!preferences.workPreferences
+        hasWorkPreferences: !!preferences.workPreferences,
+        hasPreferredCategories: !!preferences.preferredCategories
     });
 
     return profile;

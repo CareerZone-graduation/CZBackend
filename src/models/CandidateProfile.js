@@ -290,6 +290,18 @@ const candidateProfileSchema = new mongoose.Schema({
       default: null // null = tất cả quận/huyện
     }
   }],
+  // Preferred job categories - Ngành nghề mong muốn
+  preferredCategories: [{
+    type: String,
+    enum: [
+      'IT', 'SOFTWARE_DEVELOPMENT', 'DATA_SCIENCE', 'MACHINE_LEARNING', 'WEB_DEVELOPMENT',
+      'SALES', 'MARKETING', 'ACCOUNTING', 'GRAPHIC_DESIGN', 'CONTENT_WRITING',
+      'MEDICAL', 'TEACHING', 'ENGINEERING', 'PRODUCTION', 'LOGISTICS',
+      'HOSPITALITY', 'REAL_ESTATE', 'LAW', 'FINANCE', 'HUMAN_RESOURCES',
+      'CUSTOMER_SERVICE', 'ADMINISTRATION', 'MANAGEMENT', 'OTHER'
+    ],
+    trim: true
+  }],
   // Work preferences
   workPreferences: {
     workTypes: [{
