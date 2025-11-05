@@ -46,8 +46,14 @@ export const getJobsForAdmin = async (queryParams) => {
       };
     }
   }
+  // Filter by status
   if (status) {
-    filter.status = status;
+    if (status === 'PENDING') {
+      // PENDING means not approved yet
+      filter.approved = false;
+    } else {
+      filter.status = status;
+    }
   }
 
 

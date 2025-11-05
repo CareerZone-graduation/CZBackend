@@ -234,7 +234,7 @@ export const applyToJobSchema = z.object({
 export const getMyJobsQuerySchema = z.object({
   page: z.coerce.number().min(1).optional().default(1),
   limit: z.coerce.number().min(1).max(100).optional().default(10),
-  status: z.enum(['ACTIVE', 'INACTIVE', 'EXPIRED']).optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'EXPIRED', 'PENDING']).optional(),
   sortBy: z.string().optional(),
   search: z.string().optional(), // Add this line
 });
