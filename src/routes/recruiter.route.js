@@ -17,4 +17,28 @@ router.get(
   recruiterController.getRecruiterProfile
 );
 
+/**
+ * @route GET /api/v1/recruiters/candidates/:userId
+ * @desc Get candidate profile (with masking if not unlocked)
+ * @access Private (Recruiter)
+ */
+router.get(
+  '/candidates/:userId',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.recruiterOnly,
+  recruiterController.getCandidateProfile
+);
+
+/**
+ * @route POST /api/v1/recruiters/candidates/:userId/unlock
+ * @desc Unlock candidate profile (purchase access)
+ * @access Private (Recruiter)
+ */
+router.post(
+  '/candidates/:userId/unlock',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.recruiterOnly,
+  recruiterController.unlockCandidateProfile
+);
+
 export default router;

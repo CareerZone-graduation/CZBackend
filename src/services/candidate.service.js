@@ -478,3 +478,34 @@ export const updateProfilePreferences = async (userId, preferences) => {
 
     return profile;
 };
+
+/**
+ * Update privacy settings (allowSearch)
+ * @param {string} userId
+ * @param {boolean} allowSearch
+ * @returns {Promise<Object>}
+ */
+export const updatePrivacySettings = async (userId, allowSearch) => {
+    const user = await User.findById(userId);
+
+    if (!user) {
+        throw new NotFoundError('Không tìm thấy người dùng.');
+    }
+
+    if (user.role !== 'candidate') {
+        throw new BadRequestError('Chỉ ứng viên mới có thể cập nhật cài đặt này.');
+    }
+
+    user.allowSearch = allowSearch;
+    await user.save();
+
+    logger.info('Privacy settings updated', {
+        userId,
+        allowSearch
+    });
+
+    return {
+        allowSearch: user.allowSearch,
+        updatedAt: user.updatedAt
+    };
+};

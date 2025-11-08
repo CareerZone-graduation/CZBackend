@@ -1,5 +1,5 @@
-import { RecruiterProfile } from '../models/index.js';
-import { NotFoundError } from '../utils/AppError.js';
+import { RecruiterProfile, User, CandidateProfile, ProfileUnlock } from '../models/index.js';
+import { NotFoundError, BadRequestError, ForbiddenError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -22,4 +22,139 @@ export const getRecruiterProfile = async (userId) => {
 
   logger.info(`Successfully fetched recruiter profile for userId: ${userId}`);
   return profile;
+};
+
+/**
+ * Mask email address
+ * @param {string} email - Email to mask
+ * @returns {string} Masked email
+ */
+const maskEmail = (email) => {
+  if (!email) return '';
+  const [username, domain] = email.split('@');
+  if (!domain) return email;
+  const maskedUsername = username.charAt(0) + '***' + username.charAt(username.length - 1);
+  return `${maskedUsername}@${domain}`;
+};
+
+/**
+ * Mask phone number
+ * @param {string} phone - Phone to mask
+ * @returns {string} Masked phone
+ */
+const maskPhone = (phone) => {
+  if (!phone) return '';
+  return phone.replace(/(\d{3})\d{4}(\d{3})/, '$1****$2');
+};
+
+/**
+ * Get candidate profile with masking if not unlocked
+ * @param {string} userId - Candidate user ID
+ * @param {string} recruiterId - Recruiter user ID
+ * @returns {Promise<Object>} Candidate profile
+ */
+export const getCandidateProfile = async (userId, recruiterId) => {
+  logger.info(`Fetching candidate profile for userId: ${userId} by recruiter: ${recruiterId}`);
+
+  // Check if user exists and is a candidate
+  const user = await User.findById(userId).select('email phone role').lean();
+  if (!user || user.role !== 'candidate') {
+    throw new NotFoundError('Không tìm thấy ứng viên.');
+  }
+
+  // Get candidate profile
+  const profile = await CandidateProfile.findOne({ userId }).lean();
+  if (!profile) {
+    throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
+  }
+
+  // Check if profile is unlocked
+  const unlock = await ProfileUnlock.findOne({
+    recruiterId,
+    candidateId: userId,
+  }).lean();
+
+  const isUnlocked = !!unlock;
+
+  // Prepare response with masking if needed
+  const response = {
+    ...profile,
+    email: isUnlocked ? user.email : maskEmail(user.email),
+    phone: isUnlocked ? profile.phone : maskPhone(profile.phone),
+    isUnlocked,
+  };
+
+  // If locked, also mask CV files
+  if (!isUnlocked && profile.cvFiles && profile.cvFiles.length > 0) {
+    response.cvFiles = profile.cvFiles.map(cv => ({
+      ...cv,
+      maskedPath: cv.path, // In production, this should point to a masked version
+    }));
+  }
+
+  logger.info(`Successfully fetched candidate profile for userId: ${userId}, isUnlocked: ${isUnlocked}`);
+  return response;
+};
+
+/**
+ * Unlock candidate profile (purchase access)
+ * @param {string} userId - Candidate user ID
+ * @param {string} recruiterId - Recruiter user ID
+ * @returns {Promise<Object>} Unlock result
+ */
+export const unlockCandidateProfile = async (userId, recruiterId) => {
+  logger.info(`Unlocking candidate profile userId: ${userId} by recruiter: ${recruiterId}`);
+
+  // Check if user exists and is a candidate
+  const user = await User.findById(userId).select('role').lean();
+  if (!user || user.role !== 'candidate') {
+    throw new NotFoundError('Không tìm thấy ứng viên.');
+  }
+
+  // Check if already unlocked
+  const existingUnlock = await ProfileUnlock.findOne({
+    recruiterId,
+    candidateId: userId,
+  });
+
+  if (existingUnlock) {
+    logger.info(`Profile already unlocked for userId: ${userId} by recruiter: ${recruiterId}`);
+    return {
+      alreadyUnlocked: true,
+      message: 'Hồ sơ đã được mở khóa trước đó.',
+    };
+  }
+
+  // Get recruiter user to check coinBalance
+  const recruiterUser = await User.findById(recruiterId).select('coinBalance');
+  if (!recruiterUser) {
+    throw new NotFoundError('Không tìm thấy nhà tuyển dụng.');
+  }
+
+  // Check if recruiter has enough coins (50 coins per unlock)
+  const UNLOCK_COST = 50;
+  if (recruiterUser.coinBalance < UNLOCK_COST) {
+    throw new BadRequestError('Không đủ xu để mở khóa hồ sơ. Vui lòng nạp thêm xu.');
+  }
+
+  // Deduct coins
+  recruiterUser.coinBalance -= UNLOCK_COST;
+  await recruiterUser.save();
+
+  // Create unlock record
+  const unlock = await ProfileUnlock.create({
+    recruiterId,
+    candidateId: userId,
+    cost: UNLOCK_COST,
+    unlockedAt: new Date(),
+  });
+
+  logger.info(`Successfully unlocked candidate profile userId: ${userId} by recruiter: ${recruiterId}`);
+  
+  return {
+    unlocked: true,
+    cost: UNLOCK_COST,
+    remainingCoins: recruiterUser.coinBalance,
+    unlockedAt: unlock.unlockedAt,
+  };
 };

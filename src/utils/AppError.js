@@ -39,5 +39,11 @@ export class ValidationError extends AppError {
   }
 }
 
+export class UnprocessableEntityError extends AppError {
+  constructor(message = 'Unprocessable Entity') {
+    super(message, 422);
+  }
+}
+
 export default AppError;
 export {AppError}

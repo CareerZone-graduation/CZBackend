@@ -6,6 +6,7 @@ import * as jobSchema from '../schemas/job.schema.js';
 import { getMapClustersSchema } from '../schemas/map.schema.js';
 import * as commonSchema from '../schemas/common.schema.js';
 import * as jobController from '../controllers/job.controller.js';
+import * as recommendationController from '../controllers/recommendation.controller.js';
 
 const router = express.Router();
 
@@ -69,6 +70,16 @@ router.get(
   authMiddleware.recruiterOnly,
   validationMiddleware.validateParams(commonSchema.idParamSchema),
   jobController.getJobDetailsForRecruiter
+);
+
+// Candidate suggestions endpoint (AI-powered recommendations)
+router.get(
+  '/:id/suggestions',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.recruiterOnly,
+  validationMiddleware.validateParams(commonSchema.idParamSchema),
+  validationMiddleware.validateQuery(jobSchema.candidateSuggestionsQuerySchema),
+  recommendationController.getSuggestions
 );
 
 router.get(

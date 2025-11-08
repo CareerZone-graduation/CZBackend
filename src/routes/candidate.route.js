@@ -48,6 +48,13 @@ router.get(
     candidateController.getProfileRecommendations
 );
 
+// Privacy settings endpoint
+router.patch(
+    '/settings/privacy',
+    validationMiddleware.validateBody(userSchema.privacySettingsSchema),
+    candidateController.updatePrivacySettings
+);
+
 router
     .route('/avatar')
     .patch(

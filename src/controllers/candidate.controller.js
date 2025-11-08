@@ -204,3 +204,22 @@ export const getProfileRecommendations = asyncHandler(async (req, res) => {
         data: recommendations
     });
 });
+
+/**
+ * Update privacy settings
+ * PATCH /api/v1/candidates/settings/privacy
+ */
+export const updatePrivacySettings = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    const { allowSearch } = req.body;
+    
+    logger.info('Updating privacy settings', { userId, allowSearch });
+    
+    const settings = await candidateService.updatePrivacySettings(userId, allowSearch);
+    
+    res.status(200).json({
+        success: true,
+        message: 'Cập nhật cài đặt riêng tư thành công.',
+        data: settings
+    });
+});

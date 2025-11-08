@@ -444,3 +444,14 @@ export const profileCompletenessQuerySchema = z.object({
     .optional()
     .default('false')
 });
+
+/**
+ * Privacy settings schema
+ * For PATCH /api/v1/candidates/settings/privacy
+ */
+export const privacySettingsSchema = z.object({
+  allowSearch: z.boolean({
+    required_error: 'Trường allowSearch là bắt buộc',
+    invalid_type_error: 'allowSearch phải là giá trị boolean'
+  })
+});
