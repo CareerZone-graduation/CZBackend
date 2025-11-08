@@ -32,6 +32,9 @@ router.get('/job-categories', analyticsController.getJobCategories);
 
 router.get('/company-stats', analyticsController.getCompanyStats);
 
+// KPI Metrics - Các chỉ số KPI nghiệp vụ từ dữ liệu thực
+router.get('/kpi-metrics', analyticsController.getKPIMetrics);
+
 // Transaction Analytics - API cho phân tích giao dịch
 router.get(
   '/transaction-trends',

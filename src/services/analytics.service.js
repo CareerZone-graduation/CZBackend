@@ -147,8 +147,54 @@ export const getDashboardStats = async () => {
  * Thống kê tăng trưởng người dùng theo thời gian
  */
 export const getUserGrowth = async (queryParams) => {
-  const { period, granularity } = queryParams;
-  const { startDate, endDate } = getDateRange(period);
+  // Log toàn bộ queryParams để debug
+  console.log('📥 Backend received RAW queryParams:', JSON.stringify(queryParams, null, 2));
+  
+  const { period, granularity, customStartDate, customEndDate } = queryParams;
+  
+  console.log('📥 Destructured params:', { 
+    period, 
+    granularity, 
+    customStartDate, 
+    customEndDate,
+    'typeof customStartDate': typeof customStartDate,
+    'typeof customEndDate': typeof customEndDate
+  });
+  
+  // Sử dụng custom dates từ frontend nếu có, nếu không thì dùng period
+  let startDate, endDate;
+  
+  if (customStartDate && customEndDate) {
+    // Chuyển đổi string thành Date object
+    startDate = new Date(customStartDate);
+    endDate = new Date(customEndDate);
+    
+    // Kiểm tra Date có hợp lệ không
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      console.error('❌ Invalid date format:', { customStartDate, customEndDate });
+      throw new Error('Invalid date format');
+    }
+    
+    // Set time để đảm bảo lấy đủ dữ liệu
+    startDate.setHours(0, 0, 0, 0);
+    endDate.setHours(23, 59, 59, 999);
+    
+    console.log('✅ Using custom dates:', { 
+      startDate: startDate.toISOString(), 
+      endDate: endDate.toISOString() 
+    });
+  } else {
+    // Sử dụng period mặc định
+    const dateRange = getDateRange(period || '30d');
+    startDate = dateRange.startDate;
+    endDate = dateRange.endDate;
+    
+    console.log('✅ Using period dates:', { 
+      period: period || '30d',
+      startDate: startDate.toISOString(), 
+      endDate: endDate.toISOString() 
+    });
+  }
 
   // --- THAY ĐỔI: Sử dụng $dateTrunc để chuẩn hóa ngày ---
   const dateGroupingExpression = {
@@ -295,8 +341,42 @@ export const getUserGrowth = async (queryParams) => {
  * Thống kê doanh thu theo thời gian
  */
 export const getRevenueTrends = async (queryParams) => {
-  const { period, granularity } = queryParams;
-  const { startDate, endDate } = getDateRange(period);
+  const { period, granularity, customStartDate, customEndDate } = queryParams;
+  
+  // Sử dụng custom dates từ frontend nếu có, nếu không thì dùng period
+  let startDate, endDate;
+  
+  if (customStartDate && customEndDate) {
+    // Chuyển đổi string thành Date object
+    startDate = new Date(customStartDate);
+    endDate = new Date(customEndDate);
+    
+    // Kiểm tra Date có hợp lệ không
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      console.error('❌ Invalid date format:', { customStartDate, customEndDate });
+      throw new Error('Invalid date format');
+    }
+    
+    // Set time để đảm bảo lấy đủ dữ liệu
+    startDate.setHours(0, 0, 0, 0);
+    endDate.setHours(23, 59, 59, 999);
+    
+    console.log('✅ getRevenueTrends using custom dates:', { 
+      startDate: startDate.toISOString(), 
+      endDate: endDate.toISOString() 
+    });
+  } else {
+    // Sử dụng period mặc định
+    const dateRange = getDateRange(period || '30d');
+    startDate = dateRange.startDate;
+    endDate = dateRange.endDate;
+    
+    console.log('✅ getRevenueTrends using period dates:', { 
+      period: period || '30d',
+      startDate: startDate.toISOString(), 
+      endDate: endDate.toISOString() 
+    });
+  }
 
   // --- THAY ĐỔI LỚN BẮT ĐẦU TỪ ĐÂY ---
   // Thay vì chỉ dùng format string, ta dùng $dateTrunc để chuẩn hóa ngày
@@ -445,12 +525,30 @@ export const getUserDemographics = async () => {
  */
 export const getJobCategories = async () => {
   const results = await Job.aggregate([
-    { $match: { status: "ACTIVE", approved: true } },
-    { $group: { _id: "$category", value: { $sum: 1 } } },
-    { $project: { _id: 0, name: "$_id", value: 1 } },
+    { 
+      $match: { 
+        status: "ACTIVE", 
+        moderationStatus: "APPROVED" // Sửa từ approved thành moderationStatus
+      } 
+    },
+    { 
+      $group: { 
+        _id: "$category", 
+        value: { $sum: 1 } 
+      } 
+    },
+    { 
+      $project: { 
+        _id: 0, 
+        name: "$_id", 
+        value: 1 
+      } 
+    },
     { $sort: { value: -1 } },
-    { $limit: 10 }, // Lấy top 10
+    { $limit: 10 }, // Lấy top 10 categories
   ]);
+  
+  console.log('📊 Job categories from MongoDB:', results);
   return results;
 };
 
@@ -1157,5 +1255,189 @@ export const getAllTransactions = async (queryParams) => {
           totalItems,
           totalPages: Math.ceil(totalItems / limit)
       }
+  };
+};
+
+// Get KPI metrics from real MongoDB data
+export const getKPIData = async () => {
+  const now = new Date();
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  const [
+    // Application Success Rate (current month)
+    currentMonthApplications,
+    currentMonthInterviewedApps,
+    // Application Success Rate (last month)
+    lastMonthApplications,
+    lastMonthInterviewedApps,
+    // Average Time to Hire
+    acceptedApplications,
+    // User Engagement
+    totalUsers,
+    activeUsers,
+    totalUsersLastMonth,
+    activeUsersLastMonth,
+    // Platform Revenue
+    currentMonthRevenue,
+    lastMonthRevenue
+  ] = await Promise.all([
+    // Current month application success rate
+    Application.countDocuments({ 
+      createdAt: { $gte: currentMonthStart } 
+    }),
+    Application.countDocuments({ 
+      createdAt: { $gte: currentMonthStart },
+      status: { $in: ['SCHEDULED_INTERVIEW', 'INTERVIEWED', 'ACCEPTED'] }
+    }),
+    // Last month application success rate
+    Application.countDocuments({ 
+      createdAt: { $gte: lastMonthStart, $lte: lastMonthEnd }
+    }),
+    Application.countDocuments({ 
+      createdAt: { $gte: lastMonthStart, $lte: lastMonthEnd },
+      status: { $in: ['SCHEDULED_INTERVIEW', 'INTERVIEWED', 'ACCEPTED'] }
+    }),
+    // Accepted applications for time to hire calculation
+    Application.find({ 
+      status: 'ACCEPTED',
+      appliedAt: { $exists: true }
+    }).populate('jobId', 'createdAt').limit(1000).lean(),
+    // User engagement
+    User.countDocuments(),
+    User.countDocuments({ updatedAt: { $gte: thirtyDaysAgo } }),
+    User.countDocuments({ createdAt: { $lt: lastMonthEnd } }),
+    User.countDocuments({ 
+      createdAt: { $lt: lastMonthEnd },
+      updatedAt: { $gte: new Date(lastMonthStart.getTime() - 30 * 24 * 60 * 60 * 1000) }
+    }),
+    // Platform revenue
+    CoinRecharge.aggregate([
+      { 
+        $match: { 
+          status: 'SUCCESS', 
+          createdAt: { $gte: currentMonthStart } 
+        }
+      },
+      { 
+        $group: { 
+          _id: null, 
+          total: { $sum: '$amountPaid' }
+        }
+      }
+    ]),
+    CoinRecharge.aggregate([
+      { 
+        $match: { 
+          status: 'SUCCESS', 
+          createdAt: { $gte: lastMonthStart, $lte: lastMonthEnd }
+        }
+      },
+      { 
+        $group: { 
+          _id: null, 
+          total: { $sum: '$amountPaid' }
+        }
+      }
+    ])
+  ]);
+
+  // Calculate Application Success Rate
+  const currentSuccessRate = currentMonthApplications > 0 
+    ? (currentMonthInterviewedApps / currentMonthApplications * 100) 
+    : 0;
+  const lastSuccessRate = lastMonthApplications > 0 
+    ? (lastMonthInterviewedApps / lastMonthApplications * 100) 
+    : 0;
+  const successRateChange = lastSuccessRate > 0 
+    ? ((currentSuccessRate - lastSuccessRate) / lastSuccessRate * 100) 
+    : 0;
+
+  // Calculate Average Time to Hire
+  let avgTimeToHire = 0;
+  let avgTimeToHireLastMonth = 0;
+  if (acceptedApplications.length > 0) {
+    const currentMonthAccepted = acceptedApplications.filter(
+      app => app.appliedAt >= currentMonthStart
+    );
+    const lastMonthAccepted = acceptedApplications.filter(
+      app => app.appliedAt >= lastMonthStart && app.appliedAt <= lastMonthEnd
+    );
+
+    if (currentMonthAccepted.length > 0) {
+      const totalDays = currentMonthAccepted.reduce((sum, app) => {
+        if (app.jobId && app.jobId.createdAt && app.appliedAt) {
+          const days = Math.floor(
+            (new Date(app.appliedAt) - new Date(app.jobId.createdAt)) / (1000 * 60 * 60 * 24)
+          );
+          return sum + days;
+        }
+        return sum;
+      }, 0);
+      avgTimeToHire = Math.floor(totalDays / currentMonthAccepted.length);
+    }
+
+    if (lastMonthAccepted.length > 0) {
+      const totalDaysLast = lastMonthAccepted.reduce((sum, app) => {
+        if (app.jobId && app.jobId.createdAt && app.appliedAt) {
+          const days = Math.floor(
+            (new Date(app.appliedAt) - new Date(app.jobId.createdAt)) / (1000 * 60 * 60 * 24)
+          );
+          return sum + days;
+        }
+        return sum;
+      }, 0);
+      avgTimeToHireLastMonth = Math.floor(totalDaysLast / lastMonthAccepted.length);
+    }
+  }
+  const timeToHireChange = avgTimeToHireLastMonth > 0
+    ? avgTimeToHireLastMonth - avgTimeToHire
+    : 0;
+
+  // Calculate User Engagement
+  const engagementRate = totalUsers > 0 
+    ? (activeUsers / totalUsers * 100) 
+    : 0;
+  const lastEngagementRate = totalUsersLastMonth > 0 
+    ? (activeUsersLastMonth / totalUsersLastMonth * 100) 
+    : 0;
+  const engagementChange = lastEngagementRate > 0 
+    ? ((engagementRate - lastEngagementRate) / lastEngagementRate * 100) 
+    : 0;
+
+  // Calculate Platform Revenue
+  const currentRevenue = currentMonthRevenue[0]?.total || 0;
+  const lastRevenue = lastMonthRevenue[0]?.total || 0;
+  const revenueChange = lastRevenue > 0 
+    ? ((currentRevenue - lastRevenue) / lastRevenue * 100) 
+    : 0;
+
+  return {
+    applicationSuccessRate: {
+      value: `${currentSuccessRate.toFixed(1)}%`,
+      change: successRateChange >= 0 ? `+${successRateChange.toFixed(1)}%` : `${successRateChange.toFixed(1)}%`,
+      trend: successRateChange >= 0 ? 'up' : 'down',
+      description: 'Tỷ lệ ứng viên được phỏng vấn'
+    },
+    averageTimeToHire: {
+      value: `${avgTimeToHire} ngày`,
+      change: timeToHireChange !== 0 ? `${timeToHireChange > 0 ? '+' : ''}${timeToHireChange} ngày` : 'Không đổi',
+      trend: timeToHireChange < 0 ? 'up' : timeToHireChange > 0 ? 'down' : 'neutral',
+      description: 'Thời gian trung bình để tuyển dụng'
+    },
+    userEngagement: {
+      value: `${Math.round(engagementRate)}%`,
+      change: engagementChange >= 0 ? `+${engagementChange.toFixed(1)}%` : `${engagementChange.toFixed(1)}%`,
+      trend: engagementChange >= 0 ? 'up' : 'down',
+      description: 'Người dùng hoạt động trong 30 ngày'
+    },
+    platformRevenue: {
+      value: `${(currentRevenue / 1000000).toFixed(1)}M VNĐ`,
+      change: revenueChange >= 0 ? `+${revenueChange.toFixed(1)}%` : `${revenueChange.toFixed(1)}%`,
+      trend: revenueChange >= 0 ? 'up' : 'down',
+      description: 'Doanh thu nền tảng tháng này'
+    }
   };
 };

@@ -3,8 +3,10 @@ import { z } from 'zod';
 
 // Schema cho các query yêu cầu khoảng thời gian và độ chi tiết
 export const timeSeriesSchema = z.object({
-  period: z.enum(['7d', '30d', '90d', '1y']).default('30d'),
+  period: z.enum(['7d', '30d', '90d', '1y']).optional().default('30d'),
   granularity: z.enum(['daily', 'weekly', 'monthly']).default('daily'),
+  customStartDate: z.string().optional(), // Thêm support cho custom date range
+  customEndDate: z.string().optional(),   // Thêm support cho custom date range
 });
 
 export const recruiterDashboardSchema = z.object({
@@ -26,4 +28,6 @@ export const transactionListSchema = z.object({
 export const transactionAnalyticsSchema = z.object({
   period: z.enum(['7d', '30d', '90d', '1y']).default('30d'),
   granularity: z.enum(['daily', 'weekly', 'monthly']).default('daily'),
+  customStartDate: z.string().optional(), // Thêm support cho custom date range
+  customEndDate: z.string().optional(),   // Thêm support cho custom date range
 });

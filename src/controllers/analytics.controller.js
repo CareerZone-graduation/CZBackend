@@ -67,3 +67,13 @@ export const getAllTransactions = asyncHandler(async (req, res) => {
     ...result // Trả về { data, meta }
   });
 });
+
+// KPI Metrics - Các chỉ số KPI nghiệp vụ
+export const getKPIMetrics = asyncHandler(async (req, res) => {
+  const data = await analyticsService.getKPIData();
+  res.json({
+    success: true,
+    message: 'Lấy dữ liệu KPI thành công',
+    data
+  });
+});

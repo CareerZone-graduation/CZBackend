@@ -19,7 +19,8 @@
     "test:locations": "node scripts/test-location-normalization.js",
     "migrate:credit-history": "node scripts/migrateCreditHistory.js",
     "migrate:credit-history:dry-run": "node scripts/migrateCreditHistory.js --dry-run",
-    "verify:credit-history": "node scripts/verifyCreditHistory.js"
+    "verify:credit-history": "node scripts/verifyCreditHistory.js",
+    "seed:q4-2025": "node scripts/seed-analytics-q4-2025.js"
   },
   "keywords": [
     "job",
