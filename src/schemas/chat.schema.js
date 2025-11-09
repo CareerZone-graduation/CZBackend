@@ -68,3 +68,13 @@ export const createConversationSchema = z.object({
   otherUserId: z.string()
     .regex(/^[0-9a-fA-F]{24}$/, 'ID người dùng không hợp lệ')
 });
+
+/**
+ * Create or get conversation request validation schema (for recruiters)
+ * @typedef {Object} CreateOrGetConversationRequest
+ * @property {string} candidateId - ID of the candidate to start conversation with
+ */
+export const createOrGetConversationSchema = z.object({
+  candidateId: z.string()
+    .regex(/^[0-9a-fA-F]{24}$/, 'ID ứng viên không hợp lệ')
+});

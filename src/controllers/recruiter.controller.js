@@ -36,19 +36,39 @@ export const getCandidateProfile = asyncHandler(async (req, res) => {
 });
 
 /**
- * Unlock candidate profile (purchase access)
+ * Unlock candidate profile for messaging
  * @param {import('express').Request} req
  * @param {import('express').Response} res
  */
-export const unlockCandidateProfile = asyncHandler(async (req, res) => {
-  const { userId } = req.params;
+export const unlockProfile = asyncHandler(async (req, res) => {
+  const { candidateId } = req.body;
   const recruiterId = req.user._id;
   
-  const result = await recruiterService.unlockCandidateProfile(userId, recruiterId);
+  try {
+    const result = await recruiterService.unlockCandidateProfile(candidateId, recruiterId);
 
-  res.status(200).json({
-    success: true,
-    message: 'Mở khóa hồ sơ ứng viên thành công.',
-    data: result,
-  });
+    res.status(200).json({
+      success: true,
+      message: result.alreadyUnlocked 
+        ? 'Hồ sơ đã được mở khóa trước đó.' 
+        : 'Mở khóa hồ sơ ứng viên thành công.',
+      data: {
+        transaction: result.transaction,
+        remainingBalance: result.remainingBalance,
+        candidateName: result.candidateName,
+        alreadyUnlocked: result.alreadyUnlocked || false,
+      },
+    });
+  } catch (error) {
+    // Handle insufficient credits error with specific error code
+    if (error.message && error.message.includes('Không đủ xu')) {
+      return res.status(400).json({
+        success: false,
+        message: 'Không đủ xu để mở khóa hồ sơ.',
+        error: 'INSUFFICIENT_CREDITS',
+      });
+    }
+    // Re-throw other errors to be handled by error middleware
+    throw error;
+  }
 });

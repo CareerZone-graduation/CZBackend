@@ -1,5 +1,6 @@
-import { RecruiterProfile, User, CandidateProfile, ProfileUnlock } from '../models/index.js';
+import { RecruiterProfile, User, CandidateProfile, ProfileUnlock, CreditTransaction } from '../models/index.js';
 import { NotFoundError, BadRequestError, ForbiddenError } from '../utils/AppError.js';
+import { TRANSACTION_TYPES, TRANSACTION_CATEGORIES } from '../constants/index.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -108,29 +109,48 @@ export const getCandidateProfile = async (userId, recruiterId) => {
 
 /**
  * Unlock candidate profile (purchase access)
- * @param {string} userId - Candidate user ID
+ * @param {string} candidateId - Candidate user ID
  * @param {string} recruiterId - Recruiter user ID
- * @returns {Promise<Object>} Unlock result
+ * @returns {Promise<Object>} Unlock result with transaction details
  */
-export const unlockCandidateProfile = async (userId, recruiterId) => {
-  logger.info(`Unlocking candidate profile userId: ${userId} by recruiter: ${recruiterId}`);
+export const unlockCandidateProfile = async (candidateId, recruiterId) => {
+  logger.info(`Unlocking candidate profile candidateId: ${candidateId} by recruiter: ${recruiterId}`);
 
   // Check if user exists and is a candidate
-  const user = await User.findById(userId).select('role').lean();
-  if (!user || user.role !== 'candidate') {
+  const candidateUser = await User.findById(candidateId).select('role').lean();
+  if (!candidateUser || candidateUser.role !== 'candidate') {
     throw new NotFoundError('Không tìm thấy ứng viên.');
   }
 
-  // Check if already unlocked
+  // Get candidate profile to retrieve candidate name
+  const candidateProfile = await CandidateProfile.findOne({ userId: candidateId }).select('fullname').lean();
+  if (!candidateProfile) {
+    throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
+  }
+
+  const candidateName = candidateProfile.fullname;
+
+  // Check if already unlocked by looking for existing ProfileUnlock record
   const existingUnlock = await ProfileUnlock.findOne({
     recruiterId,
-    candidateId: userId,
-  });
+    candidateId
+  }).lean();
 
   if (existingUnlock) {
-    logger.info(`Profile already unlocked for userId: ${userId} by recruiter: ${recruiterId}`);
+    logger.info(`Profile already unlocked for candidateId: ${candidateId} by recruiter: ${recruiterId}`);
+    
+    // Get the transaction for this unlock
+    const existingTransaction = await CreditTransaction.findOne({
+      userId: recruiterId,
+      category: TRANSACTION_CATEGORIES.PROFILE_UNLOCK,
+      'metadata.candidateId': candidateId
+    }).lean();
+
     return {
       alreadyUnlocked: true,
+      transaction: existingTransaction,
+      remainingBalance: (await User.findById(recruiterId).select('coinBalance').lean()).coinBalance,
+      candidateName,
       message: 'Hồ sơ đã được mở khóa trước đó.',
     };
   }
@@ -141,30 +161,47 @@ export const unlockCandidateProfile = async (userId, recruiterId) => {
     throw new NotFoundError('Không tìm thấy nhà tuyển dụng.');
   }
 
-  // Check if recruiter has enough coins (50 coins per unlock)
+  // Check if recruiter has enough credits (50 credits per unlock)
   const UNLOCK_COST = 50;
   if (recruiterUser.coinBalance < UNLOCK_COST) {
     throw new BadRequestError('Không đủ xu để mở khóa hồ sơ. Vui lòng nạp thêm xu.');
   }
 
-  // Deduct coins
+  // Deduct credits atomically
   recruiterUser.coinBalance -= UNLOCK_COST;
   await recruiterUser.save();
 
-  // Create unlock record
-  const unlock = await ProfileUnlock.create({
-    recruiterId,
-    candidateId: userId,
-    cost: UNLOCK_COST,
-    unlockedAt: new Date(),
+  const balanceAfter = recruiterUser.coinBalance;
+
+  // Create CreditTransaction record
+  const transaction = await CreditTransaction.create({
+    userId: recruiterId,
+    type: TRANSACTION_TYPES.USAGE,
+    category: TRANSACTION_CATEGORIES.PROFILE_UNLOCK,
+    amount: -UNLOCK_COST,
+    balanceAfter: balanceAfter,
+    description: `Mở khóa hồ sơ ứng viên: ${candidateName}`,
+    metadata: {
+      candidateId: candidateId,
+      candidateName: candidateName
+    }
   });
 
-  logger.info(`Successfully unlocked candidate profile userId: ${userId} by recruiter: ${recruiterId}`);
+  // Create ProfileUnlock record to mark this profile as unlocked
+  await ProfileUnlock.create({
+    recruiterId,
+    candidateId,
+    cost: UNLOCK_COST,
+    unlockedAt: new Date()
+  });
+
+  logger.info(`Successfully unlocked candidate profile candidateId: ${candidateId} by recruiter: ${recruiterId}`);
   
   return {
     unlocked: true,
+    transaction: transaction,
     cost: UNLOCK_COST,
-    remainingCoins: recruiterUser.coinBalance,
-    unlockedAt: unlock.unlockedAt,
+    remainingBalance: balanceAfter,
+    candidateName: candidateName
   };
 };
