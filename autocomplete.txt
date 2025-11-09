@@ -1,0 +1,16 @@
+"autocl"
+
+{
+  "mappings": {
+    "dynamic": false,
+    "fields": {
+      "title": {
+        "type": "autocomplete",
+        "minGrams": 1,
+        "maxGrams": 15,
+        "foldDiacritics": true,
+        "tokenization": "edgeGram"
+      }
+    }
+  }
+}

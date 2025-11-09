@@ -58,6 +58,7 @@ const chatMessageSchema = new mongoose.Schema({
 
 // Create indexes for better query performance
 chatMessageSchema.index({ conversationId: 1, createdAt: -1 }); // For retrieving messages in a conversation, ordered by newest first
+chatMessageSchema.index({ conversationId: 1, sentAt: 1 }); // For syncing missed messages after reconnection
 chatMessageSchema.index({ senderId: 1, recipientId: 1, createdAt: -1 }); // For messages sent from sender to recipient
 chatMessageSchema.index({ recipientId: 1, senderId: 1, createdAt: -1 }); // For messages sent from recipient to sender (to cover both directions of a conversation)
 chatMessageSchema.index({ recipientId: 1, isRead: 1 }); // For finding unread messages for a recipient

@@ -18,6 +18,9 @@ export const initializeSocket = (io) => {
   io.use(async (socket, next) => {
     try {
       logger.info(`Socket connection attempt from ${socket.conn.remoteAddress || 'unknown'}`);
+      // check userId
+      logger.info(`Socket connection attempt userId : ${JSON.stringify(socket.handshake.auth) || 'unknown'}`);
+
       const token = socket.handshake.auth.token || socket.handshake.headers.authorization?.split(' ')[1];
       
       if (!token) {
@@ -86,15 +89,57 @@ export const initializeSocket = (io) => {
 
     // Xử lý gửi tin nhắn mới
     socket.on('message:send', async (data, callback) => {
+      logger.info(`[Socket] message:send received from user ${socket.userId}`, { conversationId: data.conversationId, tempMessageId: data.tempMessageId });
+      
       try {
         const { conversationId, content, type = 'text', metadata, tempMessageId } = data;
 
         if (!conversationId || !content) {
+          logger.warn(`[Socket] Invalid data for message:send`, { conversationId, hasContent: !!content });
           if (callback) callback({ success: false, message: 'Dữ liệu không hợp lệ.', tempMessageId });
           return;
         }
 
-        // 1. Lưu tin nhắn vào DB sử dụng service đã được chuẩn hóa
+        // 1. Get conversation to determine recipient
+        logger.info(`[Socket] Getting conversation ${conversationId} for user ${socket.userId}`);
+        const conversationDoc = await chatService.getConversationById(conversationId, socket.userId);
+        
+        if (!conversationDoc) {
+          if (callback) callback({ 
+            success: false, 
+            message: 'Cuộc trò chuyện không tồn tại.', 
+            tempMessageId,
+            reasonCode: 'CONVERSATION_NOT_FOUND'
+          });
+          return;
+        }
+
+        // 2. Determine recipient ID
+        const recipientId = conversationDoc.otherParticipant._id.toString();
+
+        // 3. Check messaging access if sender is recruiter
+        if (socket.user.role === 'recruiter') {
+          const accessCheck = await chatService.checkMessagingAccess(socket.userId, recipientId);
+          
+          if (!accessCheck.canMessage) {
+            logger.warn(`Access denied: Recruiter ${socket.userId} cannot message candidate ${recipientId}. Reason: ${accessCheck.reason}`);
+            if (callback) callback({ 
+              success: false, 
+              message: 'Bạn không có quyền gửi tin nhắn cho ứng viên này.',
+              tempMessageId,
+              reasonCode: accessCheck.reason
+            });
+            return;
+          }
+          
+          logger.info(`Access granted: Recruiter ${socket.userId} can message candidate ${recipientId}. Reason: ${accessCheck.reason}`);
+        }
+
+        // 4. Check if this is the first message in the conversation
+        const messageCount = await chatService.getConversationMessages(socket.userId, conversationId, { page: 1, limit: 1 });
+        const isNewConversation = messageCount.meta.totalItems === 0;
+
+        // 5. Lưu tin nhắn vào DB sử dụng service đã được chuẩn hóa
         const savedMessage = await chatService.sendMessage({
           senderId: socket.userId,
           conversationId,
@@ -103,17 +148,38 @@ export const initializeSocket = (io) => {
           metadata,
         });
         
-        // Populate thông tin người gửi để hiển thị trên client
-        const populatedMessage = await savedMessage.populate('senderId', 'email role');
+        // Convert to plain object (don't populate senderId to keep it as ID for frontend comparison)
+        const messageObject = savedMessage.toObject();
 
-        // 2. Phát sự kiện tin nhắn mới đến tất cả client trong room
-        io.to(`conversation:${conversationId}`).emit('message:new', populatedMessage.toObject());
+        // 6. If this is a new conversation, emit conversation:created event
+        if (isNewConversation) {
+          logger.info(`New conversation initiated: ${conversationId} between ${socket.userId} and ${recipientId}`);
+          
+          // Emit to both participants
+          io.to(`user:${socket.userId}`).emit('conversation:created', {
+            conversationId: conversationId,
+            otherParticipant: conversationDoc.otherParticipant,
+            createdAt: conversationDoc.createdAt
+          });
+          
+          io.to(`user:${recipientId}`).emit('conversation:created', {
+            conversationId: conversationId,
+            otherParticipant: conversationDoc.participants.find(p => p._id.toString() === socket.userId),
+            createdAt: conversationDoc.createdAt
+          });
+        }
 
-        // 3. Dùng callback để xác nhận tin nhắn đã được gửi và xử lý thành công
+        // 7. Phát sự kiện tin nhắn mới CHỈ đến người nhận (không gửi cho người gửi vì họ đã có optimistic message)
+        // Emit to recipient only
+        socket.to(`conversation:${conversationId}`).emit('message:new', messageObject);
+        
+        logger.info(`[Socket] Message sent successfully from ${socket.userId} in conversation ${conversationId}`);
+
+        // 8. Dùng callback để xác nhận tin nhắn đã được gửi và xử lý thành công
         if (callback) {
           callback({ 
             success: true, 
-            message: populatedMessage.toObject(),
+            message: messageObject,
             tempMessageId: tempMessageId // Gửi lại tempMessageId
           });
         }
@@ -125,6 +191,59 @@ export const initializeSocket = (io) => {
             success: false, 
             message: error.message || 'Gửi tin nhắn thất bại.',
             tempMessageId: data.tempMessageId
+          });
+        }
+      }
+    });
+
+    // Handle message sync after reconnection
+    socket.on('messages:sync', async (data, callback) => {
+      try {
+        const { conversationId, since } = data;
+
+        if (!conversationId || !since) {
+          if (callback) callback({ success: false, message: 'Dữ liệu không hợp lệ.' });
+          return;
+        }
+
+        logger.info(`[Socket] Syncing messages for conversation ${conversationId} since ${since}`);
+
+        // Get conversation to verify access
+        const conversationDoc = await chatService.getConversationById(conversationId, socket.userId);
+        
+        if (!conversationDoc) {
+          if (callback) callback({ 
+            success: false, 
+            message: 'Cuộc trò chuyện không tồn tại.' 
+          });
+          return;
+        }
+
+        // Fetch messages since the given timestamp
+        const ChatMessage = (await import('../models/ChatMessage.js')).default;
+        const missedMessages = await ChatMessage.find({
+          conversationId: conversationId,
+          sentAt: { $gt: new Date(since) }
+        })
+          .sort({ sentAt: 1 })
+          .limit(100)
+          .lean();
+
+        logger.info(`[Socket] Found ${missedMessages.length} missed messages`);
+
+        if (callback) {
+          callback({ 
+            success: true, 
+            messages: missedMessages 
+          });
+        }
+
+      } catch (error) {
+        logger.error(`Error syncing messages for ${socket.userId}:`, error);
+        if (callback) {
+          callback({ 
+            success: false, 
+            message: error.message || 'Đồng bộ tin nhắn thất bại.' 
           });
         }
       }

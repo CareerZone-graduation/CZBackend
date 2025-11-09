@@ -3,6 +3,8 @@ import passport from 'passport';
 import * as recruiterController from '../controllers/recruiter.controller.js';
 import { maskPdfController } from '../controllers/cvMask.controller.js';
 import * as authMiddleware from '../middleware/auth.middleware.js';
+import { validateBody } from '../middleware/validation.middleware.js';
+import { unlockProfileSchema } from '../schemas/recruiter.schema.js';
 
 const router = Router();
 
@@ -31,18 +33,6 @@ router.get(
 );
 
 /**
- * @route POST /api/v1/recruiters/candidates/:userId/unlock
- * @desc Unlock candidate profile (purchase access)
- * @access Private (Recruiter)
- */
-router.post(
-  '/candidates/:userId/unlock',
-  passport.authenticate('jwt', { session: false }),
-  authMiddleware.recruiterOnly,
-  recruiterController.unlockCandidateProfile
-);
-
-/**
  * @route GET /api/v1/recruiters/candidates/:candidateId/cv/:cvId
  * @desc Get candidate CV (masked if not unlocked)
  * @access Private (Recruiter)
@@ -52,6 +42,19 @@ router.get(
   passport.authenticate('jwt', { session: false }),
   authMiddleware.recruiterOnly,
   maskPdfController
+);
+
+/**
+ * @route POST /api/v1/recruiters/unlock-profile
+ * @desc Unlock candidate profile for messaging
+ * @access Private (Recruiter)
+ */
+router.post(
+  '/unlock-profile',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.recruiterOnly,
+  validateBody(unlockProfileSchema),
+  recruiterController.unlockProfile
 );
 
 export default router;

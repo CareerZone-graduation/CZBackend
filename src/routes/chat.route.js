@@ -13,9 +13,26 @@ const router = express.Router();
 // Tất cả các route chat đều yêu cầu xác thực
 router.use(passport.authenticate('jwt', { session: false }));
 
-// Tạo cuộc trò chuyện mới với người dùng khác
+// Check messaging access (recruiter or candidate)
+router.get(
+  '/access-check/:candidateId',
+  validationMiddleware.validateParams(z.object({ 
+    candidateId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID ứng viên không hợp lệ')
+  })),
+  chatController.checkMessagingAccess
+);
+
+// Create or get conversation with candidate (recruiter only)
 router.post(
   '/conversations',
+  authMiddleware.recruiterOnly,
+  validationMiddleware.validateBody(chatSchema.createOrGetConversationSchema),
+  chatController.createOrGetConversation
+);
+
+// Tạo cuộc trò chuyện mới với người dùng khác (general - for backward compatibility)
+router.post(
+  '/conversations/general',
   validationMiddleware.validateBody(chatSchema.createConversationSchema),
   chatController.createNewConversation
 );

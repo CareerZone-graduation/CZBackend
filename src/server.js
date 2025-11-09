@@ -25,12 +25,12 @@ dotenv.config();
 const server = http.createServer(app);
 const io = new socketio.Server(server, {
   cors: {
-    origin: [config.CLIENT_URL,"http://localhost:3001","http://localhost:3000","http://localhost:3002", "http://localhost:3003"],
+    origin: [config.CLIENT_URL,config.RECRUITER_FE_URL,"http://localhost:3001","http://localhost:3000","http://localhost:3002", "http://localhost:3003"],
     methods: ['GET', 'POST','PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
     credentials: true,
   },
 });
-// socket.initializeSocket(io);
+socket.initializeSocket(io);
 
 // Khởi động
 const startServer = async () => {
