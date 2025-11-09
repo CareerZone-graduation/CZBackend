@@ -12,6 +12,9 @@ import passport from 'passport'; // Đảm bảo có import này
 import path from 'path';
 import { fileURLToPath } from 'url';
 import './config/passport.js'; // Import để cấu hình passport
+import morgan from 'morgan';
+import logger from './utils/logger.js';
+
 
 // Get __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -53,6 +56,7 @@ import * as notFoundMiddleware from './middleware/notFound.middleware.js';
 dotenv.config();
 
 const app = express();
+app.use(morgan('combined', { stream: logger.stream }));
 
 // Cấu hình view engine (chỉ dành cho 1 số trang như xác thực email trả về HTML)
 app.set('view engine', 'pug');

@@ -48,6 +48,11 @@ const userSchema = new mongoose.Schema({
     default: false,
     comment: 'Allow recruiters to discover this candidate through AI suggestions'
   },
+  selectedCvId: {
+    type: mongoose.Schema.Types.ObjectId,
+    default: null,
+    comment: 'CV ID selected for job search (from CandidateProfile.cvs array)'
+  },
   embedding: {
     type: [Number],
     default: [],

@@ -509,3 +509,83 @@ export const updatePrivacySettings = async (userId, allowSearch) => {
         updatedAt: user.updatedAt
     };
 };
+
+/**
+ * Toggle allow search setting with optional CV selection
+ * @param {string} userId
+ * @param {boolean} allowSearch
+ * @param {string} selectedCvId - Optional CV ID to use for job search
+ * @returns {Promise<Object>}
+ */
+export const toggleAllowSearch = async (userId, allowSearch, selectedCvId = null) => {
+    const user = await User.findById(userId);
+
+    if (!user) {
+        throw new NotFoundError('Không tìm thấy người dùng.');
+    }
+
+    if (user.role !== 'candidate') {
+        throw new BadRequestError('Chỉ ứng viên mới có thể cập nhật cài đặt này.');
+    }
+
+    // Nếu bật tìm việc và có chọn CV
+    if (allowSearch && selectedCvId) {
+        // Kiểm tra CV có tồn tại không
+        const profile = await CandidateProfile.findOne({ userId });
+        if (!profile) {
+            throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
+        }
+
+        const cvExists = profile.cvs.some(cv => cv._id.toString() === selectedCvId);
+        if (!cvExists) {
+            throw new BadRequestError('CV được chọn không tồn tại.');
+        }
+
+        user.selectedCvId = selectedCvId;
+    } else if (!allowSearch) {
+        // Nếu tắt tìm việc, xóa CV đã chọn
+        user.selectedCvId = null;
+    }
+
+    user.allowSearch = allowSearch;
+    await user.save();
+
+    logger.info('Allow search setting toggled', {
+        userId,
+        allowSearch,
+        selectedCvId: user.selectedCvId
+    });
+
+    return user;
+};
+
+/**
+ * Get current allow search settings
+ * @param {string} userId
+ * @returns {Promise<Object>}
+ */
+export const getAllowSearchSettings = async (userId) => {
+    const user = await User.findById(userId).select('allowSearch selectedCvId');
+    if (!user) {
+        throw new NotFoundError('Không tìm thấy người dùng.');
+    }
+
+    // Nếu có selectedCvId, lấy thông tin CV
+    let selectedCv = null;
+    if (user.selectedCvId) {
+        const profile = await CandidateProfile.findOne({ userId }).select('cvs');
+        if (profile) {
+            selectedCv = profile.cvs.find(cv => cv._id.toString() === user.selectedCvId.toString());
+        }
+    }
+
+    return {
+        allowSearch: user.allowSearch,
+        selectedCvId: user.selectedCvId,
+        selectedCv: selectedCv ? {
+            _id: selectedCv._id,
+            name: selectedCv.name,
+            uploadedAt: selectedCv.uploadedAt
+        } : null
+    };
+};

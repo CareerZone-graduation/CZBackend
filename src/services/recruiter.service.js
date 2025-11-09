@@ -57,9 +57,14 @@ export const getCandidateProfile = async (userId, recruiterId) => {
   logger.info(`Fetching candidate profile for userId: ${userId} by recruiter: ${recruiterId}`);
 
   // Check if user exists and is a candidate
-  const user = await User.findById(userId).select('email phone role').lean();
+  const user = await User.findById(userId).select('email phone role allowSearch selectedCvId').lean();
   if (!user || user.role !== 'candidate') {
     throw new NotFoundError('Không tìm thấy ứng viên.');
+  }
+
+  // Check if candidate allows search
+  if (!user.allowSearch) {
+    throw new ForbiddenError('Ứng viên này đã tắt tính năng cho phép nhà tuyển dụng tìm kiếm.');
   }
 
   // Get candidate profile
@@ -84,12 +89,17 @@ export const getCandidateProfile = async (userId, recruiterId) => {
     isUnlocked,
   };
 
-  // If locked, also mask CV files
-  if (!isUnlocked && profile.cvFiles && profile.cvFiles.length > 0) {
-    response.cvFiles = profile.cvFiles.map(cv => ({
-      ...cv,
-      maskedPath: cv.path, // In production, this should point to a masked version
-    }));
+  // Always only show selected CV (both locked and unlocked)
+  // The difference is: locked = CV is masked, unlocked = CV is not masked
+  if (profile.cvs && profile.cvs.length > 0) {
+    if (user.selectedCvId) {
+      // Chỉ hiển thị CV được chọn (dù locked hay unlocked)
+      const selectedCv = profile.cvs.find(cv => cv._id.toString() === user.selectedCvId.toString());
+      response.cvs = selectedCv ? [selectedCv] : [];
+    } else {
+      // Nếu không có CV được chọn, không hiển thị CV nào
+      response.cvs = [];
+    }
   }
 
   logger.info(`Successfully fetched candidate profile for userId: ${userId}, isUnlocked: ${isUnlocked}`);

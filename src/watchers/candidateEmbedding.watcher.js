@@ -33,6 +33,37 @@ export const watchCandidateProfileChanges = () => {
         return;
       }
 
+      // Check if the change is meaningful for embedding generation
+      // Skip if only metadata fields changed (like timestamps, onboarding status)
+      if (change.operationType === 'update' && change.updateDescription) {
+        const updatedFields = Object.keys(change.updateDescription.updatedFields || {});
+        
+        // Fields that don't affect embedding
+        const ignoredFields = [
+          'updatedAt',
+          'onboardingCompleted',
+          'onboardingCompletedAt',
+          'onboardingStatus',
+          'profileCompleteness',
+          'profileCompleteness.percentage',
+          'profileCompleteness.lastCalculated',
+          'profileCompleteness.missingFields'
+        ];
+        
+        // Check if only ignored fields were updated
+        const hasRelevantChanges = updatedFields.some(field => {
+          return !ignoredFields.some(ignored => field.startsWith(ignored));
+        });
+        
+        if (!hasRelevantChanges) {
+          logger.debug('CandidateProfile changed but no relevant fields for embedding', {
+            userId: userId.toString(),
+            updatedFields
+          });
+          return;
+        }
+      }
+
       logger.info('CandidateProfile changed, generating embedding', { 
         userId: userId.toString(),
         operationType: change.operationType 

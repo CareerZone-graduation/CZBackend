@@ -350,14 +350,16 @@ const combineTextContent = (profileText, cvText) => {
 /**
  * Generate embedding for a candidate
  * @param {string} userId - User ID
+ * @param {boolean} force - Force regeneration even if recently updated
  * @returns {Promise<void>}
  */
-export const generateCandidateEmbedding = async (userId) => {
+export const generateCandidateEmbedding = async (userId, force = false) => {
   try {
     const user = await User.findById(userId);
     if (!user || user.role !== 'candidate') {
       throw new Error(`Candidate user not found: ${userId}`);
     }
+
 
     const profile = await CandidateProfile.findOne({ userId }).lean();
     if (!profile) {

@@ -55,6 +55,22 @@ router.patch(
     candidateController.updatePrivacySettings
 );
 
+// Get current allow search settings
+router.get(
+    '/settings/allow-search',
+    candidateController.getAllowSearchSettings
+);
+
+// Toggle allow search setting with optional CV selection
+router.patch(
+    '/settings/allow-search',
+    validationMiddleware.validateBody(z.object({ 
+        allowSearch: z.boolean(),
+        selectedCvId: z.string().optional()
+    })),
+    candidateController.toggleAllowSearch
+);
+
 router
     .route('/avatar')
     .patch(
