@@ -215,8 +215,14 @@ export const getJobsByRecruiter = async (userId, options) => {
   const recruiterProfileId = recruiterProfile._id;
 
   const query = { recruiterProfileId };
+  // Filter by status
   if (status) {
-    query.status = status;
+    if (status === 'PENDING') {
+      // PENDING means not approved yet
+      query.approved = false;
+    } else {
+      query.status = status;
+    }
   }
 
   /**

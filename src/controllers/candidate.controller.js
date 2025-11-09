@@ -204,3 +204,60 @@ export const getProfileRecommendations = asyncHandler(async (req, res) => {
         data: recommendations
     });
 });
+
+/**
+ * Update privacy settings
+ * PATCH /api/v1/candidates/settings/privacy
+ */
+export const updatePrivacySettings = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    const { allowSearch } = req.body;
+    
+    logger.info('Updating privacy settings', { userId, allowSearch });
+    
+    const settings = await candidateService.updatePrivacySettings(userId, allowSearch);
+    
+    res.status(200).json({
+        success: true,
+        message: 'Cập nhật cài đặt riêng tư thành công.',
+        data: settings
+    });
+});
+
+/**
+ * Toggle allow search setting with optional CV selection
+ * PATCH /api/v1/candidates/settings/allow-search
+ */
+export const toggleAllowSearch = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    const { allowSearch, selectedCvId } = req.body;
+    
+    logger.info('Toggling allow search setting', { userId, allowSearch, selectedCvId });
+    
+    const user = await candidateService.toggleAllowSearch(userId, allowSearch, selectedCvId);
+    
+    res.status(200).json({
+        success: true,
+        message: 'Cập nhật cài đặt cho phép tìm kiếm thành công.',
+        data: { 
+            allowSearch: user.allowSearch,
+            selectedCvId: user.selectedCvId
+        }
+    });
+});
+
+/**
+ * Get current allow search settings
+ * GET /api/v1/candidates/settings/allow-search
+ */
+export const getAllowSearchSettings = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    
+    const settings = await candidateService.getAllowSearchSettings(userId);
+    
+    res.status(200).json({
+        success: true,
+        message: 'Lấy cài đặt tìm kiếm thành công.',
+        data: settings
+    });
+});

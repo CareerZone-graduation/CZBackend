@@ -234,7 +234,7 @@ export const applyToJobSchema = z.object({
 export const getMyJobsQuerySchema = z.object({
   page: z.coerce.number().min(1).optional().default(1),
   limit: z.coerce.number().min(1).max(100).optional().default(10),
-  status: z.enum(['ACTIVE', 'INACTIVE', 'EXPIRED']).optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'EXPIRED', 'PENDING']).optional(),
   sortBy: z.string().optional(),
   search: z.string().optional(), // Add this line
 });
@@ -329,4 +329,11 @@ export const mapClusterSchema = z.object({
   experience: z.enum(experienceEnum).optional(),
   province: z.enum(provinceNames).optional(),
   district: z.string().optional(),
+});
+
+// Schema for candidate suggestions query parameters
+export const candidateSuggestionsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1, 'Trang phải lớn hơn 0').default(1),
+  limit: z.coerce.number().int().min(1, 'Limit phải lớn hơn 0').max(50, 'Limit không được vượt quá 50').default(10),
+  minScore: z.coerce.number().min(0, 'minScore phải từ 0 đến 1').max(1, 'minScore phải từ 0 đến 1').default(0.5),
 });

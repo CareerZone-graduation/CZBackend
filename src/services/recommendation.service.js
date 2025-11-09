@@ -1,4 +1,4 @@
-import { CandidateProfile, Job, JobRecommendation } from '../models/index.js';
+import { CandidateProfile, Job, JobRecommendation, User } from '../models/index.js';
 import { NotFoundError, BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
 import ngeohash from 'ngeohash';
@@ -631,5 +631,315 @@ export const getRecommendations = async (userId, options = {}) => {
     lastUpdated: paginatedRecommendations.length > 0 
       ? paginatedRecommendations[0].generatedAt 
       : null
+  };
+};
+
+// ============================================================================
+// AI-POWERED VECTOR SEARCH RECOMMENDATION FUNCTIONS
+// ============================================================================
+
+/**
+ * Calculate average embedding from multiple vectors
+ * @param {Array<Array<number>>} embeddings - Array of embedding vectors
+ * @returns {Array<number>} Average embedding vector
+ */
+const calculateAverageEmbedding = (embeddings) => {
+  if (!embeddings || embeddings.length === 0) {
+    throw new Error('No embeddings provided for averaging');
+  }
+
+  const dim = embeddings[0].length;
+  const avg = new Array(dim).fill(0);
+  
+  for (const emb of embeddings) {
+    for (let i = 0; i < dim; i++) {
+      avg[i] += emb[i];
+    }
+  }
+  
+  for (let i = 0; i < dim; i++) {
+    avg[i] /= embeddings.length;
+  }
+  
+  return avg;
+};
+
+/**
+ * Extract matched skills between job and candidate (case-insensitive)
+ * @param {Array<string>} jobSkills - Array of job skill names
+ * @param {Array<Object>} candidateSkills - Array of candidate skill objects with name property
+ * @returns {Array<string>} Array of matched skill names
+ */
+const extractMatchedSkills = (jobSkills, candidateSkills) => {
+  if (!jobSkills || !candidateSkills || jobSkills.length === 0 || candidateSkills.length === 0) {
+    return [];
+  }
+
+  const jobSkillsLower = jobSkills.map(s => s.toLowerCase().trim());
+  const matched = candidateSkills
+    .filter(cs => jobSkillsLower.includes(cs.name.toLowerCase().trim()))
+    .map(cs => cs.name);
+  
+  return matched.slice(0, 5); // Return max 5 matched skills
+};
+
+/**
+ * Calculate total years of experience from experience array
+ * @param {Array<Object>} experiences - Array of experience objects
+ * @returns {number} Total years of experience
+ */
+const calculateExperienceYears = (experiences) => {
+  if (!experiences || experiences.length === 0) {
+    return 0;
+  }
+
+  let totalMonths = 0;
+  
+  for (const exp of experiences) {
+    try {
+      const start = new Date(exp.startDate);
+      const end = exp.endDate ? new Date(exp.endDate) : new Date();
+      
+      if (isNaN(start.getTime())) {
+        continue; // Skip invalid dates
+      }
+      
+      const months = (end.getFullYear() - start.getFullYear()) * 12 + 
+                     (end.getMonth() - start.getMonth());
+      totalMonths += Math.max(0, months);
+    } catch (error) {
+      logger.warn('Error calculating experience duration', { 
+        experience: exp, 
+        error: error.message 
+      });
+    }
+  }
+  
+  return Math.round(totalMonths / 12);
+};
+
+/**
+ * Get current position from latest experience
+ * @param {Array<Object>} experiences - Array of experience objects
+ * @returns {string} Current position or 'N/A'
+ */
+const getCurrentPosition = (experiences) => {
+  if (!experiences || experiences.length === 0) {
+    return 'N/A';
+  }
+
+  // Find current job (isCurrentJob = true) or most recent experience
+  const currentJob = experiences.find(exp => exp.isCurrentJob);
+  if (currentJob) {
+    return currentJob.position;
+  }
+
+  // If no current job marked, return the first experience (assuming sorted by date)
+  return experiences[0]?.position || 'N/A';
+};
+
+/**
+ * Build MongoDB Atlas Vector Search aggregation pipeline
+ * @param {Array<number>} queryVector - Query embedding vector
+ * @param {Object} options - Search options
+ * @returns {Array} MongoDB aggregation pipeline
+ */
+const buildVectorSearchPipeline = (queryVector, options = {}) => {
+  const {
+    numCandidates = 200,
+    limit = 100,
+    minScore = 0.5,
+    skip = 0
+  } = options;
+
+  return [
+    {
+      $vectorSearch: {
+        index: 'default',
+        path: 'embedding',
+        queryVector: queryVector,
+        numCandidates: numCandidates,
+        limit: limit,
+        filter: {
+          role: { $eq: 'candidate' },
+          allowSearch: { $eq: true }
+        }
+      }
+    },
+    {
+      $addFields: {
+        similarityScore: { $meta: 'vectorSearchScore' }
+      }
+    },
+    {
+      $match: {
+        similarityScore: { $gte: minScore }
+      }
+    },
+    {
+      $skip: skip
+    },
+    {
+      $limit: limit
+    },
+    {
+      $project: {
+        _id: 1,
+        similarityScore: 1
+      }
+    }
+  ];
+};
+
+/**
+ * Get candidate suggestions using MongoDB Atlas Vector Search
+ * @param {string} jobId - Job ID
+ * @param {Object} options - Query options
+ * @returns {Promise<Object>} Suggestion results with candidates and pagination
+ */
+export const getCandidateSuggestions = async (jobId, options = {}) => {
+  const { page = 1, limit = 10, minScore = 0.5 } = options;
+  const skip = (page - 1) * limit;
+
+  logger.info('Getting candidate suggestions via vector search', { 
+    jobId, 
+    page, 
+    limit, 
+    minScore 
+  });
+
+  // Fetch job and validate it has embeddings
+  const job = await Job.findById(jobId).lean();
+  if (!job) {
+    throw new NotFoundError('Không tìm thấy tin tuyển dụng');
+  }
+
+  if (!job.chunks || job.chunks.length === 0) {
+    throw new BadRequestError('Tin tuyển dụng chưa được xử lý. Vui lòng thử lại sau vài phút.');
+  }
+
+  // Calculate average embedding vector from job chunks
+  const jobEmbeddings = job.chunks
+    .filter(chunk => chunk.embedding && chunk.embedding.length > 0)
+    .map(chunk => chunk.embedding);
+
+  if (jobEmbeddings.length === 0) {
+    throw new BadRequestError('Tin tuyển dụng không có embedding hợp lệ');
+  }
+
+  const avgEmbedding = calculateAverageEmbedding(jobEmbeddings);
+
+  logger.info('Calculated average embedding for job', { 
+    jobId, 
+    chunkCount: jobEmbeddings.length,
+    embeddingDimension: avgEmbedding.length 
+  });
+
+  // Build and execute MongoDB Atlas Vector Search pipeline
+  const pipeline = buildVectorSearchPipeline(avgEmbedding, {
+    numCandidates: 200,
+    limit: 100,
+    minScore: minScore,
+    skip: skip
+  });
+
+  const matchedUsers = await User.aggregate(pipeline);
+
+  logger.info('Vector search completed', { 
+    jobId, 
+    matchedCount: matchedUsers.length 
+  });
+
+  if (matchedUsers.length === 0) {
+    return {
+      data: {
+        candidates: [],
+        pagination: {
+          currentPage: page,
+          totalPages: 0,
+          totalItems: 0,
+          limit,
+          hasNextPage: false,
+          hasPrevPage: false
+        },
+        jobInfo: {
+          jobId,
+          title: job.title,
+          hasEmbeddings: true
+        }
+      }
+    };
+  }
+
+  // Fetch candidate profiles for matched users
+  const userIds = matchedUsers.map(u => u._id);
+  const profiles = await CandidateProfile.find({ userId: { $in: userIds } })
+    .select('userId fullname avatar bio skills experiences preferredCategories')
+    .lean();
+
+  logger.info('Fetched candidate profiles', { 
+    jobId, 
+    profileCount: profiles.length 
+  });
+
+  // Create lookup maps for efficient data access
+  const profileMap = new Map(profiles.map(p => [p.userId.toString(), p]));
+  const scoreMap = new Map(matchedUsers.map(u => [u._id.toString(), u.similarityScore]));
+
+  // Enrich results with profile data and calculated fields
+  const candidates = matchedUsers
+    .map(user => {
+      const profile = profileMap.get(user._id.toString());
+      if (!profile) {
+        logger.warn('Profile not found for matched user', { userId: user._id.toString() });
+        return null;
+      }
+
+      const currentPosition = getCurrentPosition(profile.experiences || []);
+      const experienceYears = calculateExperienceYears(profile.experiences || []);
+      const matchedSkills = extractMatchedSkills(job.skills || [], profile.skills || []);
+      const similarityScore = scoreMap.get(user._id.toString());
+
+      return {
+        userId: user._id.toString(),
+        candidateProfileId: profile._id.toString(),
+        fullname: profile.fullname,
+        avatar: profile.avatar,
+        bio: profile.bio,
+        currentPosition,
+        skills: profile.skills?.slice(0, 5) || [],
+        similarityScore: similarityScore,
+        similarityPercentage: Math.round(similarityScore * 100),
+        matchedSkills,
+        experienceYears
+      };
+    })
+    .filter(Boolean); // Remove null entries
+
+  // Calculate total count for pagination
+  const totalCount = candidates.length;
+
+  logger.info('Enriched candidate suggestions', { 
+    jobId, 
+    candidateCount: candidates.length 
+  });
+
+  return {
+    data: {
+      candidates,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalCount / limit),
+        totalItems: totalCount,
+        limit,
+        hasNextPage: page * limit < totalCount,
+        hasPrevPage: page > 1
+      },
+      jobInfo: {
+        jobId,
+        title: job.title,
+        hasEmbeddings: true
+      }
+    }
   };
 };

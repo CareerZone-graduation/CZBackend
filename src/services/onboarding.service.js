@@ -241,14 +241,26 @@ export const updateProfileCompleteness = async (profileId, profile = null) => {
 
     const completeness = calculateProfileCompleteness(profileData);
 
-    profileData.profileCompleteness = completeness;
-    await profileData.save();
+    // Chỉ save nếu có thay đổi về percentage hoặc missingFields
+    const hasChanged = 
+      profileData.profileCompleteness?.percentage !== completeness.percentage ||
+      JSON.stringify(profileData.profileCompleteness?.missingFields || []) !== JSON.stringify(completeness.missingFields);
 
-    logger.info('Profile completeness updated', {
-      profileId,
-      percentage: completeness.percentage,
-      missingFieldsCount: completeness.missingFields.length
-    });
+    if (hasChanged) {
+      profileData.profileCompleteness = completeness;
+      await profileData.save();
+
+      logger.info('Profile completeness updated', {
+        profileId,
+        percentage: completeness.percentage,
+        missingFieldsCount: completeness.missingFields.length
+      });
+    } else {
+      logger.debug('Profile completeness unchanged, skipping save', {
+        profileId,
+        percentage: completeness.percentage
+      });
+    }
 
     return completeness;
   } catch (error) {

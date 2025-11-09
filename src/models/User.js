@@ -40,7 +40,28 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
-  fcmTokens: [{ type: String }] // Lưu một mảng các token
+  fcmTokens: [{ type: String }], // Lưu một mảng các token
+  
+  // AI Recommendation fields
+  allowSearch: {
+    type: Boolean,
+    default: false,
+    comment: 'Allow recruiters to discover this candidate through AI suggestions'
+  },
+  selectedCvId: {
+    type: mongoose.Schema.Types.ObjectId,
+    default: null,
+    comment: 'CV ID selected for job search (from CandidateProfile.cvs array)'
+  },
+  embedding: {
+    type: [Number],
+    default: [],
+    comment: 'Vector embedding of candidate profile and CV content'
+  },
+  embeddingUpdatedAt: {
+    type: Date,
+    comment: 'Timestamp of last embedding update'
+  }
 }, {
   timestamps: true
 });
@@ -49,6 +70,8 @@ const userSchema = new mongoose.Schema({
 userSchema.index({ role: 1 });
 userSchema.index({ emailVerificationToken: 1 });
 userSchema.index({ emailVerificationExpires: 1 });
+userSchema.index({ role: 1, allowSearch: 1 });
+userSchema.index({ embeddingUpdatedAt: 1 });
 /**
  * Hash password before saving
  */

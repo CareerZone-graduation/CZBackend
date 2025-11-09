@@ -16,6 +16,9 @@ import './cron/interviewReminder.cron.js';
 import './cron/jobAlert.cron.js';
 import './cron/emailVerificationCleanup.cron.js';
 
+// Import watchers
+import { watchCandidateProfileChanges } from './watchers/candidateEmbedding.watcher.js';
+
 dotenv.config();
 
 // Tạo HTTP server và Socket.IO
@@ -35,6 +38,10 @@ const startServer = async () => {
     await connectDB();
     await rabbitmq.getChannel(); // Khởi tạo kết nối RabbitMQ
     await kafkaService.connectProducer();
+
+    // Initialize change stream watchers
+    watchCandidateProfileChanges();
+    logger.info('Change stream watchers initialized');
 
     const PORT = config.PORT || 8080;
     server.listen(PORT, () => {

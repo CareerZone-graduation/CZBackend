@@ -12,6 +12,9 @@ import passport from 'passport'; // Đảm bảo có import này
 import path from 'path';
 import { fileURLToPath } from 'url';
 import './config/passport.js'; // Import để cấu hình passport
+import morgan from 'morgan';
+import logger from './utils/logger.js';
+
 
 // Get __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -27,6 +30,7 @@ import userRoutes from './routes/user.route.js';
 import jobRoutes from './routes/job.route.js';
 import candidateRoutes from './routes/candidate.route.js';
 import companyRoutes from './routes/company.route.js';
+import recruiterRoutes from './routes/recruiter.route.js';
 import applicationRoutes from './routes/application.route.js';
 import jobAlertRoutes from './routes/jobAlert.route.js';
 import notificationRoutes from './routes/notification.route.js';
@@ -52,6 +56,7 @@ import * as notFoundMiddleware from './middleware/notFound.middleware.js';
 dotenv.config();
 
 const app = express();
+app.use(morgan('combined', { stream: logger.stream }));
 
 // Cấu hình view engine (chỉ dành cho 1 số trang như xác thực email trả về HTML)
 app.set('view engine', 'pug');
@@ -123,6 +128,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/candidate', candidateRoutes);
 app.use('/api/companies', companyRoutes);
+app.use('/api/recruiters', recruiterRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/job-alerts', jobAlertRoutes);
 app.use('/api/notifications', notificationRoutes);
