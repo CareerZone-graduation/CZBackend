@@ -534,22 +534,182 @@ export const getJobCategories = async () => {
     { 
       $group: { 
         _id: "$category", 
-        value: { $sum: 1 } 
+        count: { $sum: 1 } 
       } 
     },
     { 
       $project: { 
         _id: 0, 
-        name: "$_id", 
-        value: 1 
+        category: "$_id", 
+        count: 1 
       } 
     },
-    { $sort: { value: -1 } },
+    { $sort: { count: -1 } },
     { $limit: 10 }, // Lấy top 10 categories
   ]);
   
   console.log('📊 Job categories from MongoDB:', results);
   return results;
+};
+
+/**
+ * GET /api/analytics/top-companies
+ * Lấy danh sách công ty hàng đầu (theo số lượng tin đăng tuyển nhiều nhất)
+ * Sắp xếp: Công ty có nhiều việc làm ACTIVE + APPROVED nhất sẽ lên đầu
+ */
+export const getTopCompanies = async (limit = 6) => {
+  try {
+    // Bước 1: Thử lấy công ty APPROVED có tin active
+    let companies = await RecruiterProfile.aggregate([
+      {
+        $match: {
+          'company.name': { $exists: true },
+          approvalStatus: 'APPROVED' // Chỉ lấy công ty đã được phê duyệt
+        }
+      },
+      {
+        $lookup: {
+          from: 'jobs',
+          localField: '_id',
+          foreignField: 'recruiterProfileId',
+          as: 'jobs'
+        }
+      },
+      {
+        $addFields: {
+          activeJobCount: {
+            $size: {
+              $filter: {
+                input: '$jobs',
+                as: 'job',
+                cond: { 
+                  $and: [
+                    { $eq: ['$$job.status', 'ACTIVE'] },
+                    { $eq: ['$$job.moderationStatus', 'APPROVED'] }
+                  ]
+                }
+              }
+            }
+          },
+          // Tổng số tất cả tin đăng (kể cả inactive) để hiển thị thêm
+          totalJobCount: { $size: '$jobs' }
+        }
+      },
+      {
+        $match: {
+          activeJobCount: { $gt: 0 } // Chỉ lấy công ty có ít nhất 1 việc làm active
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          companyName: '$company.name',
+          logo: '$company.logo',
+          industry: '$company.industry',
+          employees: '$company.employees',
+          about: '$company.about',
+          location: {
+            province: '$company.location.province',
+            district: '$company.location.district',
+            address: '$company.location.address'
+          },
+          activeJobCount: 1,
+          totalJobCount: 1,
+          userId: 1,
+          approvalStatus: 1
+        }
+      },
+      { 
+        $sort: { 
+          activeJobCount: -1,  // Sắp xếp theo số việc làm active giảm dần
+          totalJobCount: -1     // Nếu bằng nhau thì xét tổng số tin
+        } 
+      },
+      { $limit: limit }
+    ]);
+
+    // Bước 2: Nếu không có kết quả, lấy bất kỳ công ty nào có tin đăng
+    if (companies.length === 0) {
+      console.log('⚠️ No APPROVED companies with active jobs. Trying all companies with jobs...');
+      companies = await RecruiterProfile.aggregate([
+        {
+          $match: {
+            'company.name': { $exists: true }
+          }
+        },
+        {
+          $lookup: {
+            from: 'jobs',
+            localField: '_id',
+            foreignField: 'recruiterProfileId',
+            as: 'jobs'
+          }
+        },
+        {
+          $addFields: {
+            activeJobCount: {
+              $size: {
+                $filter: {
+                  input: '$jobs',
+                  as: 'job',
+                  cond: { 
+                    $and: [
+                      { $eq: ['$$job.status', 'ACTIVE'] },
+                      { $eq: ['$$job.moderationStatus', 'APPROVED'] }
+                    ]
+                  }
+                }
+              }
+            },
+            totalJobCount: { $size: '$jobs' }
+          }
+        },
+        {
+          $match: {
+            totalJobCount: { $gt: 0 } // Lấy công ty có ít nhất 1 tin (kể cả chưa active)
+          }
+        },
+        {
+          $project: {
+            _id: 1,
+            companyName: '$company.name',
+            logo: '$company.logo',
+            industry: '$company.industry',
+            employees: '$company.employees',
+            about: '$company.about',
+            location: {
+              province: '$company.location.province',
+              district: '$company.location.district',
+              address: '$company.location.address'
+            },
+            activeJobCount: 1,
+            totalJobCount: 1,
+            userId: 1,
+            approvalStatus: 1
+          }
+        },
+        { 
+          $sort: { 
+            activeJobCount: -1,
+            totalJobCount: -1
+          } 
+        },
+        { $limit: limit }
+      ]);
+    }
+
+    console.log(`🏢 Found ${companies.length} companies:`, companies.map(c => ({
+      name: c.companyName,
+      activeJobs: c.activeJobCount,
+      totalJobs: c.totalJobCount,
+      status: c.approvalStatus
+    })));
+    
+    return companies;
+  } catch (error) {
+    console.error('❌ Error in getTopCompanies:', error);
+    throw error;
+  }
 };
 
 /**
@@ -1440,4 +1600,185 @@ export const getKPIData = async () => {
       description: 'Doanh thu nền tảng tháng này'
     }
   };
+};
+
+/**
+ * Get most applied companies - Lấy công ty được ứng viên nộp CV nhiều nhất
+ * @param {number} limit - Số lượng công ty tối đa
+ * @returns {Promise<Array>} Danh sách công ty theo số lượng application
+ */
+export const getMostAppliedCompanies = async (limit = 12) => {
+  try {
+    console.log('\n🔍 getMostAppliedCompanies called with limit:', limit);
+    
+    // Kiểm tra tổng số applications trong DB
+    const totalApplications = await Application.countDocuments();
+    console.log(`📊 Total applications in DB: ${totalApplications}`);
+    
+    if (totalApplications === 0) {
+      console.log('⚠️ No applications found, falling back to top companies by job count');
+      return await getTopCompanies(limit);
+    }
+    
+    // Đếm applications theo từng job trước
+    const applicationsByJob = await Application.aggregate([
+      {
+        $group: {
+          _id: '$jobId',
+          applicationCount: { $sum: 1 }
+        }
+      }
+    ]);
+    
+    console.log(`📊 Found applications for ${applicationsByJob.length} different jobs`);
+    
+    // Tạo map jobId -> applicationCount
+    const jobAppCountMap = {};
+    applicationsByJob.forEach(item => {
+      jobAppCountMap[item._id.toString()] = item.applicationCount;
+    });
+    
+    // Aggregation để đếm số application cho mỗi công ty
+    const companies = await RecruiterProfile.aggregate([
+      {
+        $match: {
+          'company.name': { $exists: true },
+          approvalStatus: 'APPROVED' // Chỉ lấy công ty đã được phê duyệt
+        }
+      },
+      {
+        // Lookup tất cả jobs của công ty
+        $lookup: {
+          from: 'jobs',
+          localField: '_id',
+          foreignField: 'recruiterProfileId',
+          as: 'allJobs'
+        }
+      },
+      {
+        // Lookup chỉ jobs ACTIVE để hiển thị
+        $lookup: {
+          from: 'jobs',
+          localField: '_id',
+          foreignField: 'recruiterProfileId',
+          as: 'activeJobs',
+          pipeline: [
+            {
+              $match: {
+                status: 'ACTIVE',
+                moderationStatus: 'APPROVED'
+              }
+            }
+          ]
+        }
+      },
+      {
+        $addFields: {
+          activeJobCount: { $size: '$activeJobs' },
+          totalJobCount: { $size: '$allJobs' },
+          // Đếm applications thủ công từ map
+          allJobIds: {
+            $map: {
+              input: '$allJobs',
+              as: 'job',
+              in: { $toString: '$$job._id' }
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          companyName: '$company.name',
+          logo: '$company.logo',
+          industry: '$company.industry',
+          employees: '$company.employees',
+          about: '$company.about',
+          location: {
+            province: '$company.location.province',
+            district: '$company.location.district',
+            address: '$company.location.address'
+          },
+          activeJobCount: 1,
+          totalJobCount: 1,
+          allJobIds: 1,
+          userId: 1,
+          approvalStatus: 1
+        }
+      }
+    ]);
+
+    console.log(`✅ Found ${companies.length} approved companies`);
+    
+    // Tính applicationCount cho từng company từ jobAppCountMap
+    const companiesWithAppCount = companies.map(company => {
+      let applicationCount = 0;
+      
+      // Cộng dồn applications từ tất cả jobs của company
+      if (company.allJobIds && company.allJobIds.length > 0) {
+        company.allJobIds.forEach(jobIdStr => {
+          applicationCount += (jobAppCountMap[jobIdStr] || 0);
+        });
+      }
+      
+      // Tính average
+      const avgApplicationPerJob = company.totalJobCount > 0 
+        ? Math.round((applicationCount / company.totalJobCount) * 10) / 10
+        : 0;
+      
+      return {
+        _id: company._id,
+        companyName: company.companyName,
+        logo: company.logo,
+        industry: company.industry,
+        employees: company.employees,
+        about: company.about,
+        location: company.location,
+        activeJobCount: company.activeJobCount,
+        totalJobCount: company.totalJobCount,
+        applicationCount,
+        avgApplicationPerJob,
+        userId: company.userId,
+        approvalStatus: company.approvalStatus
+      };
+    });
+    
+    // Sort by applicationCount
+    companiesWithAppCount.sort((a, b) => {
+      if (b.applicationCount !== a.applicationCount) {
+        return b.applicationCount - a.applicationCount;
+      }
+      return b.activeJobCount - a.activeJobCount;
+    });
+    
+    // Take limit
+    const topCompanies = companiesWithAppCount.slice(0, limit);
+    
+    console.log(`📊 Companies with applications: ${companiesWithAppCount.filter(c => c.applicationCount > 0).length}/${companiesWithAppCount.length}`);
+    
+    // Log top 10 for debugging
+    if (topCompanies.length > 0) {
+      console.log('\n📊 Top companies by applications:');
+      topCompanies.slice(0, Math.min(10, topCompanies.length)).forEach((company, index) => {
+        console.log(`  ${index + 1}. ${company.companyName}:`);
+        console.log(`      - Applications: ${company.applicationCount} CVs`);
+        console.log(`      - Active Jobs: ${company.activeJobCount}`);
+        console.log(`      - Total Jobs: ${company.totalJobCount}`);
+        console.log(`      - Avg: ${company.avgApplicationPerJob} CVs/job`);
+      });
+      console.log(''); // empty line
+    }
+
+    // Fallback: Nếu không có công ty nào có applications
+    if (topCompanies.every(c => c.applicationCount === 0)) {
+      console.log('⚠️ No companies with applications found!');
+      console.log('⚠️ Falling back to getTopCompanies() - sorting by job count instead\n');
+      return await getTopCompanies(limit);
+    }
+
+    return topCompanies;
+  } catch (error) {
+    console.error('❌ Error fetching most applied companies:', error);
+    throw error;
+  }
 };

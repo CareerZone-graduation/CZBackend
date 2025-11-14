@@ -8,7 +8,17 @@ import * as analyticsSchema from '../schemas/analytics.schema.js';
 
 const router = express.Router();
 
-// Tất cả các route trong file này đều yêu cầu quyền admin
+// === Public Routes (không cần authentication) ===
+router.get('/job-categories', analyticsController.getJobCategories);
+router.get('/top-companies', analyticsController.getTopCompanies);
+router.get('/most-applied-companies', analyticsController.getMostAppliedCompanies);
+
+// Debug endpoint để test applications data
+import * as testController from '../controllers/test-applications.controller.js';
+router.get('/debug-applications', testController.testApplicationsData);
+
+// === Admin Only Routes ===
+// Tất cả các route sau đây đều yêu cầu quyền admin
 router.use(passport.authenticate('jwt', { session: false }), authMiddleware.adminOnly);
 
 // Dashboard & Analytics APIs
@@ -27,8 +37,6 @@ router.get(
 );
 
 router.get('/user-demographics', analyticsController.getUserDemographics);
-
-router.get('/job-categories', analyticsController.getJobCategories);
 
 router.get('/company-stats', analyticsController.getCompanyStats);
 

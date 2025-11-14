@@ -31,6 +31,18 @@ export const getCompanyStats = asyncHandler(async (req, res) => {
   res.json({ success: true, data });
 });
 
+export const getTopCompanies = asyncHandler(async (req, res) => {
+  const limit = parseInt(req.query.limit) || 6;
+  const data = await analyticsService.getTopCompanies(limit);
+  res.json({ success: true, data });
+});
+
+export const getMostAppliedCompanies = asyncHandler(async (req, res) => {
+  const limit = parseInt(req.query.limit) || 12;
+  const data = await analyticsService.getMostAppliedCompanies(limit);
+  res.json({ success: true, data });
+});
+
 export const getTransactionTrends = asyncHandler(async (req, res) => {
   const data = await analyticsService.getTransactionAnalytics(req.validatedQuery || req.query);
   res.json({
