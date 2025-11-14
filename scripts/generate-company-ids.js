@@ -1,8 +1,8 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import connectDB from './../src/utils/connectDB.js';
-import logger from './../src/utils/logger.js';
-import RecruiterProfile from './../src/models/RecruiterProfile.js';
+import connectDB from '../src/utils/connectDB.js';
+import logger from '../src/utils/logger.js';
+import RecruiterProfile from '../src/models/RecruiterProfile.js';
 
 dotenv.config();
 
