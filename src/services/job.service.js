@@ -903,10 +903,15 @@ export const getSavedJobs = async (userId, options) => {
 export const getJobsByCompany = async (companyId, options = {}) => {
   const { page = 1, limit = 10, province, sortBy, search, ...filters } = options;
 
-  // Find recruiter profile by company ID
-  const recruiterProfile = await RecruiterProfile.findOne({
-    'company._id': new mongoose.Types.ObjectId(companyId)
-  }).lean();
+  // Find recruiter profile - Thử tìm theo RecruiterProfile._id trước (cho analytics)
+  let recruiterProfile = await RecruiterProfile.findById(companyId).lean();
+  
+  // Nếu không thấy, thử tìm theo company._id (subdocument)
+  if (!recruiterProfile) {
+    recruiterProfile = await RecruiterProfile.findOne({
+      'company._id': new mongoose.Types.ObjectId(companyId)
+    }).lean();
+  }
 
   if (!recruiterProfile) {
     throw new NotFoundError('Không tìm thấy công ty.');
@@ -915,7 +920,8 @@ export const getJobsByCompany = async (companyId, options = {}) => {
   // Build query
   const query = {
     status: 'ACTIVE',
-    approved: true,
+    moderationStatus: 'APPROVED', // ✅ Fix: Dùng moderationStatus thay vì approved
+    deadline: { $gte: new Date() }, // ✅ Fix: Chỉ lấy jobs chưa hết hạn
     recruiterProfileId: recruiterProfile._id
   };
 

@@ -209,9 +209,21 @@ export const getAllCompanies = async (options = {}) => {
  * @returns {Promise<object>} The company object.
  */
 export const getCompanyById = async (companyId) => {
-  const recruiterProfile = await RecruiterProfile.findOne({ 'company._id': companyId });
+  // Thử tìm theo RecruiterProfile _id trước (dùng cho analytics)
+  let recruiterProfile = await RecruiterProfile.findById(companyId);
+  
+  // Nếu không tìm thấy, thử tìm theo company._id (subdocument id)
+  if (!recruiterProfile) {
+    recruiterProfile = await RecruiterProfile.findOne({ 'company._id': companyId });
+  }
+  
   if (!recruiterProfile || !recruiterProfile.company) {
     throw new NotFoundError('Không tìm thấy công ty.');
   }
-  return recruiterProfile.company;
+  
+  // Trả về company data với _id của RecruiterProfile để navigate đúng
+  return {
+    ...recruiterProfile.company.toObject(),
+    _id: recruiterProfile._id // Override với RecruiterProfile ID
+  };
 };

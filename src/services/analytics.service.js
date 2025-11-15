@@ -585,7 +585,8 @@ export const getTopCompanies = async (limit = 6) => {
                 cond: { 
                   $and: [
                     { $eq: ['$$job.status', 'ACTIVE'] },
-                    { $eq: ['$$job.moderationStatus', 'APPROVED'] }
+                    { $eq: ['$$job.moderationStatus', 'APPROVED'] },
+                    { $gte: ['$$job.deadline', new Date()] } // Chỉ đếm jobs chưa hết hạn
                   ]
                 }
               }
@@ -655,7 +656,8 @@ export const getTopCompanies = async (limit = 6) => {
                   cond: { 
                     $and: [
                       { $eq: ['$$job.status', 'ACTIVE'] },
-                      { $eq: ['$$job.moderationStatus', 'APPROVED'] }
+                      { $eq: ['$$job.moderationStatus', 'APPROVED'] },
+                      { $gte: ['$$job.deadline', new Date()] } // Chỉ đếm jobs chưa hết hạn
                     ]
                   }
                 }
@@ -1642,8 +1644,9 @@ export const getMostAppliedCompanies = async (limit = 12) => {
     const companies = await RecruiterProfile.aggregate([
       {
         $match: {
-          'company.name': { $exists: true },
-          approvalStatus: 'APPROVED' // Chỉ lấy công ty đã được phê duyệt
+          'company.name': { $exists: true }
+          // BỎ filter APPROVED để hiển thị tất cả công ty (bao gồm PENDING)
+          // approvalStatus: 'APPROVED'
         }
       },
       {
@@ -1656,7 +1659,7 @@ export const getMostAppliedCompanies = async (limit = 12) => {
         }
       },
       {
-        // Lookup chỉ jobs ACTIVE để hiển thị
+        // Lookup chỉ jobs ACTIVE và chưa hết hạn để hiển thị
         $lookup: {
           from: 'jobs',
           localField: '_id',
@@ -1666,7 +1669,8 @@ export const getMostAppliedCompanies = async (limit = 12) => {
             {
               $match: {
                 status: 'ACTIVE',
-                moderationStatus: 'APPROVED'
+                moderationStatus: 'APPROVED',
+                deadline: { $gte: new Date() } // Chỉ lấy jobs chưa hết hạn
               }
             }
           ]
@@ -1708,7 +1712,7 @@ export const getMostAppliedCompanies = async (limit = 12) => {
       }
     ]);
 
-    console.log(`✅ Found ${companies.length} approved companies`);
+    console.log(`✅ Found ${companies.length} companies (all statuses)`);
     
     // Tính applicationCount cho từng company từ jobAppCountMap
     const companiesWithAppCount = companies.map(company => {
@@ -1743,37 +1747,48 @@ export const getMostAppliedCompanies = async (limit = 12) => {
       };
     });
     
-    // Sort by applicationCount
-    companiesWithAppCount.sort((a, b) => {
+    // KHÔNG LỌC BỎ công ty 0 CV - chỉ đẩy xuống cuối
+    console.log(`📊 Total companies: ${companiesWithAppCount.length}`);
+    
+    const companiesWithCV = companiesWithAppCount.filter(c => c.applicationCount > 0);
+    const companiesWithoutCV = companiesWithAppCount.filter(c => c.applicationCount === 0);
+    
+    console.log(`📊 Companies with CV: ${companiesWithCV.length}`);
+    console.log(`📊 Companies without CV: ${companiesWithoutCV.length}`);
+    
+    // Sort companies có CV theo applicationCount DESC
+    companiesWithCV.sort((a, b) => {
       if (b.applicationCount !== a.applicationCount) {
         return b.applicationCount - a.applicationCount;
       }
       return b.activeJobCount - a.activeJobCount;
     });
     
-    // Take limit
-    const topCompanies = companiesWithAppCount.slice(0, limit);
+    // Sort companies không có CV theo activeJobCount DESC
+    companiesWithoutCV.sort((a, b) => {
+      return b.activeJobCount - a.activeJobCount;
+    });
     
-    console.log(`📊 Companies with applications: ${companiesWithAppCount.filter(c => c.applicationCount > 0).length}/${companiesWithAppCount.length}`);
+    // Ghép lại: Có CV trước, không CV sau
+    const allCompaniesSorted = [...companiesWithCV, ...companiesWithoutCV];
+    
+    // Take limit
+    const topCompanies = allCompaniesSorted.slice(0, limit);
     
     // Log top 10 for debugging
     if (topCompanies.length > 0) {
-      console.log('\n📊 Top companies by applications:');
+      console.log('\n📊 Top companies (sorted by CV, then by Jobs):');
       topCompanies.slice(0, Math.min(10, topCompanies.length)).forEach((company, index) => {
-        console.log(`  ${index + 1}. ${company.companyName}:`);
+        const hasCV = company.applicationCount > 0 ? '✅' : '⚠️ 0 CV';
+        console.log(`  ${index + 1}. ${company.companyName}: ${hasCV}`);
         console.log(`      - Applications: ${company.applicationCount} CVs`);
         console.log(`      - Active Jobs: ${company.activeJobCount}`);
         console.log(`      - Total Jobs: ${company.totalJobCount}`);
-        console.log(`      - Avg: ${company.avgApplicationPerJob} CVs/job`);
+        if (company.applicationCount > 0) {
+          console.log(`      - Avg: ${company.avgApplicationPerJob} CVs/job`);
+        }
       });
       console.log(''); // empty line
-    }
-
-    // Fallback: Nếu không có công ty nào có applications
-    if (topCompanies.every(c => c.applicationCount === 0)) {
-      console.log('⚠️ No companies with applications found!');
-      console.log('⚠️ Falling back to getTopCompanies() - sorting by job count instead\n');
-      return await getTopCompanies(limit);
     }
 
     return topCompanies;
