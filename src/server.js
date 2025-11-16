@@ -7,7 +7,7 @@ import config from './config/index.js';
 import logger from './utils/logger.js';
 import * as socket from './socket/index.js';
 import * as rabbitmq from './queues/rabbitmq.js';
-import * as kafkaService from './services/kafka.service.js';
+// import * as kafkaService from './services/kafka.service.js';
 
 import app from './app.js';
 
@@ -37,7 +37,7 @@ const startServer = async () => {
   try {
     await connectDB();
     await rabbitmq.getChannel(); // Khởi tạo kết nối RabbitMQ
-    await kafkaService.connectProducer();
+    // await kafkaService.connectProducer();
 
     // Initialize change stream watchers
     watchCandidateProfileChanges();

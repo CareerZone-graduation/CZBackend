@@ -105,36 +105,36 @@ export const createJob = async (userId, jobData) => {
     referenceModel: 'Job'
   });
 
-  // Gửi sự kiện JOB_CREATED đến Kafka
+  // TODO: Gửi sự kiện JOB_CREATED đến Kafka
   // Không cần await để tránh block response trả về cho client
   //gửi all thông tin cần thiết để tạo sự kiện JOB_CREATED
-  kafkaService.sendJobEvent({
-    eventType: 'JOB_CREATED',
-    timestamp: new Date().toISOString(),
-    payload: {
-      jobId: newJob._id.toString(),
-      description: newJob.description,
-      requirements: newJob.requirements,
-      benefits: newJob.benefits,
-      title: newJob.title,
-      skills: newJob.skills,
-      category: newJob.category,
-      area: newJob.area,
-      minSalary: newJob.minSalary,
-      maxSalary: newJob.maxSalary,
-      companyName: recruiterProfile.company.name,
-      location: {
-        province: newJob.location.province,
-        district: newJob.location.district,
-        commune: newJob.location.commune,
-      },
-      address: newJob.address,
-      type: newJob.type,
-      workType: newJob.workType,
-      experience: newJob.experience,
-      deadline: newJob.deadline,
-    }
-  });
+  // kafkaService.sendJobEvent({
+  //   eventType: 'JOB_CREATED',
+  //   timestamp: new Date().toISOString(),
+  //   payload: {
+  //     jobId: newJob._id.toString(),
+  //     description: newJob.description,
+  //     requirements: newJob.requirements,
+  //     benefits: newJob.benefits,
+  //     title: newJob.title,
+  //     skills: newJob.skills,
+  //     category: newJob.category,
+  //     area: newJob.area,
+  //     minSalary: newJob.minSalary,
+  //     maxSalary: newJob.maxSalary,
+  //     companyName: recruiterProfile.company.name,
+  //     location: {
+  //       province: newJob.location.province,
+  //       district: newJob.location.district,
+  //       commune: newJob.location.commune,
+  //     },
+  //     address: newJob.address,
+  //     type: newJob.type,
+  //     workType: newJob.workType,
+  //     experience: newJob.experience,
+  //     deadline: newJob.deadline,
+  //   }
+  // });
 
   return newJob;
 };
@@ -375,14 +375,7 @@ export const getJobById = async (jobId, userId = null) => {
   let isSaved = false;
   let isApplied = false;
   if (userId) {
-    // Gửi sự kiện xem việc làm
-    kafkaService.sendUserInteraction({
-      eventType: 'VIEW_JOB',
-      userId,
-      jobId,
-      timestamp: new Date().toISOString(),
-      details: { weight: 1 }
-    });
+    // TODO: Gửi sự kiện xem việc làm KAFKA
 
     // Kiểm tra xem user có phải là candidate và đã lưu/apply job này không
     try {
@@ -673,14 +666,8 @@ export const applyToJob = async (userId, jobId, applicationData) => {
     });
     logActivity(application, 'APPLICATION_SUBMITTED', 'Ứng viên đã nộp đơn');
 
-    // Gửi sự kiện APPLY_JOB
-    kafkaService.sendUserInteraction({
-      eventType: 'APPLY_JOB',
-      userId,
-      jobId,
-      timestamp: new Date().toISOString(),
-      details: { weight: 5 }
-    });
+    // TODO: Gửi sự kiện APPLY_JOB KAFKA
+    
 
     // --- BẮT ĐẦU GỬI SỰ KIỆN THÔNG BÁO ---
     try {
@@ -759,14 +746,7 @@ export const saveJob = async (userId, jobId) => {
     jobId,
   });
 
-  // Gửi sự kiện SAVE_JOB
-  kafkaService.sendUserInteraction({
-    eventType: 'SAVE_JOB',
-    userId,
-    jobId,
-    timestamp: new Date().toISOString(),
-    details: { weight: 3 },
-  });
+  // TODO: Gửi sự kiện SAVE_JOB KAFKA
 };
 
 /**
