@@ -246,17 +246,23 @@ export const createInterviewScheduledNotification = async (applicationId, interv
   const candidateProfileId = application.candidateProfileId;
   const candidateId = await CandidateProfile.findById(candidateProfileId).select('userId').userId;
 
+  const scheduledTimeFormatted = new Date(interview.scheduledTime).toLocaleString('vi-VN', {
+    dateStyle: 'short',
+    timeStyle: 'short'
+  });
+
   const notification = await Notification.create({
     userId: new mongoose.Types.ObjectId(candidateId),
     title: "Lịch phỏng vấn đã được lên lịch",
-    message: `Bạn có một lịch phỏng vấn cho vị trí "${application.jobSnapshot.title}" tại ${application.jobSnapshot.company}.`,
+    message: `Bạn có một lịch phỏng vấn cho vị trí "${application.jobSnapshot.title}" tại ${application.jobSnapshot.company} vào ${scheduledTimeFormatted}.`,
     type: 'interview',
     entity: {
       type: "InterviewRoom",
       id: new mongoose.Types.ObjectId(interviewId)
     },
     metadata: {
-      interviewId: interviewId.toString()
+      interviewId: interviewId.toString(),
+      scheduledTime: interview.scheduledTime.toISOString()
     }
   });
   // đồng thời push thông báo đẩy
@@ -403,6 +409,238 @@ export const createInterviewReminderNotification = async (interviewId) => {
       url: `/interviews/${interviewId}`,
     }
   });
+};
+
+/**
+ * Tạo thông báo khi phỏng vấn bắt đầu.
+ * @param {string} interviewId - ID của cuộc phỏng vấn
+ * @returns {Promise<void>}
+ */
+export const createInterviewStartedNotification = async (interviewId) => {
+  const interview = await InterviewRoom.findById(interviewId)
+    .populate('candidateId', 'fullName')
+    .populate('recruiterId', 'fullName')
+    .populate({
+      path: 'applicationId',
+      select: 'jobSnapshot'
+    });
+
+  if (!interview) {
+    logger.warn('INTERVIEW_STARTED - Interview not found', { interviewId });
+    throw new NotFoundError('Cuộc phỏng vấn không tồn tại.');
+  }
+
+  const title = '🎥 Phỏng vấn đã bắt đầu';
+  const candidateMessage = `Cuộc phỏng vấn cho vị trí "${interview.applicationId?.jobSnapshot?.title}" đã bắt đầu.`;
+  const recruiterMessage = `Cuộc phỏng vấn với ${interview.candidateId.fullName} đã bắt đầu.`;
+
+  // Thông báo cho candidate
+  const notificationForCandidate = await Notification.create({
+    userId: new mongoose.Types.ObjectId(interview.candidateId._id),
+    title,
+    message: candidateMessage,
+    type: 'interview',
+    entity: {
+      type: 'InterviewRoom',
+      id: new mongoose.Types.ObjectId(interviewId)
+    },
+    metadata: {
+      interviewId: interviewId.toString(),
+      startTime: interview.startTime?.toISOString()
+    }
+  });
+
+  // Thông báo cho recruiter
+  const notificationForRecruiter = await Notification.create({
+    userId: new mongoose.Types.ObjectId(interview.recruiterId._id),
+    title,
+    message: recruiterMessage,
+    type: 'interview',
+    entity: {
+      type: 'InterviewRoom',
+      id: new mongoose.Types.ObjectId(interviewId)
+    },
+    metadata: {
+      interviewId: interviewId.toString(),
+      startTime: interview.startTime?.toISOString()
+    }
+  });
+
+  // Push notifications
+  await pushNotification(interview.candidateId._id, {
+    title,
+    body: candidateMessage,
+    data: {
+      url: `/interviews/${interviewId}`,
+    }
+  });
+
+  await pushNotification(interview.recruiterId._id, {
+    title,
+    body: recruiterMessage,
+    data: {
+      url: `/interviews/${interviewId}`,
+    }
+  });
+
+  logger.info(`Interview started notifications sent for interview ${interviewId}`);
+};
+
+/**
+ * Tạo thông báo khi phỏng vấn kết thúc.
+ * @param {string} interviewId - ID của cuộc phỏng vấn
+ * @param {number} duration - Thời lượng phỏng vấn (phút)
+ * @returns {Promise<void>}
+ */
+export const createInterviewEndedNotification = async (interviewId, duration) => {
+  const interview = await InterviewRoom.findById(interviewId)
+    .populate('candidateId', 'fullName')
+    .populate('recruiterId', 'fullName')
+    .populate({
+      path: 'applicationId',
+      select: 'jobSnapshot'
+    });
+
+  if (!interview) {
+    logger.warn('INTERVIEW_ENDED - Interview not found', { interviewId });
+    throw new NotFoundError('Cuộc phỏng vấn không tồn tại.');
+  }
+
+  const title = '✅ Phỏng vấn đã kết thúc';
+  const candidateMessage = `Cuộc phỏng vấn cho vị trí "${interview.applicationId?.jobSnapshot?.title}" đã kết thúc. Thời lượng: ${duration} phút.`;
+  const recruiterMessage = `Cuộc phỏng vấn với ${interview.candidateId.fullName} đã kết thúc. Thời lượng: ${duration} phút.`;
+
+  // Thông báo cho candidate
+  const notificationForCandidate = await Notification.create({
+    userId: new mongoose.Types.ObjectId(interview.candidateId._id),
+    title,
+    message: candidateMessage,
+    type: 'interview',
+    entity: {
+      type: 'InterviewRoom',
+      id: new mongoose.Types.ObjectId(interviewId)
+    },
+    metadata: {
+      interviewId: interviewId.toString(),
+      endTime: interview.endTime?.toISOString(),
+      duration
+    }
+  });
+
+  // Thông báo cho recruiter
+  const notificationForRecruiter = await Notification.create({
+    userId: new mongoose.Types.ObjectId(interview.recruiterId._id),
+    title,
+    message: recruiterMessage,
+    type: 'interview',
+    entity: {
+      type: 'InterviewRoom',
+      id: new mongoose.Types.ObjectId(interviewId)
+    },
+    metadata: {
+      interviewId: interviewId.toString(),
+      endTime: interview.endTime?.toISOString(),
+      duration
+    }
+  });
+
+  // Push notifications
+  await pushNotification(interview.candidateId._id, {
+    title,
+    body: candidateMessage,
+    data: {
+      url: `/interviews/${interviewId}`,
+    }
+  });
+
+  await pushNotification(interview.recruiterId._id, {
+    title,
+    body: recruiterMessage,
+    data: {
+      url: `/interviews/${interviewId}`,
+    }
+  });
+
+  logger.info(`Interview ended notifications sent for interview ${interviewId}`);
+};
+
+/**
+ * Tạo thông báo khi recording đã sẵn sàng.
+ * @param {string} interviewId - ID của cuộc phỏng vấn
+ * @param {number} recordingDuration - Thời lượng recording (giây)
+ * @returns {Promise<void>}
+ */
+export const createRecordingAvailableNotification = async (interviewId, recordingDuration) => {
+  const interview = await InterviewRoom.findById(interviewId)
+    .populate('candidateId', 'fullName')
+    .populate('recruiterId', 'fullName')
+    .populate({
+      path: 'applicationId',
+      select: 'jobSnapshot'
+    });
+
+  if (!interview) {
+    logger.warn('RECORDING_AVAILABLE - Interview not found', { interviewId });
+    throw new NotFoundError('Cuộc phỏng vấn không tồn tại.');
+  }
+
+  const durationMinutes = Math.round(recordingDuration / 60);
+  const title = '🎬 Bản ghi phỏng vấn đã sẵn sàng';
+  const candidateMessage = `Bản ghi phỏng vấn cho vị trí "${interview.applicationId?.jobSnapshot?.title}" đã sẵn sàng để xem. Thời lượng: ${durationMinutes} phút.`;
+  const recruiterMessage = `Bản ghi phỏng vấn với ${interview.candidateId.fullName} đã sẵn sàng để xem. Thời lượng: ${durationMinutes} phút.`;
+
+  // Thông báo cho candidate
+  const notificationForCandidate = await Notification.create({
+    userId: new mongoose.Types.ObjectId(interview.candidateId._id),
+    title,
+    message: candidateMessage,
+    type: 'interview',
+    entity: {
+      type: 'InterviewRoom',
+      id: new mongoose.Types.ObjectId(interviewId)
+    },
+    metadata: {
+      interviewId: interviewId.toString(),
+      recordingDuration,
+      recordingUrl: interview.recording?.url
+    }
+  });
+
+  // Thông báo cho recruiter
+  const notificationForRecruiter = await Notification.create({
+    userId: new mongoose.Types.ObjectId(interview.recruiterId._id),
+    title,
+    message: recruiterMessage,
+    type: 'interview',
+    entity: {
+      type: 'InterviewRoom',
+      id: new mongoose.Types.ObjectId(interviewId)
+    },
+    metadata: {
+      interviewId: interviewId.toString(),
+      recordingDuration,
+      recordingUrl: interview.recording?.url
+    }
+  });
+
+  // Push notifications
+  await pushNotification(interview.candidateId._id, {
+    title,
+    body: candidateMessage,
+    data: {
+      url: `/interviews/${interviewId}`,
+    }
+  });
+
+  await pushNotification(interview.recruiterId._id, {
+    title,
+    body: recruiterMessage,
+    data: {
+      url: `/interviews/${interviewId}`,
+    }
+  });
+
+  logger.info(`Recording available notifications sent for interview ${interviewId}`);
 };
 
 
@@ -594,6 +832,42 @@ export const handleInterviewReminder = async (payload) => {
     throw new BadRequestError('Missing interviewId in payload');
   }
   return createInterviewReminderNotification(interviewId);
+};
+
+/**
+ * Xử lý message INTERVIEW_STARTED.
+ * @param {object} payload - Toàn bộ payload từ RabbitMQ
+ */
+export const handleInterviewStarted = async (payload) => {
+  const { interviewId } = payload.data;
+  if (!interviewId) {
+    throw new BadRequestError('Missing interviewId in payload');
+  }
+  return createInterviewStartedNotification(interviewId);
+};
+
+/**
+ * Xử lý message INTERVIEW_ENDED.
+ * @param {object} payload - Toàn bộ payload từ RabbitMQ
+ */
+export const handleInterviewEnded = async (payload) => {
+  const { interviewId, duration } = payload.data;
+  if (!interviewId) {
+    throw new BadRequestError('Missing interviewId in payload');
+  }
+  return createInterviewEndedNotification(interviewId, duration);
+};
+
+/**
+ * Xử lý message RECORDING_AVAILABLE.
+ * @param {object} payload - Toàn bộ payload từ RabbitMQ
+ */
+export const handleRecordingAvailable = async (payload) => {
+  const { interviewId, recordingDuration } = payload.data;
+  if (!interviewId) {
+    throw new BadRequestError('Missing interviewId in payload');
+  }
+  return createRecordingAvailableNotification(interviewId, recordingDuration);
 };
 
 /**

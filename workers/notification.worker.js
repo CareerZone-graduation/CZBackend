@@ -31,7 +31,10 @@ const handlerRegistry = {
   [ROUTING_KEYS.INTERVIEW_REMINDER]: notificationService.handleInterviewReminder,
   [ROUTING_KEYS.INTERVIEW_RESCHEDULE]: notificationService.handleInterviewReschedule,
   [ROUTING_KEYS.INTERVIEW_CANCEL]: notificationService.handleInterviewCancel,
-  [ROUTING_KEYS.INTERVIEW_COMPLETE]: () => {}, // No-op for now
+  [ROUTING_KEYS.INTERVIEW_COMPLETE]: notificationService.handleInterviewEnded,
+  [ROUTING_KEYS.INTERVIEW_SCHEDULED]: notificationService.handleStatusUpdate,
+  [ROUTING_KEYS.INTERVIEW_STARTED]: notificationService.handleInterviewStarted,
+  [ROUTING_KEYS.RECORDING_AVAILABLE]: notificationService.handleRecordingAvailable,
 
   // === Job Alerts ===
   [ROUTING_KEYS.JOB_ALERT_DAILY]: notificationService.processJobAlertNotification,

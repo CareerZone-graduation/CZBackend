@@ -1,11 +1,56 @@
 import mongoose from 'mongoose';
 
+// Chat message schema for interview transcript
+const chatMessageSchema = new mongoose.Schema({
+  senderId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: [true, 'Sender ID is required']
+  },
+  message: {
+    type: String,
+    required: [true, 'Message content is required'],
+    trim: true,
+    maxlength: [2000, 'Message cannot exceed 2000 characters']
+  },
+  timestamp: {
+    type: Date,
+    default: Date.now
+  }
+}, { _id: false });
+
+// Recording information schema
+const recordingSchema = new mongoose.Schema({
+  enabled: {
+    type: Boolean,
+    default: false
+  },
+  url: {
+    type: String,
+    trim: true
+  },
+  duration: {
+    type: Number,
+    min: [0, 'Duration cannot be negative'],
+    comment: 'Recording duration in seconds'
+  },
+  size: {
+    type: Number,
+    min: [0, 'Size cannot be negative'],
+    comment: 'File size in bytes'
+  }
+}, { _id: false });
+
 const interviewRoomSchema = new mongoose.Schema({
   roomName: {
     type: String,
     required: [true, 'Room name is required'],
     trim: true,
     maxlength: [200, 'Room name cannot exceed 200 characters']
+  },
+  jobId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Job'
   },
   recruiterId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -20,6 +65,13 @@ const interviewRoomSchema = new mongoose.Schema({
   applicationId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Application'
+  },
+  roomId: {
+    type: String,
+    unique: true,
+    sparse: true,
+    trim: true,
+    comment: 'Unique identifier for WebRTC room'
   },
   
   scheduledTime: {//Đây là thời gian "chính thức" mà cả nhà tuyển dụng và ứng viên đã đồng ý.
@@ -82,6 +134,22 @@ const interviewRoomSchema = new mongoose.Schema({
   isReminderSent: {
     type: Boolean,
     default: false // Cờ để đánh dấu đã gửi thông báo nhắc nhở hay chưa
+  },
+  // WebRTC interview fields
+  duration: {
+    type: Number,
+    default: 60,
+    min: [15, 'Duration must be at least 15 minutes'],
+    max: [180, 'Duration cannot exceed 180 minutes'],
+    comment: 'Expected duration in minutes'
+  },
+  recording: {
+    type: recordingSchema,
+    default: () => ({})
+  },
+  chatTranscript: {
+    type: [chatMessageSchema],
+    default: []
   }
 }, {
   timestamps: true // Tự động thêm createdAt và updatedAt
@@ -105,5 +173,49 @@ interviewRoomSchema.index({ scheduledTime: 1 });
 // - `isReminderSent`: Chỉ tìm những cuộc chưa gửi lời nhắc.
 // - `scheduledTime`: Tìm trong một khoảng thời gian cụ thể.
 interviewRoomSchema.index({ status: 1, scheduledTime: 1, isReminderSent: 1 });
+// Index for job reference
+interviewRoomSchema.index({ jobId: 1 });
+
+// ================================= Virtual Properties =================================
+// Virtual property to check if interview is currently active
+interviewRoomSchema.virtual('isActive').get(function() {
+  return this.status === 'STARTED';
+});
+
+// ================================= Instance Methods =================================
+// Instance method to check if a user can join the interview
+interviewRoomSchema.methods.canUserJoin = function(userId) {
+  const userIdStr = userId.toString();
+  
+  // Check if user is a participant (recruiter or candidate)
+  const isParticipant = 
+    this.recruiterId.toString() === userIdStr || 
+    this.candidateId.toString() === userIdStr;
+  
+  // Check if interview is in valid status
+  const isScheduledOrStarted = 
+    this.status === 'SCHEDULED' || 
+    this.status === 'STARTED';
+  
+  // Check if current time is within the allowed time window
+  const isWithinTimeWindow = () => {
+    const now = new Date();
+    const scheduledTime = new Date(this.scheduledTime);
+    
+    // Allow joining 15 minutes before scheduled time
+    const windowStart = new Date(scheduledTime.getTime() - 15 * 60000);
+    
+    // Allow joining up to 30 minutes after scheduled time
+    const windowEnd = new Date(scheduledTime.getTime() + 30 * 60000);
+    
+    return now >= windowStart && now <= windowEnd;
+  };
+  
+  return isParticipant && isScheduledOrStarted && isWithinTimeWindow();
+};
+
+// Ensure virtuals are included when converting to JSON
+interviewRoomSchema.set('toJSON', { virtuals: true });
+interviewRoomSchema.set('toObject', { virtuals: true });
 
 export default mongoose.model('InterviewRoom', interviewRoomSchema);

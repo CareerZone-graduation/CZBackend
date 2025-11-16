@@ -128,21 +128,21 @@ export const verifyEmail = async (token) => {
     await user.save({ validateBeforeSave: false });
 
     // Nếu là candidate, gửi sự kiện sau khi xác thực thành công
-    if (user.role === 'candidate') {
-      const candidateProfile = await CandidateProfile.findOne({ userId: user._id });
-      if (candidateProfile) {
-        kafkaService.sendUserEvent({
-          eventType: 'CANDIDATE_REGISTERED',
-          timestamp: new Date().toISOString(),
-          payload: {
-            userId: user._id.toString(),
-            email: user.email,
-            fullName: candidateProfile.fullname,
-            role: user.role,
-          }
-        });
-      }
-    }
+    // if (user.role === 'candidate') {
+    //   const candidateProfile = await CandidateProfile.findOne({ userId: user._id });
+    //   if (candidateProfile) {
+    //     kafkaService.sendUserEvent({
+    //       eventType: 'CANDIDATE_REGISTERED',
+    //       timestamp: new Date().toISOString(),
+    //       payload: {
+    //         userId: user._id.toString(),
+    //         email: user.email,
+    //         fullName: candidateProfile.fullname,
+    //         role: user.role,
+    //       }
+    //     });
+    //   }
+    // }
     
     // Lấy thông tin profile để trả về
     const profile = user.role === 'candidate' 

@@ -31,6 +31,9 @@ export const ROUTING_KEYS = {
   INTERVIEW_RESCHEDULE: 'notification.interview_reschedule', // Dành cho dời lịch phỏng vấn
   INTERVIEW_CANCEL: 'notification.interview_cancel', // Dành cho hủy lịch phỏng vấn
   INTERVIEW_COMPLETE: 'notification.interview_complete', // Dành cho hoàn thành phỏng vấn
+  INTERVIEW_SCHEDULED: 'notification.interview_scheduled', // Dành cho thông báo phỏng vấn đã được lên lịch
+  INTERVIEW_STARTED: 'notification.interview_started', // Dành cho thông báo phỏng vấn đã bắt đầu
+  RECORDING_AVAILABLE: 'notification.recording_available', // Dành cho thông báo recording đã sẵn sàng
   JOB_APPROVAL: 'notification.job_approval', // Dành cho thông báo phê duyệt tin tuyển dụng
   COMPANY_VERIFICATION: 'notification.company_verification', // Dành cho thông báo xác thực công ty
   EMAIL_SEND: 'notification.email.send', // Dành cho các tác vụ gửi email chung
@@ -100,6 +103,9 @@ export async function getChannel() {
     await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.INTERVIEW_RESCHEDULE);
     await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.INTERVIEW_CANCEL);
     await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.INTERVIEW_COMPLETE);
+    await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.INTERVIEW_SCHEDULED);
+    await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.INTERVIEW_STARTED);
+    await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.RECORDING_AVAILABLE);
     await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.EMAIL_SEND);
     await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.NEW_APPLICATION); // THÊM: Bind routing key mới
 
