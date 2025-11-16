@@ -17,7 +17,7 @@ const chatMessageSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
-}, { _id: false });
+}); // Removed { _id: false } to allow Mongoose to auto-generate _id for each message
 
 // Recording information schema
 const recordingSchema = new mongoose.Schema({
@@ -79,7 +79,12 @@ const interviewRoomSchema = new mongoose.Schema({
     required: [true, 'Scheduled time is required'],
     validate: {
       validator: function(value) {
-        return value > new Date();
+        // Only validate future time when creating new interview
+        // Allow past times for existing interviews (e.g., when updating chat transcript)
+        if (this.isNew) {
+          return value > new Date();
+        }
+        return true;
       },
       message: 'Scheduled time must be in the future'
     }

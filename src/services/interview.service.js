@@ -727,19 +727,32 @@ export const saveChatMessage = async (interviewId, senderId, message) => {
   }
 
   // Add message to chat transcript
-  interview.chatTranscript.push({
+  const newMessage = {
     senderId,
     message: message.trim(),
     timestamp: new Date()
-  });
+  };
 
-  await interview.save();
+  // Use $push to add message without triggering full document validation
+  // This avoids validation errors on scheduledTime for past interviews
+  const result = await InterviewRoom.findByIdAndUpdate(
+    interviewId,
+    { $push: { chatTranscript: newMessage } },
+    { new: true, runValidators: false } // Don't run validators to avoid scheduledTime validation
+  );
+
+  if (!result) {
+    throw new NotFoundError('Interview not found after update');
+  }
+
+  // Get the newly added message (last item in array)
+  const savedMessage = result.chatTranscript[result.chatTranscript.length - 1];
 
   logger.info(`Chat message saved to interview ${interviewId} from user ${senderId}`);
 
   return {
     success: true,
-    message: interview.chatTranscript[interview.chatTranscript.length - 1]
+    message: savedMessage
   };
 };
 

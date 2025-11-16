@@ -748,6 +748,7 @@ export const initializeSocket = (io) => {
         
         // Broadcast message to other participants in the room
         socket.to(`interview:${roomId}`).emit('interview:chat-message', {
+          _id: result.message._id,
           senderId: socket.userId,
           message: result.message.message,
           timestamp: result.message.timestamp
