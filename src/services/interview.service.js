@@ -1,10 +1,851 @@
 import { NotFoundError, BadRequestError, ForbiddenError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
 import InterviewRoom from '../models/InterviewRoom.js';
-import { User, Application } from '../models/index.js';
+import { User, Application, Job } from '../models/index.js';
 import * as queueService from './queue.service.js';
 import * as rabbitmq from '../queues/rabbitmq.js';
 import mongoose from 'mongoose';
+import { v4 as uuidv4 } from 'uuid';
+
+// =================================================================
+// Core Interview Management Functions (Task 2.1)
+// =================================================================
+
+/**
+ * Schedule a new interview
+ * @param {string} recruiterId - ID of the recruiter
+ * @param {string} candidateId - ID of the candidate
+ * @param {string} jobId - ID of the job
+ * @param {string} applicationId - ID of the application
+ * @param {Date} scheduledAt - Scheduled interview time
+ * @param {number} duration - Expected duration in minutes
+ * @returns {Object} Created interview
+ */
+export const scheduleInterview = async (recruiterId, candidateId, jobId, applicationId, scheduledAt, duration = 60) => {
+  // Validate inputs
+  if (!recruiterId || !candidateId || !jobId || !applicationId || !scheduledAt) {
+    throw new BadRequestError('Missing required fields for scheduling interview');
+  }
+
+  // Validate scheduled time is in the future
+  const scheduledDate = new Date(scheduledAt);
+  if (scheduledDate <= new Date()) {
+    throw new BadRequestError('Scheduled time must be in the future');
+  }
+
+  // Validate duration
+  if (duration < 15 || duration > 180) {
+    throw new BadRequestError('Duration must be between 15 and 180 minutes');
+  }
+
+  // Verify application exists and belongs to the candidate
+  const application = await Application.findById(applicationId)
+    .populate('candidateProfileId', 'userId')
+    .lean();
+  
+  if (!application) {
+    throw new NotFoundError('Application not found');
+  }
+
+  // Verify job exists
+  const job = await Job.findById(jobId).lean();
+  if (!job) {
+    throw new NotFoundError('Job not found');
+  }
+
+  // Verify recruiter owns the job
+  if (job.recruiterProfileId.toString() !== recruiterId.toString()) {
+    throw new ForbiddenError('You do not have permission to schedule interviews for this job');
+  }
+
+  // Generate unique room ID
+  const roomId = `interview-${uuidv4()}`;
+  
+  // Create room name
+  const roomName = `Interview for ${application.jobSnapshot?.title || 'Position'} - ${new Date(scheduledAt).toLocaleString('vi-VN')}`;
+
+  // Create interview
+  const interview = await InterviewRoom.create({
+    jobId,
+    applicationId,
+    recruiterId,
+    candidateId,
+    scheduledTime: scheduledDate,
+    duration,
+    roomId,
+    roomName,
+    status: 'SCHEDULED',
+    changeHistory: [{
+      timestamp: new Date(),
+      action: 'CREATED',
+      actor: recruiterId
+    }]
+  });
+
+  // Update application activity history
+  if (application) {
+    await Application.findByIdAndUpdate(applicationId, {
+      $push: {
+        activityHistory: {
+          action: 'INTERVIEW_SCHEDULED',
+          detail: `Interview scheduled for ${scheduledDate.toLocaleString('vi-VN')}`,
+          timestamp: new Date()
+        }
+      }
+    });
+  }
+
+  // Send notification to candidate and recruiter via RabbitMQ
+  queueService.publishNotification(rabbitmq.ROUTING_KEYS.STATUS_UPDATE, {
+    type: 'INTERVIEW_SCHEDULED',
+    recipientId: candidateId.toString(),
+    data: {
+      interviewId: interview._id.toString(),
+      applicationId: applicationId.toString()
+    }
+  });
+
+  logger.info(`Interview ${interview._id} scheduled by recruiter ${recruiterId} for candidate ${candidateId}`);
+
+  return interview;
+};
+
+/**
+ * Get interview by ID with access control
+ * @param {string} interviewId - ID of the interview
+ * @param {string} userId - ID of the user requesting access
+ * @returns {Object} Interview details
+ */
+export const getInterviewById = async (interviewId, userId) => {
+  if (!interviewId || !userId) {
+    throw new BadRequestError('Interview ID and User ID are required');
+  }
+
+  const interview = await InterviewRoom.findById(interviewId)
+    .populate('candidateId', 'fullName email avatar')
+    .populate('recruiterId', 'fullName email avatar')
+    .populate({
+      path: 'applicationId',
+      select: 'jobSnapshot candidateProfileId appliedAt status candidateName candidateEmail candidatePhone coverLetter candidateRating notes submittedCV activityHistory'
+    })
+    .lean();
+
+  if (!interview) {
+    throw new NotFoundError('Interview not found');
+  }
+
+  // Check access control
+  const isRecruiter = interview.recruiterId._id.toString() === userId.toString();
+  const isCandidate = interview.candidateId._id.toString() === userId.toString();
+
+  if (!isRecruiter && !isCandidate) {
+    throw new ForbiddenError('You do not have permission to access this interview');
+  }
+
+  return interview;
+};
+
+/**
+ * Get interviews by recruiter with filtering
+ * @param {string} recruiterId - ID of the recruiter
+ * @param {Object} filters - Filter options (status, page, limit)
+ * @returns {Object} List of interviews with pagination
+ */
+export const getInterviewsByRecruiter = async (recruiterId, filters = {}) => {
+  const { status, page = 1, limit = 10 } = filters;
+  const skip = (page - 1) * limit;
+
+  const query = { recruiterId };
+  
+  // Apply status filter if provided
+  if (status) {
+    // Support multiple statuses
+    if (Array.isArray(status)) {
+      query.status = { $in: status };
+    } else {
+      query.status = status;
+    }
+  }
+
+  // Count total documents
+  const total = await InterviewRoom.countDocuments(query);
+
+  // Fetch interviews
+  const interviews = await InterviewRoom.find(query)
+    .populate('candidateId', 'fullName email avatar')
+    .populate({
+      path: 'applicationId',
+      select: 'jobSnapshot candidateProfileId appliedAt status candidateName candidateEmail candidatePhone'
+    })
+    .sort({ scheduledTime: -1 })
+    .skip(skip)
+    .limit(Number(limit))
+    .lean();
+
+  const totalPages = Math.ceil(total / limit);
+
+  return {
+    data: interviews,
+    meta: {
+      currentPage: Number(page),
+      totalPages,
+      totalItems: total,
+      limit: Number(limit)
+    }
+  };
+};
+
+/**
+ * Get interviews by candidate with filtering
+ * @param {string} candidateId - ID of the candidate
+ * @param {Object} filters - Filter options (status, page, limit)
+ * @returns {Object} List of interviews with pagination
+ */
+export const getInterviewsByCandidate = async (candidateId, filters = {}) => {
+  const { status, page = 1, limit = 10 } = filters;
+  const skip = (page - 1) * limit;
+
+  const query = { candidateId };
+  
+  // Apply status filter if provided
+  if (status) {
+    // Support multiple statuses
+    if (Array.isArray(status)) {
+      query.status = { $in: status };
+    } else {
+      query.status = status;
+    }
+  }
+
+  // Count total documents
+  const total = await InterviewRoom.countDocuments(query);
+
+  // Fetch interviews
+  const interviews = await InterviewRoom.find(query)
+    .populate('recruiterId', 'fullName email avatar')
+    .populate({
+      path: 'applicationId',
+      select: 'jobSnapshot appliedAt status'
+    })
+    .sort({ scheduledTime: -1 })
+    .skip(skip)
+    .limit(Number(limit))
+    .lean();
+
+  const totalPages = Math.ceil(total / limit);
+
+  return {
+    data: interviews,
+    meta: {
+      currentPage: Number(page),
+      totalPages,
+      totalItems: total,
+      limit: Number(limit)
+    }
+  };
+};
+
+/**
+ * Update interview status with state transition validation
+ * @param {string} interviewId - ID of the interview
+ * @param {string} newStatus - New status to set
+ * @param {string} userId - ID of the user making the change
+ * @returns {Object} Updated interview
+ */
+export const updateInterviewStatus = async (interviewId, newStatus, userId) => {
+  if (!interviewId || !newStatus || !userId) {
+    throw new BadRequestError('Interview ID, status, and user ID are required');
+  }
+
+  const interview = await InterviewRoom.findById(interviewId);
+  
+  if (!interview) {
+    throw new NotFoundError('Interview not found');
+  }
+
+  // Check if user has permission (must be recruiter or candidate)
+  const isRecruiter = interview.recruiterId.toString() === userId.toString();
+  const isCandidate = interview.candidateId.toString() === userId.toString();
+
+  if (!isRecruiter && !isCandidate) {
+    throw new ForbiddenError('You do not have permission to update this interview');
+  }
+
+  // Validate state transitions
+  const validTransitions = {
+    'SCHEDULED': ['STARTED', 'RESCHEDULED', 'CANCELLED'],
+    'RESCHEDULED': ['STARTED', 'CANCELLED'],
+    'STARTED': ['COMPLETED', 'CANCELLED'],
+    'COMPLETED': [], // Cannot transition from completed
+    'CANCELLED': [] // Cannot transition from cancelled
+  };
+
+  const allowedStatuses = validTransitions[interview.status] || [];
+  
+  if (!allowedStatuses.includes(newStatus)) {
+    throw new BadRequestError(`Cannot transition from ${interview.status} to ${newStatus}`);
+  }
+
+  // Update status
+  const oldStatus = interview.status;
+  interview.status = newStatus;
+  
+  // Add to change history
+  interview.changeHistory.push({
+    timestamp: new Date(),
+    action: `STATUS_CHANGED_TO_${newStatus}`,
+    notes: `Status changed from ${oldStatus} to ${newStatus}`,
+    actor: userId
+  });
+
+  await interview.save();
+
+  logger.info(`Interview ${interviewId} status updated from ${oldStatus} to ${newStatus} by user ${userId}`);
+
+  return interview;
+};
+
+// =================================================================
+// Interview Session Control Functions (Task 2.2)
+// =================================================================
+
+/**
+ * Join interview with time window validation
+ * @param {string} interviewId - ID of the interview
+ * @param {string} userId - ID of the user joining
+ * @returns {Object} Interview details with join permission
+ */
+export const joinInterview = async (interviewId, userId) => {
+  if (!interviewId || !userId) {
+    throw new BadRequestError('Interview ID and User ID are required');
+  }
+
+  const interview = await InterviewRoom.findById(interviewId)
+    .populate('candidateId', 'fullName email avatar')
+    .populate('recruiterId', 'fullName email avatar')
+    .lean();
+
+  if (!interview) {
+    throw new NotFoundError('Interview not found');
+  }
+
+  // Check if user is a participant
+  const isRecruiter = interview.recruiterId._id.toString() === userId.toString();
+  const isCandidate = interview.candidateId._id.toString() === userId.toString();
+
+  if (!isRecruiter && !isCandidate) {
+    throw new ForbiddenError('You are not a participant in this interview');
+  }
+
+  // Check if interview is in valid status
+  if (!['SCHEDULED', 'RESCHEDULED', 'STARTED'].includes(interview.status)) {
+    throw new BadRequestError(`Cannot join interview with status: ${interview.status}`);
+  }
+
+  // Validate time window (15 minutes before to 30 minutes after scheduled time)
+  const now = new Date();
+  const scheduledTime = new Date(interview.scheduledTime);
+  const windowStart = new Date(scheduledTime.getTime() - 15 * 60000); // 15 min before
+  const windowEnd = new Date(scheduledTime.getTime() + 30 * 60000); // 30 min after
+
+  if (now < windowStart) {
+    const minutesUntilStart = Math.ceil((windowStart - now) / 60000);
+    throw new BadRequestError(`Interview can be joined ${minutesUntilStart} minutes before scheduled time`);
+  }
+
+  if (now > windowEnd) {
+    throw new BadRequestError('Interview join window has expired (30 minutes after scheduled time)');
+  }
+
+  logger.info(`User ${userId} validated to join interview ${interviewId}`);
+
+  return {
+    interview,
+    canJoin: true,
+    userRole: isRecruiter ? 'recruiter' : 'candidate'
+  };
+};
+
+/**
+ * Start interview - mark as in-progress
+ * @param {string} interviewId - ID of the interview
+ * @param {string} userId - ID of the user starting (must be recruiter)
+ * @returns {Object} Updated interview
+ */
+export const startInterview = async (interviewId, userId) => {
+  if (!interviewId || !userId) {
+    throw new BadRequestError('Interview ID and User ID are required');
+  }
+
+  const interview = await InterviewRoom.findById(interviewId);
+
+  if (!interview) {
+    throw new NotFoundError('Interview not found');
+  }
+
+  // Only recruiter can start the interview
+  if (interview.recruiterId.toString() !== userId.toString()) {
+    throw new ForbiddenError('Only the recruiter can start the interview');
+  }
+
+  // Can only start if status is SCHEDULED or RESCHEDULED
+  if (!['SCHEDULED', 'RESCHEDULED'].includes(interview.status)) {
+    throw new BadRequestError(`Cannot start interview with status: ${interview.status}`);
+  }
+
+  // Update interview
+  interview.status = 'STARTED';
+  interview.startTime = new Date();
+  interview.changeHistory.push({
+    timestamp: new Date(),
+    action: 'STARTED',
+    actor: userId
+  });
+
+  await interview.save();
+
+  // Update application activity history
+  if (interview.applicationId) {
+    await Application.findByIdAndUpdate(interview.applicationId, {
+      $push: {
+        activityHistory: {
+          action: 'INTERVIEW_STARTED',
+          detail: `Interview started at ${interview.startTime.toLocaleString('vi-VN')}`,
+          timestamp: new Date()
+        }
+      }
+    });
+  }
+
+  // Send notification via RabbitMQ
+  queueService.publishNotification(rabbitmq.ROUTING_KEYS.INTERVIEW_STARTED, {
+    type: 'INTERVIEW_STARTED',
+    data: {
+      interviewId: interview._id.toString()
+    }
+  });
+
+  logger.info(`Interview ${interviewId} started by recruiter ${userId}`);
+
+  return interview;
+};
+
+/**
+ * End interview with feedback storage
+ * @param {string} interviewId - ID of the interview
+ * @param {string} userId - ID of the user ending (must be recruiter)
+ * @param {Object} feedback - Feedback data (rating, notes, technicalIssues, issueDescription)
+ * @returns {Object} Updated interview
+ */
+export const endInterview = async (interviewId, userId, feedback = {}) => {
+  if (!interviewId || !userId) {
+    throw new BadRequestError('Interview ID and User ID are required');
+  }
+
+  const interview = await InterviewRoom.findById(interviewId)
+    .populate('candidateId', 'fullName email')
+    .populate({
+      path: 'applicationId',
+      select: 'jobSnapshot'
+    });
+
+  if (!interview) {
+    throw new NotFoundError('Interview not found');
+  }
+
+  // Only recruiter can end the interview
+  if (interview.recruiterId.toString() !== userId.toString()) {
+    throw new ForbiddenError('Only the recruiter can end the interview');
+  }
+
+  // Can only end if status is STARTED
+  if (interview.status !== 'STARTED') {
+    throw new BadRequestError(`Cannot end interview with status: ${interview.status}`);
+  }
+
+  // Update interview
+  interview.status = 'COMPLETED';
+  interview.endTime = new Date();
+  
+  // Calculate duration
+  const durationMs = interview.endTime - interview.startTime;
+  const durationMinutes = Math.round(durationMs / (1000 * 60));
+
+  // Add to change history
+  interview.changeHistory.push({
+    timestamp: new Date(),
+    action: 'COMPLETED',
+    notes: feedback.notes || `Interview completed. Duration: ${durationMinutes} minutes.`,
+    actor: userId
+  });
+
+  await interview.save();
+
+  // Update application status and activity history
+  if (interview.applicationId) {
+    const application = await Application.findById(interview.applicationId);
+    if (application) {
+      const oldStatus = application.status;
+      application.status = 'INTERVIEWED';
+      application.lastStatusUpdateAt = new Date();
+
+      // Store feedback if provided
+      if (feedback.rating || feedback.notes) {
+        application.candidateRating = feedback.rating || application.candidateRating;
+        if (feedback.notes) {
+          application.notes = (application.notes || '') + `\n\nInterview Feedback (${new Date().toLocaleString('vi-VN')}): ${feedback.notes}`;
+        }
+      }
+
+      application.activityHistory.push({
+        action: 'INTERVIEW_COMPLETED',
+        detail: `Interview completed. Duration: ${durationMinutes} minutes.`,
+        timestamp: new Date()
+      });
+
+      application.activityHistory.push({
+        action: 'STATUS_CHANGE',
+        detail: `Status changed from ${oldStatus} to INTERVIEWED`,
+        timestamp: new Date()
+      });
+
+      await application.save();
+    }
+  }
+
+  // Send notification via RabbitMQ
+  queueService.publishNotification(rabbitmq.ROUTING_KEYS.INTERVIEW_COMPLETE, {
+    type: 'INTERVIEW_ENDED',
+    data: {
+      interviewId: interview._id.toString(),
+      duration: durationMinutes
+    }
+  });
+
+  logger.info(`Interview ${interviewId} ended by recruiter ${userId}. Duration: ${durationMinutes} minutes`);
+
+  return interview;
+};
+
+/**
+ * Cancel interview
+ * @param {string} interviewId - ID of the interview
+ * @param {string} userId - ID of the user cancelling (must be recruiter)
+ * @param {string} reason - Reason for cancellation
+ * @returns {Object} Updated interview
+ */
+export const cancelInterview = async (interviewId, userId, reason = '') => {
+  if (!interviewId || !userId) {
+    throw new BadRequestError('Interview ID and User ID are required');
+  }
+
+  const interview = await InterviewRoom.findById(interviewId)
+    .populate('candidateId', 'fullName email')
+    .populate({
+      path: 'applicationId',
+      select: 'jobSnapshot'
+    });
+
+  if (!interview) {
+    throw new NotFoundError('Interview not found');
+  }
+
+  // Only recruiter can cancel
+  if (interview.recruiterId.toString() !== userId.toString()) {
+    throw new ForbiddenError('Only the recruiter can cancel the interview');
+  }
+
+  // Can only cancel if status is SCHEDULED or RESCHEDULED
+  if (!['SCHEDULED', 'RESCHEDULED'].includes(interview.status)) {
+    throw new BadRequestError(`Cannot cancel interview with status: ${interview.status}`);
+  }
+
+  // Update interview
+  interview.status = 'CANCELLED';
+  interview.changeHistory.push({
+    timestamp: new Date(),
+    action: 'CANCELLED',
+    reason: reason || 'Interview cancelled by recruiter',
+    actor: userId
+  });
+
+  await interview.save();
+
+  // Update application activity history
+  if (interview.applicationId) {
+    await Application.findByIdAndUpdate(interview.applicationId, {
+      $push: {
+        activityHistory: {
+          action: 'INTERVIEW_CANCELLED',
+          detail: `Interview cancelled${reason ? `. Reason: ${reason}` : ''}`,
+          timestamp: new Date()
+        }
+      }
+    });
+  }
+
+  // Send notification via RabbitMQ
+  queueService.publishNotification(rabbitmq.ROUTING_KEYS.INTERVIEW_CANCEL, {
+    type: 'INTERVIEW_CANCEL',
+    recipientId: interview.candidateId._id.toString(),
+    data: {
+      interviewId: interview._id.toString()
+    }
+  });
+
+  logger.info(`Interview ${interviewId} cancelled by recruiter ${userId}`);
+
+  return interview;
+};
+
+/**
+ * Reschedule interview
+ * @param {string} interviewId - ID of the interview
+ * @param {string} userId - ID of the user rescheduling (must be recruiter)
+ * @param {Date} newScheduledAt - New scheduled time
+ * @param {string} reason - Reason for rescheduling
+ * @returns {Object} Updated interview
+ */
+export const rescheduleInterview = async (interviewId, userId, newScheduledAt, reason = '') => {
+  if (!interviewId || !userId || !newScheduledAt) {
+    throw new BadRequestError('Interview ID, User ID, and new scheduled time are required');
+  }
+
+  // Validate new scheduled time is in the future
+  const newScheduledDate = new Date(newScheduledAt);
+  if (newScheduledDate <= new Date()) {
+    throw new BadRequestError('New scheduled time must be in the future');
+  }
+
+  const interview = await InterviewRoom.findById(interviewId)
+    .populate('candidateId', 'fullName email')
+    .populate({
+      path: 'applicationId',
+      select: 'jobSnapshot'
+    });
+
+  if (!interview) {
+    throw new NotFoundError('Interview not found');
+  }
+
+  // Only recruiter can reschedule
+  if (interview.recruiterId.toString() !== userId.toString()) {
+    throw new ForbiddenError('Only the recruiter can reschedule the interview');
+  }
+
+  // Can only reschedule if status is SCHEDULED or RESCHEDULED
+  if (!['SCHEDULED', 'RESCHEDULED'].includes(interview.status)) {
+    throw new BadRequestError(`Cannot reschedule interview with status: ${interview.status}`);
+  }
+
+  // Store old scheduled time
+  const oldScheduledTime = interview.scheduledTime;
+
+  // Update interview
+  interview.scheduledTime = newScheduledDate;
+  interview.status = 'RESCHEDULED';
+  interview.isReminderSent = false; // Reset reminder flag
+  interview.changeHistory.push({
+    timestamp: new Date(),
+    action: 'RESCHEDULED',
+    fromTime: oldScheduledTime,
+    toTime: newScheduledDate,
+    reason: reason || 'Interview rescheduled',
+    actor: userId
+  });
+
+  await interview.save();
+
+  // Update application activity history
+  if (interview.applicationId) {
+    await Application.findByIdAndUpdate(interview.applicationId, {
+      $push: {
+        activityHistory: {
+          action: 'INTERVIEW_RESCHEDULED',
+          detail: `Interview rescheduled from ${oldScheduledTime.toLocaleString('vi-VN')} to ${newScheduledDate.toLocaleString('vi-VN')}`,
+          timestamp: new Date()
+        }
+      }
+    });
+  }
+
+  // Send notification via RabbitMQ
+  queueService.publishNotification(rabbitmq.ROUTING_KEYS.INTERVIEW_RESCHEDULE, {
+    type: 'INTERVIEW_RESCHEDULE',
+    recipientId: interview.candidateId._id.toString(),
+    data: {
+      interviewId: interview._id.toString(),
+      newScheduledTime: newScheduledDate.toISOString()
+    }
+  });
+
+  logger.info(`Interview ${interviewId} rescheduled by recruiter ${userId} to ${newScheduledDate.toISOString()}`);
+
+  return interview;
+};
+
+// =================================================================
+// Chat and Recording Functions (Task 2.3)
+// =================================================================
+
+/**
+ * Save chat message to interview transcript
+ * @param {string} interviewId - ID of the interview
+ * @param {string} senderId - ID of the message sender
+ * @param {string} message - Message content
+ * @returns {Object} Updated interview with new message
+ */
+export const saveChatMessage = async (interviewId, senderId, message) => {
+  if (!interviewId || !senderId || !message) {
+    throw new BadRequestError('Interview ID, sender ID, and message are required');
+  }
+
+  // Validate message length
+  if (message.length > 2000) {
+    throw new BadRequestError('Message cannot exceed 2000 characters');
+  }
+
+  const interview = await InterviewRoom.findById(interviewId);
+
+  if (!interview) {
+    throw new NotFoundError('Interview not found');
+  }
+
+  // Check if sender is a participant
+  const isParticipant = 
+    interview.recruiterId.toString() === senderId.toString() ||
+    interview.candidateId.toString() === senderId.toString();
+
+  if (!isParticipant) {
+    throw new ForbiddenError('You are not a participant in this interview');
+  }
+
+  // Check if interview is active or scheduled
+  const allowedStatuses = ['SCHEDULED', 'STARTED', 'RESCHEDULED'];
+  if (!allowedStatuses.includes(interview.status)) {
+    throw new BadRequestError('Can only send messages during an active or scheduled interview');
+  }
+
+  // Add message to chat transcript
+  const newMessage = {
+    senderId,
+    message: message.trim(),
+    timestamp: new Date()
+  };
+
+  // Use $push to add message without triggering full document validation
+  // This avoids validation errors on scheduledTime for past interviews
+  const result = await InterviewRoom.findByIdAndUpdate(
+    interviewId,
+    { $push: { chatTranscript: newMessage } },
+    { new: true, runValidators: false } // Don't run validators to avoid scheduledTime validation
+  );
+
+  if (!result) {
+    throw new NotFoundError('Interview not found after update');
+  }
+
+  // Get the newly added message (last item in array)
+  const savedMessage = result.chatTranscript[result.chatTranscript.length - 1];
+
+  logger.info(`Chat message saved to interview ${interviewId} from user ${senderId}`);
+
+  return {
+    success: true,
+    message: savedMessage
+  };
+};
+
+/**
+ * Save recording metadata and Cloudinary integration
+ * @param {string} interviewId - ID of the interview
+ * @param {Object} recordingData - Recording metadata (url, duration, size, cloudinaryPublicId)
+ * @returns {Object} Updated interview with recording info
+ */
+export const saveRecording = async (interviewId, recordingData) => {
+  if (!interviewId || !recordingData) {
+    throw new BadRequestError('Interview ID and recording data are required');
+  }
+
+  const { url, duration, size, cloudinaryPublicId } = recordingData;
+
+  if (!url) {
+    throw new BadRequestError('Recording URL is required');
+  }
+
+  const interview = await InterviewRoom.findById(interviewId);
+
+  if (!interview) {
+    throw new NotFoundError('Interview not found');
+  }
+
+  // Check if interview is completed
+  if (interview.status !== 'COMPLETED') {
+    throw new BadRequestError('Can only save recording for completed interviews');
+  }
+
+  // Update recording information
+  interview.recording = {
+    enabled: true,
+    url,
+    duration: duration || 0,
+    size: size || 0
+  };
+
+  // Store cloudinaryPublicId in changeHistory for reference
+  interview.changeHistory.push({
+    timestamp: new Date(),
+    action: 'RECORDING_SAVED',
+    notes: `Recording saved. Duration: ${duration || 0}s, Size: ${size || 0} bytes${cloudinaryPublicId ? `, Cloudinary ID: ${cloudinaryPublicId}` : ''}`,
+    actor: interview.recruiterId
+  });
+
+  await interview.save();
+
+  // Send notification to candidate and recruiter that recording is available
+  queueService.publishNotification(rabbitmq.ROUTING_KEYS.RECORDING_AVAILABLE, {
+    type: 'RECORDING_AVAILABLE',
+    data: {
+      interviewId: interview._id.toString(),
+      recordingDuration: duration || 0
+    }
+  });
+
+  logger.info(`Recording saved for interview ${interviewId}. URL: ${url}`);
+
+  return interview;
+};
+
+/**
+ * Check if user has access to interview
+ * @param {string} interviewId - ID of the interview
+ * @param {string} userId - ID of the user
+ * @returns {Object} Access information
+ */
+export const checkInterviewAccess = async (interviewId, userId) => {
+  if (!interviewId || !userId) {
+    throw new BadRequestError('Interview ID and User ID are required');
+  }
+
+  const interview = await InterviewRoom.findById(interviewId)
+    .select('recruiterId candidateId status')
+    .lean();
+
+  if (!interview) {
+    throw new NotFoundError('Interview not found');
+  }
+
+  const isRecruiter = interview.recruiterId.toString() === userId.toString();
+  const isCandidate = interview.candidateId.toString() === userId.toString();
+  const hasAccess = isRecruiter || isCandidate;
+
+  return {
+    hasAccess,
+    isRecruiter,
+    isCandidate,
+    interviewStatus: interview.status
+  };
+};
 
 /**
  * Lấy danh sách cuộc phỏng vấn của recruiter
@@ -262,313 +1103,13 @@ export const getInterviewDetails = async (interviewId, userId, userRole) => {
   return formattedInterview;
 };
 
-/**
- * Dời lịch phỏng vấn
- * @param {string} interviewId - ID của cuộc phỏng vấn
- * @param {string} recruiterId - ID của recruiter
- * @param {Object} data - Dữ liệu dời lịch
- * @returns {Object} Cuộc phỏng vấn đã được cập nhật
- */
-export const rescheduleInterview = async (interviewId, recruiterId, data) => {
-  const { scheduledTime, reason } = data;
-
-  // Tìm cuộc phỏng vấn với thông tin đầy đủ
-  const interview = await InterviewRoom.findById(interviewId)
-    .populate('candidateId', 'fullName email')
-    .populate({
-      path: 'applicationId', 
-      select: 'jobSnapshot'
-    });
-
-  if (!interview) {
-    throw new NotFoundError('Không tìm thấy cuộc phỏng vấn.');
-  }
-
-  // Kiểm tra quyền
-  if (interview.recruiterId.toString() !== recruiterId.toString()) {
-    throw new ForbiddenError('Bạn không có quyền dời lịch phỏng vấn này.');
-  }
-
-  // Chỉ có thể dời lịch khi status là SCHEDULED hoặc RESCHEDULED
-  if (!['SCHEDULED', 'RESCHEDULED'].includes(interview.status)) {
-    throw new BadRequestError('Chỉ có thể dời lịch phỏng vấn đang ở trạng thái SCHEDULED hoặc RESCHEDULED.');
-  }
-
-  // Lấy thông tin recruiter
-  const recruiter = await User.findById(recruiterId).select('fullName');
-  
-  // Cập nhật thông tin
-  const oldScheduledTime = interview.scheduledTime;
-  interview.scheduledTime = scheduledTime;
-  interview.status = 'RESCHEDULED';
-  interview.isReminderSent = false; // Reset để có thể gửi reminder cho lịch mới
-  
-  // Thêm vào changeHistory thay vì cập nhật notes
-  interview.changeHistory.push({
-    timestamp: new Date(),
-    action: 'RESCHEDULED',
-    fromTime: oldScheduledTime,
-    toTime: scheduledTime,
-    reason: reason || 'Không có lý do cụ thể',
-    actor: recruiterId
-  });
-
-  await interview.save();
-
-  if (interview.applicationId) {
-    const application = await Application.findById(interview.applicationId);
-    if (application) {
-      application.activityHistory.push({
-        action: 'INTERVIEW_RESCHEDULED',
-        detail: "Dời lịch phỏng vấn từ " + oldScheduledTime.toLocaleString('vi-VN') + " sang " + new Date(scheduledTime).toLocaleString('vi-VN'),
-        timestamp: new Date()
-      });
-      
-      await application.save();
-    }
-  }
-
-  // Gửi thông báo qua RabbitMQ để worker xử lý
-  queueService.publishNotification(rabbitmq.ROUTING_KEYS.INTERVIEW_RESCHEDULE, {
-    type: 'INTERVIEW_RESCHEDULE',
-    recipientId: interview.candidateId._id.toString(),
-    data: {
-      interviewId: interviewId.toString(),
-      newScheduledTime: scheduledTime.toISOString()
-    }
-  });
 
 
-  return interview;
-};
 
-/**
- * Hủy lịch phỏng vấn
- * @param {string} interviewId - ID của cuộc phỏng vấn
- * @param {string} recruiterId - ID của recruiter
- * @param {Object} data - Dữ liệu hủy lịch
- * @returns {Object} Cuộc phỏng vấn đã được hủy
- */
-export const cancelInterview = async (interviewId, recruiterId, data) => {
-  const { reason } = data;
 
-  const interview = await InterviewRoom.findById(interviewId)
-    .populate('candidateId', 'fullName email')
-    .populate({
-      path: 'applicationId', 
-      select: 'jobSnapshot'
-    });
 
-  if (!interview) {
-    throw new NotFoundError('Không tìm thấy cuộc phỏng vấn.');
-  }
 
-  // Kiểm tra quyền
-  if (interview.recruiterId.toString() !== recruiterId.toString()) {
-    throw new ForbiddenError('Bạn không có quyền hủy cuộc phỏng vấn này.');
-  }
 
-  // Chỉ có thể hủy khi status là SCHEDULED hoặc RESCHEDULED
-  if (!['SCHEDULED', 'RESCHEDULED'].includes(interview.status)) {
-    throw new BadRequestError('Chỉ có thể hủy cuộc phỏng vấn đang ở trạng thái SCHEDULED hoặc RESCHEDULED.');
-  }
-
-  // Lấy thông tin recruiter
-  const recruiter = await User.findById(recruiterId).select('fullName');
-
-  // Cập nhật status và changeHistory
-  interview.status = 'CANCELLED';
-  interview.changeHistory.push({
-    timestamp: new Date(),
-    action: 'CANCELLED',
-    reason: reason || 'Cuộc phỏng vấn đã bị hủy bởi nhà tuyển dụng',
-    actor: recruiterId
-  });
-  
-  await interview.save();
-
-  if (interview.applicationId) {
-    const application = await Application.findById(interview.applicationId);
-    if (application) {
-      application.activityHistory.push({
-        action: 'INTERVIEW_CANCELLED',
-        detail: `Cuộc phỏng vấn đã bị hủy bởi nhà tuyển dụng${reason ? `. Lý do: ${reason}` : ''}`,
-        timestamp: new Date()
-      });
-      
-      await application.save();
-    }
-  }
-
-  // Gửi thông báo qua RabbitMQ để worker xử lý
-  queueService.publishNotification(rabbitmq.ROUTING_KEYS.INTERVIEW_CANCEL, {
-    type: 'INTERVIEW_CANCEL',
-    recipientId: interview.candidateId._id.toString(),
-    data: {
-      interviewId: interviewId.toString()
-    }
-  });
-
-  logger.info(`Interview ${interviewId} cancelled by recruiter ${recruiterId}`);
-
-  return interview;
-};
-
-/**
- * Bắt đầu phỏng vấn
- * @param {string} interviewId - ID của cuộc phỏng vấn
- * @param {string} recruiterId - ID của recruiter
- * @returns {Object} Cuộc phỏng vấn đã bắt đầu
- */
-export const startInterview = async (interviewId, recruiterId) => {
-  const interview = await InterviewRoom.findById(interviewId);
-
-  if (!interview) {
-    throw new NotFoundError('Không tìm thấy cuộc phỏng vấn.');
-  }
-
-  // Kiểm tra quyền
-  if (interview.recruiterId.toString() !== recruiterId.toString()) {
-    throw new ForbiddenError('Bạn không có quyền bắt đầu cuộc phỏng vấn này.');
-  }
-
-  // Chỉ có thể bắt đầu khi status là SCHEDULED hoặc RESCHEDULED
-  if (!['SCHEDULED', 'RESCHEDULED'].includes(interview.status)) {
-    throw new BadRequestError('Chỉ có thể bắt đầu cuộc phỏng vấn đang ở trạng thái SCHEDULED hoặc RESCHEDULED.');
-  }
-
-  // Cập nhật thông tin
-  interview.status = 'STARTED';
-  interview.startTime = new Date();
-  interview.changeHistory.push({
-    timestamp: new Date(),
-    action: 'STARTED',
-    actor: recruiterId
-  });
-  await interview.save();
-
-  logger.info(`Interview ${interviewId} started by recruiter ${recruiterId}`);
-
-  return interview;
-};
-
-/**
- * Kết thúc phỏng vấn
- * @param {string} interviewId - ID của cuộc phỏng vấn
- * @param {string} recruiterId - ID của recruiter
- * @param {Object} data - Dữ liệu kết thúc phỏng vấn
- * @returns {Object} Cuộc phỏng vấn đã kết thúc
- */
-export const completeInterview = async (interviewId, recruiterId, data) => {
-  const { notes } = data;
-
-  const interview = await InterviewRoom.findById(interviewId)
-    .populate('candidateId', 'fullName email')
-    .populate({
-      path: 'applicationId',
-      select: 'appliedPosition jobId',
-      populate: {
-        path: 'jobId',
-        select: 'title company',
-        populate: {
-          path: 'company',
-          select: 'companyName'
-        }
-      }
-    });
-
-  if (!interview) {
-    throw new NotFoundError('Không tìm thấy cuộc phỏng vấn.');
-  }
-
-  // Kiểm tra quyền
-  if (interview.recruiterId.toString() !== recruiterId.toString()) {
-    throw new ForbiddenError('Bạn không có quyền kết thúc cuộc phỏng vấn này.');
-  }
-
-  // Chỉ có thể kết thúc khi status là STARTED
-  if (interview.status !== 'STARTED') {
-    throw new BadRequestError('Chỉ có thể kết thúc cuộc phỏng vấn đang ở trạng thái STARTED.');
-  }
-
-  // Lấy thông tin recruiter
-  const recruiter = await User.findById(recruiterId).select('fullName');
-
-  // Cập nhật thông tin interview
-  interview.status = 'COMPLETED';
-  interview.endTime = new Date();
-  
-  // Tính thời lượng phỏng vấn
-  const durationMs = interview.endTime - interview.startTime;
-  const durationMinutes = Math.round(durationMs / (1000 * 60));
-  
-  // Thêm vào changeHistory thay vì cập nhật notes
-  interview.changeHistory.push({
-    timestamp: new Date(),
-    action: 'COMPLETED',
-    notes: notes || `Phỏng vấn kết thúc. Thời lượng: ${durationMinutes} phút.`,
-    actor: recruiterId
-  });
-
-  await interview.save();
-
-  // === BƯỚC NÂNG CẤP: TỰ ĐỘNG CẬP NHẬT APPLICATION ===
-  if (interview.applicationId) {
-    const application = await Application.findById(interview.applicationId);
-    if (application) {
-      const oldStatus = application.status;
-      application.status = 'INTERVIEWED';
-      application.lastStatusUpdateAt = new Date();
-
-      // Ghi log vào Application
-      application.activityHistory.push({
-        actor: recruiterId,
-        action: 'INTERVIEW_COMPLETED',
-        details: { interviewId: interview._id },
-        timestamp: new Date()
-      });
-      
-      application.activityHistory.push({
-        actor: recruiterId,
-        action: 'STATUS_CHANGE',
-        details: { from: oldStatus, to: 'INTERVIEWED' },
-        timestamp: new Date()
-      });
-      
-      await application.save();
-      logger.info(`Updated application ${application._id} status from ${oldStatus} to INTERVIEWED after interview completion`);
-    }
-  }
-
-  // Lấy thông tin để gửi thông báo
-  const jobTitle = interview.applicationId?.jobId?.title || 'Vị trí ứng tuyển';
-  const companyName = interview.applicationId?.jobId?.company?.companyName || 'Công ty';
-
-  // Gửi thông báo qua RabbitMQ để worker xử lý
-  queueService.publishNotification(rabbitmq.ROUTING_KEYS.INTERVIEW_COMPLETE, {
-    type: 'INTERVIEW_COMPLETE',
-    recipientId: interview.candidateId._id.toString(),
-    data: {
-      interviewId: interview._id.toString(),
-      roomName: interview.roomName,
-      duration: durationMinutes,
-      durationMs: durationMs,
-      recruiterName: recruiter.fullName,
-      candidateName: interview.candidateId.fullName,
-      candidateEmail: interview.candidateId.email,
-      jobTitle,
-      companyName,
-      startTime: interview.startTime,
-      endTime: interview.endTime,
-      emailSubject: `[${companyName}] Phỏng vấn đã hoàn thành`,
-      emailTemplate: 'interview-complete'
-    }
-  });
-
-  logger.info(`Interview ${interviewId} completed by recruiter ${recruiterId}. Duration: ${durationMinutes} minutes`);
-
-  return interview;
-};
 
 /**
  * Thêm ghi chú vào cuộc phỏng vấn

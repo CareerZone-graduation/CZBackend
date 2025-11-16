@@ -69,8 +69,6 @@ User applies → job.service.js publishes NEW_APPLICATION
 | `createInterviewReminderNotification()` | Nhắc nhở phỏng vấn | Worker |
 | `createProfileViewNotification()` | Thông báo xem hồ sơ | Worker |
 | `createJobRecommendationNotification()` | Gợi ý việc làm | Worker |
-| `createSystemNotification()` | Thông báo hệ thống | Worker |
-| `processLegacyNotification()` | Backward compatibility | Worker |
 | `upsertRecruiterApplicantsRollup()` | Enhanced with better logging | Worker |
 
 ---

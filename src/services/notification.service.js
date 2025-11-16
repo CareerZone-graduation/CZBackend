@@ -1,5 +1,5 @@
 import admin from '../config/firebase.js';
-import { Notification, Application, User, Job, InterviewRoom, CandidateProfile } from '../models/index.js';
+import { Notification, Application, User, Job, InterviewRoom, CandidateProfile, NotificationHistory, JobAlertSubscription } from '../models/index.js';
 import { NotFoundError, BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
@@ -59,7 +59,7 @@ export async function pushNotification(userId, payload) {
       }
     }
 
-    return { success: true, response, notification };
+    return { success: true, response };
   } catch (error) {
     logger.error('Error sending notification:', error);
     return { success: false, error };
@@ -172,12 +172,14 @@ const getStatusMessage = (status, jobTitle) => {
  * Tạo thông báo xác nhận cho ứng viên khi nộp đơn thành công.
  */
 export const createApplicationSubmittedNotification = async (applicationId) => {
+    logger.info(applicationId)
 
     // lấy userId từ applicationId
     const application = await Application.findById(applicationId);
     const candidateProfileId = application.candidateProfileId;
-    const candidateId = await CandidateProfile.findById(candidateProfileId).select('userId').userId;
-    const notification = await Notification.create({
+    logger.info(candidateProfileId);
+    const candidateId = (await CandidateProfile.findById(candidateProfileId).select('userId')).userId;
+    await Notification.create({
       userId: new mongoose.Types.ObjectId(candidateId),
       title:"Nộp đơn thành công",
       message: `Bạn đã nộp đơn thành công vào vị trí "${application.jobSnapshot.title}" tại ${application.jobSnapshot.company}.`,
@@ -238,22 +240,29 @@ export const createRatingUpdateNotification = async (applicationId, newRating) =
 
 
 export const createInterviewScheduledNotification = async (applicationId, interviewId) => {
+  logger.info(`Creating INTERVIEW_SCHEDULED notification for applicationId: ${applicationId}, interviewId: ${interviewId}`);
   const application = await Application.findById(applicationId);
   const interview = await InterviewRoom.findById(interviewId);
   const candidateProfileId = application.candidateProfileId;
   const candidateId = await CandidateProfile.findById(candidateProfileId).select('userId').userId;
 
+  const scheduledTimeFormatted = new Date(interview.scheduledTime).toLocaleString('vi-VN', {
+    dateStyle: 'short',
+    timeStyle: 'short'
+  });
+
   const notification = await Notification.create({
     userId: new mongoose.Types.ObjectId(candidateId),
     title: "Lịch phỏng vấn đã được lên lịch",
-    message: `Bạn có một lịch phỏng vấn cho vị trí "${application.jobSnapshot.title}" tại ${application.jobSnapshot.company}.`,
+    message: `Bạn có một lịch phỏng vấn cho vị trí "${application.jobSnapshot.title}" tại ${application.jobSnapshot.company} vào ${scheduledTimeFormatted}.`,
     type: 'interview',
     entity: {
       type: "InterviewRoom",
       id: new mongoose.Types.ObjectId(interviewId)
     },
     metadata: {
-      interviewId: interviewId.toString()
+      interviewId: interviewId.toString(),
+      scheduledTime: interview.scheduledTime.toISOString()
     }
   });
   // đồng thời push thông báo đẩy
@@ -388,18 +397,250 @@ export const createInterviewReminderNotification = async (interviewId) => {
   // đồng thời push thông báo đẩy
   await pushNotification(interview.candidateId, {
     title,
-    body,
+    body: message,
     data: {
       url: `/interviews/${interviewId}`,
     }
   });
   await pushNotification(interview.recruiterId, {
     title,
-    body,
+    body: message,
     data: {
       url: `/interviews/${interviewId}`,
     }
   });
+};
+
+/**
+ * Tạo thông báo khi phỏng vấn bắt đầu.
+ * @param {string} interviewId - ID của cuộc phỏng vấn
+ * @returns {Promise<void>}
+ */
+export const createInterviewStartedNotification = async (interviewId) => {
+  const interview = await InterviewRoom.findById(interviewId)
+    .populate('candidateId', 'fullName')
+    .populate('recruiterId', 'fullName')
+    .populate({
+      path: 'applicationId',
+      select: 'jobSnapshot'
+    });
+
+  if (!interview) {
+    logger.warn('INTERVIEW_STARTED - Interview not found', { interviewId });
+    throw new NotFoundError('Cuộc phỏng vấn không tồn tại.');
+  }
+
+  const title = '🎥 Phỏng vấn đã bắt đầu';
+  const candidateMessage = `Cuộc phỏng vấn cho vị trí "${interview.applicationId?.jobSnapshot?.title}" đã bắt đầu.`;
+  const recruiterMessage = `Cuộc phỏng vấn với ${interview.candidateId.fullName} đã bắt đầu.`;
+
+  // Thông báo cho candidate
+  const notificationForCandidate = await Notification.create({
+    userId: new mongoose.Types.ObjectId(interview.candidateId._id),
+    title,
+    message: candidateMessage,
+    type: 'interview',
+    entity: {
+      type: 'InterviewRoom',
+      id: new mongoose.Types.ObjectId(interviewId)
+    },
+    metadata: {
+      interviewId: interviewId.toString(),
+      startTime: interview.startTime?.toISOString()
+    }
+  });
+
+  // Thông báo cho recruiter
+  const notificationForRecruiter = await Notification.create({
+    userId: new mongoose.Types.ObjectId(interview.recruiterId._id),
+    title,
+    message: recruiterMessage,
+    type: 'interview',
+    entity: {
+      type: 'InterviewRoom',
+      id: new mongoose.Types.ObjectId(interviewId)
+    },
+    metadata: {
+      interviewId: interviewId.toString(),
+      startTime: interview.startTime?.toISOString()
+    }
+  });
+
+  // Push notifications
+  await pushNotification(interview.candidateId._id, {
+    title,
+    body: candidateMessage,
+    data: {
+      url: `/interviews/${interviewId}`,
+    }
+  });
+
+  await pushNotification(interview.recruiterId._id, {
+    title,
+    body: recruiterMessage,
+    data: {
+      url: `/interviews/${interviewId}`,
+    }
+  });
+
+  logger.info(`Interview started notifications sent for interview ${interviewId}`);
+};
+
+/**
+ * Tạo thông báo khi phỏng vấn kết thúc.
+ * @param {string} interviewId - ID của cuộc phỏng vấn
+ * @param {number} duration - Thời lượng phỏng vấn (phút)
+ * @returns {Promise<void>}
+ */
+export const createInterviewEndedNotification = async (interviewId, duration) => {
+  const interview = await InterviewRoom.findById(interviewId)
+    .populate('candidateId', 'fullName')
+    .populate('recruiterId', 'fullName')
+    .populate({
+      path: 'applicationId',
+      select: 'jobSnapshot'
+    });
+
+  if (!interview) {
+    logger.warn('INTERVIEW_ENDED - Interview not found', { interviewId });
+    throw new NotFoundError('Cuộc phỏng vấn không tồn tại.');
+  }
+
+  const title = '✅ Phỏng vấn đã kết thúc';
+  const candidateMessage = `Cuộc phỏng vấn cho vị trí "${interview.applicationId?.jobSnapshot?.title}" đã kết thúc. Thời lượng: ${duration} phút.`;
+  const recruiterMessage = `Cuộc phỏng vấn với ${interview.candidateId.fullName} đã kết thúc. Thời lượng: ${duration} phút.`;
+
+  // Thông báo cho candidate
+  const notificationForCandidate = await Notification.create({
+    userId: new mongoose.Types.ObjectId(interview.candidateId._id),
+    title,
+    message: candidateMessage,
+    type: 'interview',
+    entity: {
+      type: 'InterviewRoom',
+      id: new mongoose.Types.ObjectId(interviewId)
+    },
+    metadata: {
+      interviewId: interviewId.toString(),
+      endTime: interview.endTime?.toISOString(),
+      duration
+    }
+  });
+
+  // Thông báo cho recruiter
+  const notificationForRecruiter = await Notification.create({
+    userId: new mongoose.Types.ObjectId(interview.recruiterId._id),
+    title,
+    message: recruiterMessage,
+    type: 'interview',
+    entity: {
+      type: 'InterviewRoom',
+      id: new mongoose.Types.ObjectId(interviewId)
+    },
+    metadata: {
+      interviewId: interviewId.toString(),
+      endTime: interview.endTime?.toISOString(),
+      duration
+    }
+  });
+
+  // Push notifications
+  await pushNotification(interview.candidateId._id, {
+    title,
+    body: candidateMessage,
+    data: {
+      url: `/interviews/${interviewId}`,
+    }
+  });
+
+  await pushNotification(interview.recruiterId._id, {
+    title,
+    body: recruiterMessage,
+    data: {
+      url: `/interviews/${interviewId}`,
+    }
+  });
+
+  logger.info(`Interview ended notifications sent for interview ${interviewId}`);
+};
+
+/**
+ * Tạo thông báo khi recording đã sẵn sàng.
+ * @param {string} interviewId - ID của cuộc phỏng vấn
+ * @param {number} recordingDuration - Thời lượng recording (giây)
+ * @returns {Promise<void>}
+ */
+export const createRecordingAvailableNotification = async (interviewId, recordingDuration) => {
+  const interview = await InterviewRoom.findById(interviewId)
+    .populate('candidateId', 'fullName')
+    .populate('recruiterId', 'fullName')
+    .populate({
+      path: 'applicationId',
+      select: 'jobSnapshot'
+    });
+
+  if (!interview) {
+    logger.warn('RECORDING_AVAILABLE - Interview not found', { interviewId });
+    throw new NotFoundError('Cuộc phỏng vấn không tồn tại.');
+  }
+
+  const durationMinutes = Math.round(recordingDuration / 60);
+  const title = '🎬 Bản ghi phỏng vấn đã sẵn sàng';
+  const candidateMessage = `Bản ghi phỏng vấn cho vị trí "${interview.applicationId?.jobSnapshot?.title}" đã sẵn sàng để xem. Thời lượng: ${durationMinutes} phút.`;
+  const recruiterMessage = `Bản ghi phỏng vấn với ${interview.candidateId.fullName} đã sẵn sàng để xem. Thời lượng: ${durationMinutes} phút.`;
+
+  // Thông báo cho candidate
+  const notificationForCandidate = await Notification.create({
+    userId: new mongoose.Types.ObjectId(interview.candidateId._id),
+    title,
+    message: candidateMessage,
+    type: 'interview',
+    entity: {
+      type: 'InterviewRoom',
+      id: new mongoose.Types.ObjectId(interviewId)
+    },
+    metadata: {
+      interviewId: interviewId.toString(),
+      recordingDuration,
+      recordingUrl: interview.recording?.url
+    }
+  });
+
+  // Thông báo cho recruiter
+  const notificationForRecruiter = await Notification.create({
+    userId: new mongoose.Types.ObjectId(interview.recruiterId._id),
+    title,
+    message: recruiterMessage,
+    type: 'interview',
+    entity: {
+      type: 'InterviewRoom',
+      id: new mongoose.Types.ObjectId(interviewId)
+    },
+    metadata: {
+      interviewId: interviewId.toString(),
+      recordingDuration,
+      recordingUrl: interview.recording?.url
+    }
+  });
+
+  // Push notifications
+  await pushNotification(interview.candidateId._id, {
+    title,
+    body: candidateMessage,
+    data: {
+      url: `/interviews/${interviewId}`,
+    }
+  });
+
+  await pushNotification(interview.recruiterId._id, {
+    title,
+    body: recruiterMessage,
+    data: {
+      url: `/interviews/${interviewId}`,
+    }
+  });
+
+  logger.info(`Recording available notifications sent for interview ${interviewId}`);
 };
 
 
@@ -421,7 +662,7 @@ export const createProfileViewNotification = async (payload) => {
   const title = '👀 Hồ sơ của bạn đã được xem';
   const message = `Nhà tuyển dụng từ ${companyName || 'Một công ty'} vừa xem hồ sơ của bạn.`;
 
-  return await Notification.create({
+  const notification = await Notification.create({
     userId: new mongoose.Types.ObjectId(recipientId),
     title,
     message,
@@ -437,6 +678,17 @@ export const createProfileViewNotification = async (payload) => {
       companyLogo
     },
   });
+
+  // Gửi push notification
+  await pushNotification(recipientId, {
+    title,
+    body: message,
+    data: {
+      url: `/recruiters/profile/${recruiterProfileId}`
+    }
+  });
+
+  return notification;
 };
 
 /**
@@ -456,7 +708,7 @@ export const createJobRecommendationNotification = async (payload) => {
   const title = '🎯 Gợi ý việc làm phù hợp';
   const message = `Chúng tôi đã tìm thấy ${jobIds.length} công việc phù hợp với bạn. ${reason || ''}`;
 
-  return await Notification.create({
+  const notification = await Notification.create({
     userId: new mongoose.Types.ObjectId(recipientId),
     title,
     message,
@@ -467,80 +719,20 @@ export const createJobRecommendationNotification = async (payload) => {
       jobIds: jobIds.map(id => id.toString())
     },
   });
-};
 
-/**
- * Tạo thông báo hệ thống.
- * @param {object} payload - Dữ liệu từ worker
- * @returns {Promise<Notification>} - Thông báo đã tạo
- */
-export const createSystemNotification = async (payload) => {
-  const { recipientId, data } = payload;
-  const { actionType, entityId, entityTitle, link, icon, actionText, customTitle, customMessage } = data;
-
-  if (!recipientId) {
-    logger.warn('SYSTEM_NOTIFICATION payload is missing recipientId.', payload);
-    throw new BadRequestError('Thiếu thông tin bắt buộc để tạo thông báo.');
-  }
-
-  const title = customTitle || getSystemNotificationTitle(actionType);
-  const message = customMessage || getSystemNotificationMessage(actionType, entityTitle);
-
-  return await Notification.create({
-    userId: new mongoose.Types.ObjectId(recipientId),
+  // Gửi push notification
+  await pushNotification(recipientId, {
     title,
-    message,
-    type: 'system',
-    entity: entityId ? {
-      type: getEntityTypeFromActionType(actionType),
-      id: entityId,
-    } : undefined,
-    metadata: {
-      actionType,
-      entityId: entityId?.toString(),
-      entityTitle,
-      link,
-      icon: icon || 'info',
-      actionText
-    },
-  });
-};
-
-/**
- * Hàm wrapper để xử lý backward compatibility với logic cũ.
- * Worker sẽ gọi hàm này cho các message với format cũ.
- * @param {object} payload - Dữ liệu message theo format cũ
- * @returns {Promise<Notification>} - Thông báo đã tạo
- */
-export const processLegacyNotification = async (payload) => {
-  logger.info('Processing legacy notification:', payload);
-
-  try {
-    switch (payload.type) {
-      case 'APPLICATION_UPDATE':
-        return await createApplicationUpdateNotification(payload);
-      
-      case 'INTERVIEW_REMINDER':
-        return await createInterviewReminderNotification(payload);
-      
-      case 'PROFILE_VIEW':
-        return await createProfileViewNotification(payload);
-      
-      case 'JOB_RECOMMENDATION':
-        return await createJobRecommendationNotification(payload);
-      
-      case 'SYSTEM_NOTIFICATION':
-        return await createSystemNotification(payload);
-      
-      default:
-        logger.warn('Unknown legacy notification type:', payload.type);
-        throw new BadRequestError(`Unknown notification type: ${payload.type}`);
+    body: message,
+    data: {
+      url: '/jobs/recommendations'
     }
-  } catch (error) {
-    logger.error('Error processing legacy notification:', error);
-    throw error;
-  }
+  });
+
+  return notification;
 };
+
+
 
 /**
  * Helper function to get system notification title
@@ -589,6 +781,227 @@ const getEntityTypeFromActionType = (actionType) => {
   };
   
   return typeMapping[actionType] || 'System';
+};
+
+// =================================================================
+// Các Hàm Xử Lý Message từ Worker (Handler Functions)
+// Tất cả các hàm này nhận payload làm tham số duy nhất
+// =================================================================
+
+/**
+ * Xử lý message NEW_APPLICATION - Tạo thông báo gộp cho nhà tuyển dụng.
+ * @param {object} payload - Toàn bộ payload từ RabbitMQ
+ * @returns {Promise<Notification>} - Thông báo đã tạo
+ */
+export const handleNewApplication = async (payload) => {
+  return upsertRecruiterApplicantsRollup(payload);
+};
+
+/**
+ * Xử lý message STATUS_UPDATE - Route đến các handler con tương ứng.
+ * @param {object} payload - Toàn bộ payload từ RabbitMQ
+ */
+export const handleStatusUpdate = async (payload) => {
+  const applicationId = payload.data.applicationId;
+  
+  switch (payload.type) {
+    case 'APPLICATION_SUBMITTED':
+      return createApplicationSubmittedNotification(applicationId);
+    
+    case 'RATING_UPDATE':
+      return createRatingUpdateNotification(applicationId, payload.data.newRating);
+    
+    case 'INTERVIEW_SCHEDULED':
+      return createInterviewScheduledNotification(applicationId, payload.data.interviewId);
+    
+    case 'PROFILE_VIEW':
+      return createProfileViewNotification(payload);
+    
+    default:
+      logger.warn(`⚠️ Unknown STATUS_UPDATE type: ${payload.type}`);
+  }
+};
+
+/**
+ * Xử lý message INTERVIEW_REMINDER.
+ * @param {object} payload - Toàn bộ payload từ RabbitMQ
+ */
+export const handleInterviewReminder = async (payload) => {
+  const { interviewId } = payload.data;
+  if (!interviewId) {
+    throw new BadRequestError('Missing interviewId in payload');
+  }
+  return createInterviewReminderNotification(interviewId);
+};
+
+/**
+ * Xử lý message INTERVIEW_STARTED.
+ * @param {object} payload - Toàn bộ payload từ RabbitMQ
+ */
+export const handleInterviewStarted = async (payload) => {
+  const { interviewId } = payload.data;
+  if (!interviewId) {
+    throw new BadRequestError('Missing interviewId in payload');
+  }
+  return createInterviewStartedNotification(interviewId);
+};
+
+/**
+ * Xử lý message INTERVIEW_ENDED.
+ * @param {object} payload - Toàn bộ payload từ RabbitMQ
+ */
+export const handleInterviewEnded = async (payload) => {
+  const { interviewId, duration } = payload.data;
+  if (!interviewId) {
+    throw new BadRequestError('Missing interviewId in payload');
+  }
+  return createInterviewEndedNotification(interviewId, duration);
+};
+
+/**
+ * Xử lý message RECORDING_AVAILABLE.
+ * @param {object} payload - Toàn bộ payload từ RabbitMQ
+ */
+export const handleRecordingAvailable = async (payload) => {
+  const { interviewId, recordingDuration } = payload.data;
+  if (!interviewId) {
+    throw new BadRequestError('Missing interviewId in payload');
+  }
+  return createRecordingAvailableNotification(interviewId, recordingDuration);
+};
+
+/**
+ * Xử lý message INTERVIEW_RESCHEDULE.
+ * @param {object} payload - Toàn bộ payload từ RabbitMQ
+ */
+export const handleInterviewReschedule = async (payload) => {
+  const { interviewId, newScheduledTime } = payload.data;
+  if (!interviewId || !newScheduledTime) {
+    throw new BadRequestError('Missing interviewId or newScheduledTime in payload');
+  }
+  return createInterviewRescheduledNotification(interviewId, newScheduledTime);
+};
+
+/**
+ * Xử lý message INTERVIEW_CANCEL.
+ * @param {object} payload - Toàn bộ payload từ RabbitMQ
+ */
+export const handleInterviewCancel = async (payload) => {
+  const { interviewId } = payload.data;
+  if (!interviewId) {
+    throw new BadRequestError('Missing interviewId in payload');
+  }
+  return createInterviewCanceledNotification(interviewId);
+};
+
+/**
+ * Xử lý message JOB_ALERT (DAILY/WEEKLY).
+ * @param {object} payload - Toàn bộ payload từ RabbitMQ
+ */
+export const processJobAlertNotification = async (payload) => {
+  const { notificationHistoryId } = payload.data;
+
+  if (!notificationHistoryId) {
+    logger.error('Job alert task is missing notificationHistoryId', { payload });
+    return;
+  }
+
+  try {
+    const history = await NotificationHistory.findById(notificationHistoryId).lean();
+    if (!history) {
+      logger.error(`NotificationHistory with ID ${notificationHistoryId} not found.`);
+      return;
+    }
+
+    const { userId, subscriptionId, jobIds, notificationType, deliveryMethod } = history;
+
+    // Fetch all data in parallel
+    const [user, subscription, jobs] = await Promise.all([
+      User.findById(userId).select('fullName email').lean(),
+      JobAlertSubscription.findById(subscriptionId).lean(),
+      Job.find({ _id: { $in: jobIds } })
+        .populate('recruiterProfileId', 'company.name company.logo')
+        .limit(20)
+        .lean()
+    ]);
+
+    if (!user || !subscription || jobs.length === 0) {
+      logger.warn('Missing data for processing job alert notification.', { 
+        notificationHistoryId, 
+        userId, 
+        subscriptionId, 
+        hasJobs: jobs.length > 0 
+      });
+      return;
+    }
+
+    const frequency = subscription.frequency;
+    const templateType = notificationType;
+
+    // Import các dependencies cần thiết
+    const NotificationTemplateService = (await import('./notificationTemplate.service.js')).default;
+    const emailService = await import('./email.service.js');
+
+    // 1. Handle EMAIL notifications
+    if (deliveryMethod === 'EMAIL' || deliveryMethod === 'BOTH') {
+      const subject = NotificationTemplateService.generateSubject(jobs, subscription.keyword, frequency);
+
+      const templateData = {
+        user,
+        jobs,
+        subscription,
+        notificationId: notificationHistoryId
+      };
+
+      const html = await NotificationTemplateService.generateEmailTemplate(templateType, templateData);
+
+      await emailService.sendEmail({
+        to: user.email,
+        subject,
+        html,
+      });
+
+      logger.info(`Job alert email sent to ${user.email} for subscription ${subscriptionId}`);
+    }
+
+    // 2. Handle IN-APP notifications
+    if (deliveryMethod === 'APPLICATION' || deliveryMethod === 'BOTH') {
+      const title = NotificationTemplateService.generateSubject(jobs, subscription.keyword, frequency);
+      const message = `Có ${jobs.length} việc làm mới phù hợp với tìm kiếm của bạn cho từ khóa "${subscription.keyword}".`;
+
+      await Notification.create({
+        userId,
+        title,
+        message,
+        type: 'job_alert',
+        entity: {
+          type: 'JobAlertSubscription',
+          id: subscriptionId,
+        },
+        metadata: {
+          subscriptionId: subscriptionId.toString(),
+          jobIds: jobIds.map(j => j.toString()),
+          notificationHistoryId: notificationHistoryId.toString(),
+        },
+      });
+
+      // Gửi push notification
+      await pushNotification(userId, {
+        title,
+        body: message,
+        data: {
+          url: `/my-settings/job-alerts/${subscriptionId}`
+        }
+      });
+
+      logger.info(`In-app job alert and push notification created for user ${userId} for subscription ${subscriptionId}`);
+    }
+
+    logger.info(`Job alert notification processed successfully for history ID ${notificationHistoryId}`);
+  } catch (error) {
+    logger.error(`Error processing job alert notification for history ID ${notificationHistoryId}:`, error);
+    throw error;
+  }
 };
 
 // =================================================================
