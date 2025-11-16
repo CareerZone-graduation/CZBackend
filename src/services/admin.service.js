@@ -191,7 +191,9 @@ export const rejectJob = async (jobId) => {
 export const getUsersForAdmin = async (queryParams) => {
   const { page = 1, limit = 10, search, status, role, companyRegistration, sort = '-createdAt' } = queryParams;
 
-  const filter = {};
+  const filter = {
+    role: { $ne: 'admin' } // Loại bỏ admin khỏi danh sách
+  };
 
   // Tìm kiếm theo email hoặc fullname
   if (search) {
@@ -935,7 +937,7 @@ export const getAdminStats = async () => {
     recruitersWithoutCompany, // Đếm NTD chưa có thông tin công ty
     bannedUsers             // Đếm tài khoản bị khóa
   ] = await Promise.all([
-    User.countDocuments(),
+    User.countDocuments({ role: { $ne: 'admin' } }), // Loại bỏ admin
     User.countDocuments({ role: 'candidate' }),
     User.countDocuments({ role: 'recruiter' }),
     Job.countDocuments(),
@@ -949,7 +951,7 @@ export const getAdminStats = async () => {
     }),
     // --- LOGIC MỚI ---
     RecruiterProfile.countDocuments({ 'company.name': { $exists: false } }),
-    User.countDocuments({ active: false })
+    User.countDocuments({ active: false, role: { $ne: 'admin' } }) // Loại bỏ admin trong banned users
   ]);
 
   return {
