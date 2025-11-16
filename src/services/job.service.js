@@ -901,7 +901,7 @@ export const getSavedJobs = async (userId, options) => {
   };
 };
 export const getJobsByCompany = async (companyId, options = {}) => {
-  const { page = 1, limit = 10, province, sortBy, search, ...filters } = options;
+  const { page = 1, limit = 10, province, sortBy, search, excludeId, ...filters } = options;
 
   // Find recruiter profile - Thử tìm theo RecruiterProfile._id trước (cho analytics)
   let recruiterProfile = await RecruiterProfile.findById(companyId).lean();
@@ -924,6 +924,11 @@ export const getJobsByCompany = async (companyId, options = {}) => {
     deadline: { $gte: new Date() }, // ✅ Fix: Chỉ lấy jobs chưa hết hạn
     recruiterProfileId: recruiterProfile._id
   };
+
+  // Exclude specific job (useful for "other jobs from this company")
+  if (excludeId) {
+    query._id = { $ne: new mongoose.Types.ObjectId(excludeId) };
+  }
 
   // Add province filter
   if (province) {

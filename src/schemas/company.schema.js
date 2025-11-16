@@ -203,7 +203,16 @@ export const companyJobsQuerySchema = z.object({
       .min(1, 'Từ khóa tìm kiếm phải có ít nhất 1 ký tự')
       .max(200, 'Từ khóa tìm kiếm không được vượt quá 200 ký tự')
       .optional()
+  ),
+  excludeId: z.preprocess(
+    (val) => {
+      if (!val || typeof val !== 'string') return undefined;
+      return val.trim();
+    },
+    z.string()
+      .regex(/^[0-9a-fA-F]{24}$/, 'ID công việc không hợp lệ')
+      .optional()
   )
 }).strict({
-  message: 'Chỉ chấp nhận các tham số truy vấn hợp lệ: page, limit, province, sortBy, search'
+  message: 'Chỉ chấp nhận các tham số truy vấn hợp lệ: page, limit, province, sortBy, search, excludeId'
 });

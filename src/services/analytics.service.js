@@ -528,7 +528,7 @@ export const getJobCategories = async () => {
     { 
       $match: { 
         status: "ACTIVE", 
-        moderationStatus: "APPROVED" // Sửa từ approved thành moderationStatus
+        // moderationStatus: "APPROVED" // Sửa từ approved thành moderationStatus
       } 
     },
     { 
