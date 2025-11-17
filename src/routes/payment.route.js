@@ -26,4 +26,8 @@ router.get(
     paymentController.handleZaloPayRedirect
 );
 
+// VNPay routes
+router.get('/vnpay-ipn', paymentController.handleVNPayIPN); // Server-to-server callback
+router.get('/vnpay-return', paymentController.handleVNPayReturn); // User redirect back
+
 export default router;
