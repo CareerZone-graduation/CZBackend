@@ -1,26 +1,37 @@
-import crypto from 'crypto';
-import moment from 'moment';
-import config from '../config/index.js';
-import CoinRecharge from '../models/CoinRecharge.js';
-import User from '../models/User.js';
-import { BadRequestError } from '../utils/AppError.js';
-import logger from '../utils/logger.js';
-import { recordCreditTransaction } from './creditHistory.service.js';
-import { TRANSACTION_TYPES, TRANSACTION_CATEGORIES } from '../constants/index.js';
-import querystring from 'qs';
+import crypto from "crypto";
+import moment from "moment";
+import config from "../config/index.js";
+import CoinRecharge from "../models/CoinRecharge.js";
+import User from "../models/User.js";
+import { BadRequestError } from "../utils/AppError.js";
+import logger from "../utils/logger.js";
+import { recordCreditTransaction } from "./creditHistory.service.js";
+
+import querystring from "qs";
+import mongoose from "mongoose";
+import { TRANSACTION_CATEGORIES, TRANSACTION_TYPES } from "../constants/creditTransaction.constant.js";
 
 const { vnpay } = config;
 const COIN_CONVERSION_RATE = 100; // 1 coin = 100 VND
 
+// Dán hàm này đè lên hàm sortObject cũ của bạn
 /**
- * Sort object by key
+ * Sort object by key (THEO CHUẨN CỦA VNPAY - ĐÃ SỬA LỖI 'hasOwnProperty')
  */
 function sortObject(obj) {
-  const sorted = {};
-  const keys = Object.keys(obj).sort();
-  keys.forEach((key) => {
-    sorted[key] = obj[key];
-  });
+  let sorted = {};
+  let str = [];
+  let key;
+  for (key in obj) {
+    // SỬA LỖI: Dùng cách gọi an toàn cho các đối tượng không có prototype
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      str.push(encodeURIComponent(key));
+    }
+  }
+  str.sort();
+  for (key = 0; key < str.length; key++) {
+    sorted[str[key]] = encodeURIComponent(obj[str[key]]).replace(/%20/g, "+");
+  }
   return sorted;
 }
 
@@ -32,269 +43,138 @@ function sortObject(obj) {
  * @returns {Promise<object>} - Payment URL and transaction info
  */
 export const createVNPayPaymentUrl = async (userId, coins, ipAddr) => {
-  try {
-    const amountVND = coins * COIN_CONVERSION_RATE;
-    const createDate = moment().format('YYYYMMDDHHmmss');
-    const orderId = moment().format('DDHHmmss'); // Unique order ID
-    const txnRef = `VNPAY_${orderId}_${userId}`; // Transaction reference
+  if (!vnpay.tmnCode || !vnpay.hashSecret) {
+    throw new BadRequestError(
+      "VNPAY configuration is missing. Please check environment variables."
+    );
+  }
 
-    // Create pending recharge record
-    const newRecharge = await CoinRecharge.create({
-      userId,
-      coinAmount: coins,
-      amountPaid: amountVND,
-      paymentMethod: 'VNPAY',
-      transactionCode: txnRef,
-      status: 'PENDING',
-    });
+  const amountVND = coins * COIN_CONVERSION_RATE;
+  const orderId = new mongoose.Types.ObjectId().toString();
 
-    logger.info(`Created pending VNPay recharge: ${txnRef}`);
+  await CoinRecharge.create({
+    userId,
+    coinAmount: coins,
+    amountPaid: amountVND,
+    paymentMethod: "VNPAY",
+    transactionCode: orderId,
+    status: "PENDING",
+  });
 
-    // Get user info
-    const user = await User.findById(userId).select('email fullname');
+  let vnp_Params = {
+    vnp_Version: "2.1.0",
+    vnp_Command: "pay",
+    vnp_TmnCode: vnpay.tmnCode,
+    vnp_Locale: "vn",
+    vnp_CurrCode: "VND",
+    vnp_TxnRef: orderId,
+    vnp_OrderInfo: `Nap ${coins} xu vao tai khoan`,
+    vnp_OrderType: "other",
+    vnp_Amount: amountVND * 100, // Amount in cents
+    vnp_ReturnUrl: vnpay.returnUrl,
+    vnp_IpAddr: ipAddr,
+    vnp_CreateDate: moment().format("YYYYMMDDHHmmss"),
+  };
 
-    // Build VNPay params
-    let vnp_Params = {
-      vnp_Version: '2.1.0',
-      vnp_Command: 'pay',
-      vnp_TmnCode: vnpay.tmnCode,
-      vnp_Locale: 'vn',
-      vnp_CurrCode: 'VND',
-      vnp_TxnRef: txnRef,
-      vnp_OrderInfo: `Nap ${coins} xu CareerZone`,
-      vnp_OrderType: 'other',
-      vnp_Amount: amountVND * 100,
-      vnp_ReturnUrl: vnpay.returnUrl,
-      vnp_IpAddr: ipAddr === '::1' ? '127.0.0.1' : ipAddr, // Force IPv4 localhost
-      vnp_CreateDate: createDate,
-    };
+  // 1. Dùng hàm sortObject CHUẨN (đã thay thế ở trên)
+  vnp_Params = sortObject(vnp_Params);
 
-    // Add optional params (sanitized for VNPay)
-    if (user?.email) {
-      vnp_Params.vnp_Bill_Email = user.email.trim();
-    }
-    if (user?.fullname) {
-      const sanitizedName = user.fullname
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-zA-Z0-9\s]/g, '')
-        .trim();
-      // vnp_Params.vnp_Bill_FirstName = sanitizedName; // Bạn đã comment dòng này, vẫn giữ nguyên
-    }
+  // 2. Tạo signData từ object đã sort và encode
+  const signData = querystring.stringify(vnp_Params, { encode: false }); //
 
-    // Sort params
-    vnp_Params = sortObject(vnp_Params);
+  // 3. Tạo chữ ký
+  const hmac = crypto.createHmac("sha512", vnpay.hashSecret);
 
-    // === SỬA LỖI TẠI ĐÂY ===
+  // SỬA LẠI: Dùng Buffer.from thay cho 'new Buffer' (đã cũ)
+  const signed = hmac.update(Buffer.from(signData, "utf-8")).digest("hex");
 
-    // 1. Tạo signData thủ công từ các giá trị thô (giống như hàm verify)
-    const signData = Object.keys(vnp_Params)
-      .map(key => `${key}=${vnp_Params[key]}`)
-      .join('&');
+  vnp_Params["vnp_SecureHash"] = signed; //
 
-    // 2. Tạo chữ ký
-    const hmac = crypto.createHmac("sha512", vnpay.hashSecret);
-    const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest("hex");
+  // 4. SỬA LẠI: Thêm { encode: false } khi tạo URL cuối cùng
+  const paymentUrl =
+    vnpay.url + "?" + querystring.stringify(vnp_Params, { encode: false });
 
-    // 3. Thêm chữ ký vào params
-    vnp_Params.vnp_SecureHash = signed;
-
-    // 4. Tạo URL thanh toán bằng cách mã hóa TOÀN BỘ params (bao gồm cả chữ ký)
-    // querystring.stringify mặc định (encode: true) sẽ mã hóa đúng chuẩn URL
-    const paymentUrl = `${vnpay.url}?${querystring.stringify(vnp_Params, { encode: true })}`;
-
-    // === KẾT THÚC SỬA LỖI ===
-
-    // Debug logging
-    logger.info('VNPay payment URL details:', {
-      signDataRaw: signData, // Log chuỗi gốc để hash
-      signature: signed,
-      paramsCount: Object.keys(vnp_Params).length, // Sẽ nhiều hơn 1 (do có vnp_SecureHash)
-      urlPreview: paymentUrl.substring(0, 150) + '...'
-    });
-
-    logger.info(`VNPay payment URL created for user ${userId}, coins: ${coins}`);
-
-    return {
-      paymentUrl,
-      transactionCode: txnRef,
-      orderId,
-      rechargeId: newRecharge._id,
-    };
-  } catch (error) {
-    logger.error('Error creating VNPay payment URL:', error);
-    throw new BadRequestError('Không thể tạo URL thanh toán VNPay');
-  }
+  return { paymentUrl };
 };
 
-/**
- * Verify VNPay IPN callback
- * @param {object} vnpParams - VNPay callback params
- * @returns {Promise<object>} - Verification result
- */
-export const verifyVNPayCallback = async (vnpParams) => {
-  try {
-    const secureHash = vnpParams.vnp_SecureHash;
-    delete vnpParams.vnp_SecureHash;
-    delete vnpParams.vnp_SecureHashType;
+export const handleVNPayReturn = async (vnpayParams) => {
+  const secureHash = vnpayParams["vnp_SecureHash"];
 
-    // Sort and verify hash
-    const sortedParams = sortObject(vnpParams);
-    const signData = Object.keys(sortedParams)
-      .map(key => `${key}=${sortedParams[key]}`)
-      .join('&');
-    const hmac = crypto.createHmac('sha512', vnpay.hashSecret);
-    const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest('hex');
+  // Lấy các tham số gốc TRƯỚC khi delete
+  const orderId = vnpayParams["vnp_TxnRef"];
+  const responseCode = vnpayParams["vnp_ResponseCode"];
+  const amount = vnpayParams["vnp_Amount"] / 100;
 
-    if (secureHash !== signed) {
-      logger.error('VNPay hash verification failed');
-      return { success: false, message: 'Invalid signature' };
-    }
+  delete vnpayParams["vnp_SecureHash"];
+  delete vnpayParams["vnp_SecureHashType"];
 
-    const txnRef = vnpParams.vnp_TxnRef;
-    const responseCode = vnpParams.vnp_ResponseCode;
-    const amount = vnpParams.vnp_Amount / 100; // Convert back to VND
-    const bankCode = vnpParams.vnp_BankCode;
-    const transactionNo = vnpParams.vnp_TransactionNo;
+  // 1. GỌI HÀM SORT ĐÃ SỬA
+  const vnpayParamsSorted = sortObject(vnpayParams);
 
-    logger.info(`VNPay IPN received - TxnRef: ${txnRef}, Code: ${responseCode}`);
+  const signData = querystring.stringify(vnpayParamsSorted, { encode: false });
 
-    // Find recharge record
-    const recharge = await CoinRecharge.findOne({ transactionCode: txnRef });
-    if (!recharge) {
-      logger.error(`Recharge not found for txnRef: ${txnRef}`);
-      return { success: false, message: 'Transaction not found' };
-    }
+  // 2. SỬA LỖI TÊN BIẾN:
+  // Đảm bảo tên biến này khớp với file config của bạn (thường là hashSecret)
+  const hmac = crypto.createHmac("sha512", vnpay.hashSecret); // Sửa từ vnpay.hash_secret
+  const signed = hmac.update(Buffer.from(signData, "utf-8")).digest("hex");
 
-    // Check if already processed
-    if (recharge.status === 'SUCCESS') {
-      logger.info(`Transaction ${txnRef} already processed`);
-      return { success: true, message: 'Already processed' };
-    }
+  if (secureHash !== signed) {
+    logger.warn(`VNPAY Return: Invalid signature for order ${orderId}`);
+    throw new BadRequestError("Chữ ký không hợp lệ.");
+  }
 
-    // Check response code
-    if (responseCode === '00') {
-      // Payment success
-      await CoinRecharge.findByIdAndUpdate(recharge._id, {
-        status: 'SUCCESS',
-        paymentDate: new Date(),
-        metadata: JSON.stringify({ ...vnpParams, bankCode, transactionNo }),
+  const recharge = await CoinRecharge.findOne({ transactionCode: orderId });
+
+  if (!recharge) {
+    logger.error(`VNPAY Return: Order ${orderId} not found.`);
+    throw new BadRequestError("Đơn hàng không tồn tại.");
+  }
+
+  if (recharge.status !== "PENDING") {
+    logger.info(
+      `VNPAY Return: Order ${orderId} already processed with status ${recharge.status}.`
+    );
+  }
+
+  if (responseCode === "00") {
+    recharge.status = "SUCCESS";
+    recharge.gatewayResponse = JSON.stringify(vnpayParams);
+    await recharge.save();
+
+    await User.findByIdAndUpdate(recharge.userId, {
+      $inc: { coinBalance: recharge.coinAmount },
+    });
+
+    try {
+      await recordCreditTransaction({
+        userId: recharge.userId,
+        type: TRANSACTION_TYPES.DEPOSIT,
+        category: TRANSACTION_CATEGORIES.RECHARGE,
+        amount: recharge.coinAmount,
+        description: `Nạp ${recharge.coinAmount} xu qua ${recharge.paymentMethod}`,
+        referenceId: recharge._id,
+        referenceModel: "CoinRecharge",
+        metadata: {
+          paymentMethod: recharge.paymentMethod,
+          amountPaid: recharge.amountPaid,
+          transactionCode: recharge.transactionCode,
+        },
       });
-
-      // Update user balance
-      const user = await User.findById(recharge.userId);
-      if (!user) {
-        logger.error(`User not found: ${recharge.userId}`);
-        return { success: false, message: 'User not found' };
-      }
-
-      user.coins = (user.coins || 0) + recharge.coinAmount;
-      await user.save();
-
-      // Record credit transaction
-      await recordCreditTransaction(
-        recharge.userId,
-        recharge.coinAmount,
-        TRANSACTION_TYPES.CREDIT,
-        TRANSACTION_CATEGORIES.RECHARGE,
-        `Nạp ${recharge.coinAmount} xu qua VNPay`,
-        { rechargeId: recharge._id, transactionNo }
+      logger.info(
+        `Credit transaction recorded for user ${recharge.userId}, amount: ${recharge.coinAmount}`
       );
-
-      logger.info(`VNPay payment success: ${txnRef}, User: ${user.email}, Coins: ${recharge.coinAmount}`);
-
-      return {
-        success: true,
-        message: 'Payment successful',
-        coins: recharge.coinAmount,
-        newBalance: user.coins,
-      };
-    } else {
-      // Payment failed
-      await CoinRecharge.findByIdAndUpdate(recharge._id, {
-        status: 'FAILED',
-        metadata: JSON.stringify(vnpParams),
+    } catch (transactionError) {
+      logger.error("Failed to record credit transaction for VNPAY payment:", {
+        userId: recharge.userId,
+        rechargeId: recharge._id,
+        error: transactionError.message,
       });
-
-      logger.warn(`VNPay payment failed: ${txnRef}, Code: ${responseCode}`);
-
-      return {
-        success: false,
-        message: `Payment failed with code: ${responseCode}`,
-      };
     }
-  } catch (error) {
-    logger.error('Error verifying VNPay callback:', error);
-    throw error;
+  } else {
+    recharge.status = "FAILED";
+    recharge.gatewayResponse = JSON.stringify(vnpayParams);
+    await recharge.save();
   }
-};
-
-/**
- * Handle VNPay return (user redirect back)
- * @param {object} vnpParams - VNPay return params
- * @returns {object} - Payment result for frontend display
- */
-export const handleVNPayReturn = async (vnpParams) => {
-  try {
-    const secureHash = vnpParams.vnp_SecureHash;
-    delete vnpParams.vnp_SecureHash;
-    delete vnpParams.vnp_SecureHashType;
-
-    // Verify hash
-    const sortedParams = sortObject(vnpParams);
-    const signData = Object.keys(sortedParams)
-      .map(key => `${key}=${sortedParams[key]}`)
-      .join('&');
-    const hmac = crypto.createHmac('sha512', vnpay.hashSecret);
-    const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest('hex');
-
-    if (secureHash !== signed) {
-      return {
-        success: false,
-        message: 'Chữ ký không hợp lệ',
-      };
-    }
-
-    const responseCode = vnpParams.vnp_ResponseCode;
-    const txnRef = vnpParams.vnp_TxnRef;
-    const amount = vnpParams.vnp_Amount / 100;
-
-    if (responseCode === '00') {
-      const recharge = await CoinRecharge.findOne({ transactionCode: txnRef });
-      return {
-        success: true,
-        message: 'Thanh toán thành công',
-        coins: recharge?.coinAmount,
-        amount,
-        transactionCode: txnRef,
-      };
-    } else {
-      const errorMessages = {
-        '07': 'Trừ tiền thành công. Giao dịch bị nghi ngờ (liên hệ ngân hàng)',
-        '09': 'Thẻ/Tài khoản chưa đăng ký dịch vụ InternetBanking',
-        '10': 'Thẻ/Tài khoản không hợp lệ',
-        '11': 'Thẻ/Tài khoản đã hết hạn',
-        '12': 'Thẻ/Tài khoản bị khóa',
-        '13': 'Sai mật khẩu xác thực giao dịch',
-        '24': 'Khách hàng hủy giao dịch',
-        '51': 'Tài khoản không đủ số dư',
-        '65': 'Tài khoản vượt quá hạn mức giao dịch trong ngày',
-        '75': 'Ngân hàng thanh toán đang bảo trì',
-        '79': 'Nhập sai mật khẩu quá số lần quy định',
-        '99': 'Lỗi không xác định',
-      };
-
-      return {
-        success: false,
-        message: errorMessages[responseCode] || `Thanh toán thất bại (Mã lỗi: ${responseCode})`,
-        responseCode,
-      };
-    }
-  } catch (error) {
-    logger.error('Error handling VNPay return:', error);
-    return {
-      success: false,
-      message: 'Có lỗi xảy ra khi xử lý kết quả thanh toán',
-    };
-  }
+  const role = await User.findById(recharge.userId).select("role");
+  return { role: role };
 };

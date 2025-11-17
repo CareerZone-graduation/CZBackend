@@ -51,13 +51,6 @@ const config = {
   CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY,
   CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET,
 
-  // VNPay Configuration (legacy - kept for backwards compatibility)
-  VNPAY_TMN_CODE: process.env.VNPAY_TMN_CODE,
-  VNPAY_HASH_SECRET: process.env.VNPAY_HASH_SECRET,
-  VNPAY_URL: process.env.VNPAY_URL || 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html',
-  VNPAY_RETURN_URL: process.env.VNPAY_RETURN_URL || 'http://localhost:5000/api/payment/vnpay-return',
-  VNPAY_IPN_URL: process.env.VNPAY_IPN_URL || 'http://localhost:5000/api/payment/vnpay-ipn',
-
   // Email Configuration
   EMAIL_HOST: process.env.EMAIL_HOST,
   EMAIL_PORT: parseInt(process.env.EMAIL_PORT, 10),
@@ -97,8 +90,8 @@ const config = {
     tmnCode: process.env.VNPAY_TMN_CODE,
     hashSecret: process.env.VNPAY_HASH_SECRET,
     url: process.env.VNPAY_URL || 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html',
-    returnUrl: process.env.VNPAY_RETURN_URL || 'http://localhost:5000/api/payment/vnpay-return',
-    ipnUrl: process.env.VNPAY_IPN_URL || 'http://localhost:5000/api/payment/vnpay-ipn',
+    returnUrl: process.env.VNPAY_RETURN_URL || 'http://localhost:5000/api/payments/vnpay-redirect',
+    ipnUrl: process.env.VNPAY_IPN_URL || 'http://localhost:5000/api/payments/vnpay-ipn',
   },
   
   // File Upload Configuration

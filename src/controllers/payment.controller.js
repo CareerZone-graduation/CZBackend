@@ -8,6 +8,24 @@ import { PAYMENT_METHODS } from "../constants/index.js";
 import * as vnpayService from "../services/vnpay.service.js";
 import { BadRequestError } from "../utils/AppError.js";
 
+function getClientIp(req) {
+    let ip = req.headers['x-forwarded-for'];
+
+    if (ip) {
+        // Nếu có nhiều IP, lấy IP đầu tiên (chuẩn VNPAY)
+        ip = ip.split(",")[0].trim();
+    } else {
+        ip = req.socket.remoteAddress;
+    }
+
+    // Nếu IP dạng ::ffff:192.168.1.1 → convert về IPv4
+    if (ip && ip.includes("::ffff:")) {
+        ip = ip.replace("::ffff:", "");
+    }
+
+    return ip || "127.0.0.1";
+}
+
 /**
  * @desc    Create a new payment order (support ZaloPay and VNPay)
  * @route   POST /api/payments/create-order
@@ -21,12 +39,7 @@ export const createPaymentOrder = asyncHandler(async (req, res) => {
   
   if (paymentMethod === "VNPAY") {
     // Get client IP address
-    const ipAddr = req.headers['x-forwarded-for'] || 
-                   req.connection.remoteAddress || 
-                   req.socket.remoteAddress ||
-                   req.connection.socket?.remoteAddress ||
-                   '127.0.0.1';
-    
+    const ipAddr = getClientIp(req);
     result = await vnpayService.createVNPayPaymentUrl(userId, coins, ipAddr);
   } else if (paymentMethod === "ZALOPAY") {
     result = await paymentService.createZaloPayOrder(userId, coins);
@@ -104,28 +117,7 @@ export const handleZaloPayRedirect = asyncHandler(async (req, res) => {
   }
 });
 
-/**
- * @desc    Handle VNPay IPN callback (server-to-server)
- * @route   GET /api/payment/vnpay-ipn
- * @access  Public (but verified by hash)
- */
-export const handleVNPayIPN = asyncHandler(async (req, res) => {
-  try {
-    const vnpParams = req.query;
-    logger.info('VNPay IPN received:', { txnRef: vnpParams.vnp_TxnRef });
-    
-    const result = await vnpayService.verifyVNPayCallback(vnpParams);
 
-    if (result.success) {
-      return res.status(200).json({ RspCode: '00', Message: 'Success' });
-    } else {
-      return res.status(200).json({ RspCode: '01', Message: result.message });
-    }
-  } catch (error) {
-    logger.error('VNPay IPN error:', error);
-    return res.status(200).json({ RspCode: '99', Message: 'Unknown error' });
-  }
-});
 
 /**
  * @desc    Handle VNPay return URL (user redirect back)
@@ -134,24 +126,27 @@ export const handleVNPayIPN = asyncHandler(async (req, res) => {
  */
 export const handleVNPayReturn = asyncHandler(async (req, res) => {
   try {
-    const vnpParams = req.query;
-    logger.info('VNPay return received:', { txnRef: vnpParams.vnp_TxnRef });
-    
+    const vnpParams = req.query;   
     const result = await vnpayService.handleVNPayReturn(vnpParams);
-
-    // Redirect to frontend with result
-    const frontendUrl = config.RECRUITER_FE_URL || 'http://localhost:3000';
-    
-    if (result.success) {
-      const redirectUrl = `${frontendUrl}/payment/result?success=true&message=${encodeURIComponent(result.message)}&coins=${result.coins || 0}&amount=${result.amount || 0}`;
-      return res.redirect(redirectUrl);
+    const role = result.role.role;
+    if (vnpParams.vnp_ResponseCode === "00") {
+      if (role === "candidate") {
+        res.header("Location", config.CANDIDATE_FE_URL + `/payment/success`);
+        res.status(302).end();
+      } else if (role === "recruiter") {
+        res.header("Location", config.RECRUITER_FE_URL + `/payment/success`);
+        res.status(302).end();
+      }
     } else {
-      const redirectUrl = `${frontendUrl}/payment/result?success=false&message=${encodeURIComponent(result.message)}&code=${result.responseCode || ''}`;
-      return res.redirect(redirectUrl);
+      if (role === "candidate") {
+        res.header("Location", config.CANDIDATE_FE_URL + `/payment/failure`);
+        res.status(302).end();
+      } else if (role === "recruiter") {
+        res.header("Location", config.RECRUITER_FE_URL + `/payment/failure`);
+        res.status(302).end();
+      }
     }
   } catch (error) {
     logger.error('VNPay return error:', error);
-    const frontendUrl = config.RECRUITER_FE_URL || 'http://localhost:3000';
-    return res.redirect(`${frontendUrl}/payment/result?success=false&message=${encodeURIComponent('Có lỗi xảy ra')}`);
   }
 });
