@@ -9,15 +9,12 @@ import logger from '../utils/logger.js';
 import { recordCreditTransaction } from './creditHistory.service.js';
 import { TRANSACTION_TYPES, TRANSACTION_CATEGORIES } from '../constants/index.js';
 
-const { zalopay } = config;
+const { zalopay, momo } = config;
 const COIN_CONVERSION_RATE = 100; // 1 coin = 100 VND
+import * as momoService from './momo.service.js';
+import mongoose from 'mongoose';
 
-/**
- * Create a ZaloPay order for recharging coins.
- * @param {string} userId - The ID of the user.
- * @param {number} coins - The number of coins to recharge.
- * @returns {Promise<object>} - The ZaloPay order response.
- */
+
 export const createZaloPayOrder = async (userId, coins) => {
     const amountVND = coins * COIN_CONVERSION_RATE;
     const orderTime = Date.now();
@@ -106,70 +103,101 @@ export const createZaloPayOrder = async (userId, coins) => {
     }
 };
 
+export const createMomoOrder = async (userId, coins) => {
+    const amountVND = coins * COIN_CONVERSION_RATE;
+    const orderId = new mongoose.Types.ObjectId().toString();
+
+    const newRecharge = await CoinRecharge.create({
+        userId,
+        coinAmount: coins,
+        amountPaid: amountVND,
+        paymentMethod: 'MOMO',
+        transactionCode: orderId,
+        status: 'PENDING',
+    });
+
+    try {
+        const orderInfo = {
+            amount: amountVND,
+            orderId: orderId,
+            orderDescription: `[CareerZone] Nap ${coins} xu`,
+        };
+
+        const momoResponse = await momoService.createMomoPayment(orderInfo);
+
+        await CoinRecharge.findByIdAndUpdate(newRecharge._id, {
+            metadata: JSON.stringify(momoResponse),
+        });
+
+        return momoResponse;
+    } catch (error) {
+        logger.error('Error creating MoMo order:', error);
+        await CoinRecharge.findByIdAndUpdate(newRecharge._id, { status: 'FAILED' });
+        if (error instanceof BadRequestError) {
+            throw error;
+        }
+        throw new BadRequestError('Không thể tạo đơn hàng MoMo do lỗi hệ thống.');
+    }
+};
+
+export const handleMomoCallback = async (callbackData) => {
+    const { orderId, resultCode } = callbackData;
+
+    const recharge = await CoinRecharge.findOne({ transactionCode: orderId });
+    if (!recharge) {
+        logger.error(`MoMo callback: CoinRecharge record not found for orderId: ${orderId}`);
+        throw new BadRequestError('Không tìm thấy giao dịch nạp xu.');
+    }
+
+    if (recharge.status !== 'PENDING') {
+        logger.warn(`MoMo callback: Order ${orderId} is not in PENDING state. Current state: ${recharge.status}. Ignoring callback.`);
+        return; // Already processed
+    }
+
+    if (resultCode === '0') {
+        recharge.status = 'SUCCESS';
+        recharge.metadata = JSON.stringify(callbackData);
+        await recharge.save();
+
+        await User.findByIdAndUpdate(recharge.userId, {
+            $inc: { coinBalance: recharge.coinAmount },
+        });
+
+        try {
+            await recordCreditTransaction({
+                userId: recharge.userId,
+                type: TRANSACTION_TYPES.DEPOSIT,
+                category: TRANSACTION_CATEGORIES.RECHARGE,
+                amount: recharge.coinAmount,
+                description: `Nạp ${recharge.coinAmount} xu qua ${recharge.paymentMethod}`,
+                referenceId: recharge._id,
+                referenceModel: 'CoinRecharge',
+                metadata: {
+                    paymentMethod: recharge.paymentMethod,
+                    amountPaid: recharge.amountPaid,
+                    transactionCode: recharge.transactionCode
+                }
+            });
+            logger.info(`Credit transaction recorded for user ${recharge.userId}, amount: ${recharge.coinAmount}`);
+        } catch (transactionError) {
+            logger.error('Failed to record credit transaction for MoMo payment:', {
+                userId: recharge.userId,
+                rechargeId: recharge._id,
+                error: transactionError.message,
+            });
+        }
+    } else {
+        recharge.status = 'FAILED';
+        recharge.metadata = JSON.stringify(callbackData);
+        await recharge.save();
+    }
+    const role= await User.findById(recharge.userId).select('role');
+    return {role: role}
+};
+
 
 //  tạm thời lấy redirect Url làm callback luôn
 export const handleZaloPayCallback = async (apptransid, status) => {
-    // const { data, mac } = callbackData;
-    // const result = {};
-
-    // try {
-    //     const key2 = zalopay.key2;
-    //     const calculatedMac = CryptoJS.HmacSHA256(data, key2).toString();
-
-    //     if (calculatedMac !== mac) {
-    //         logger.warn('ZaloPay callback: Invalid MAC');
-    //         result.return_code = -1;
-    //         result.return_message = 'mac not equal';
-    //         return result;
-    //     }
-
-    //     const dataJSON = JSON.parse(data);
-    //     const { app_trans_id, status } = dataJSON;
-
-    //     const recharge = await CoinRecharge.findOne({ transactionCode: app_trans_id });
-
-    //     if (!recharge) {
-    //         logger.error(`ZaloPay callback: Recharge with transactionCode ${app_trans_id} not found.`);
-    //         result.return_code = 1; // Acknowledge receipt even if not found
-    //         result.return_message = 'Transaction not found';
-    //         return result;
-    //     }
-
-    //     // If already processed, just acknowledge.
-    //     if (recharge.status === 'SUCCESS' || recharge.status === 'FAILED') {
-    //         logger.info(`ZaloPay callback: Transaction ${app_trans_id} already processed with status ${recharge.status}.`);
-    //         result.return_code = 1;
-    //         result.return_message = 'success';
-    //         return result;
-    //     }
-
-
-    //     // status = 1 means success
-    //     if (status === 1) {
-    //         recharge.status = 'SUCCESS';
-    //         await recharge.save();
-
-    //         await User.findByIdAndUpdate(recharge.userId, {
-    //             $inc: { coins: recharge.coinAmount },
-    //         });
-
-    //         logger.info(`User ${recharge.userId} successfully recharged ${recharge.coinAmount} coins via callback.`);
-    //     } else {
-    //         recharge.status = 'FAILED';
-    //         await recharge.save();
-    //         logger.warn(`Transaction ${app_trans_id} failed via callback with status from ZaloPay.`);
-    //     }
-
-    //     result.return_code = 1;
-    //     result.return_message = 'success';
-    //     return result;
-
-    // } catch (error) {
-    //     logger.error('ZaloPay callback processing error:', error);
-    //     result.return_code = 0; // ZaloPay will retry if it receives 0
-    //     result.return_message = 'error';
-    //     return result;
-    // }
     let recharge;
     if (status === '1') {
         // Handle success case

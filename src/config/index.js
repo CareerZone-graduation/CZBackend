@@ -33,11 +33,11 @@ const config = {
   REDIS_URL: process.env.REDIS_URL,
 
   //Kafka Configuration
-  KAFKA_CLIENT_ID: process.env.KAFKA_CLIENT_ID || 'careerzone-be',
-  KAFKA_BROKERS: process.env.KAFKA_BROKERS || 'localhost:9092', // Comma-separated list of brokers
-  KAFKA_SASL_PASSWORD: process.env.KAFKA_SASL_PASSWORD,
-  KAFKA_SASL_USERNAME: process.env.KAFKA_SASL_USERNAME,
-  KAFKA_SSL_ENABLED: process.env.KAFKA_SSL_ENABLED || 'false', // 'true' or 'false'
+  // KAFKA_CLIENT_ID: process.env.KAFKA_CLIENT_ID || 'careerzone-be',
+  // KAFKA_BROKERS: process.env.KAFKA_BROKERS || 'localhost:9092', // Comma-separated list of brokers
+  // KAFKA_SASL_PASSWORD: process.env.KAFKA_SASL_PASSWORD,
+  // KAFKA_SASL_USERNAME: process.env.KAFKA_SASL_USERNAME,
+  // KAFKA_SSL_ENABLED: process.env.KAFKA_SSL_ENABLED || 'false', // 'true' or 'false'
   // RabbitMQ Configuration
   RABBITMQ_URL: process.env.RABBITMQ_URL,
   RABBITMQ_HOST: process.env.RABBITMQ_HOST ,
@@ -80,7 +80,16 @@ const config = {
     key1: process.env.ZALOPAY_KEY1 ,
     key2: process.env.ZALOPAY_KEY2 ,
     create_order_url: process.env.ZALOPAY_CREATE_ORDER_URL || 'https://sb-openapi.zalopay.vn/v2/create',
-    redirect_url: process.env.ZALOPAY_REDIRECT_URL || `${process.env.CLIENT_URL}/payment/result`,
+    redirect_url: process.env.ZALOPAY_REDIRECT_URL || `${process.env.CLIENT_URL}/payment/zalopay-redirect`,
+  },
+  // Momo Configuration
+  momo: {
+    partnerCode: process.env.MOMO_PARTNER_CODE,
+    accessKey: process.env.MOMO_ACCESS_KEY,
+    secretKey: process.env.MOMO_SECRET_KEY,
+    apiEndpoint: process.env.MOMO_API_ENDPOINT,
+    redirectUrl: process.env.MOMO_REDIRECT_URL,
+    ipnUrl: process.env.MOMO_IPN_URL,
   },
   
   // File Upload Configuration
