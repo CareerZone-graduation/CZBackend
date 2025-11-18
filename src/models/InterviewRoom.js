@@ -74,6 +74,18 @@ const interviewRoomSchema = new mongoose.Schema({
     comment: 'Unique identifier for WebRTC room'
   },
   
+  meetingUrl: {
+    type: String,
+    trim: true,
+    comment: 'URL for the online meeting room'
+  },
+  meetingProvider: {
+    type: String,
+    trim: true,
+    default: 'Jitsi',
+    comment: 'The provider of the meeting service (e.g., Jitsi, Google Meet)'
+  },
+
   scheduledTime: {//Đây là thời gian "chính thức" mà cả nhà tuyển dụng và ứng viên đã đồng ý.
     type: Date,
     required: [true, 'Scheduled time is required'],

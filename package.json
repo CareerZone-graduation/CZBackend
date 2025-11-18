@@ -23,7 +23,8 @@
     "seed:q4-2025": "node scripts/seed-analytics-q4-2025.js",
     "check:integrity": "node scripts/check-data-integrity.js",
     "cleanup:orphaned": "node scripts/cleanup-orphaned-data.js",
-    "backfillembeding": "node scripts/backfill-embeddings.js"
+    "backfillembeding": "node scripts/backfill-embeddings.js",
+    "reminders:schedule": "node scripts/schedule-interview-reminders.js"
   },
   "keywords": [
     "job",
