@@ -17,6 +17,8 @@
     "test": "cross-env NODE_ENV=test node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --detectOpenHandles --forceExit --no-cache",
     "normalize:locations": "node scripts/chuan-hoa-location-data.js",
     "normalize:keywords": "node scripts/normalize-keywords.js",
+    "rebuild:redis": "node scripts/rebuild-redis-subscriptions.js",
+    "test:changestream": "node scripts/test-change-stream.js",
     "check:integrity": "node scripts/check-data-integrity.js",
     "cleanup:orphaned": "node scripts/cleanup-orphaned-data.js",
     "backfillembeding": "node scripts/backfill-embeddings.js",

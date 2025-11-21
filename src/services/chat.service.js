@@ -39,7 +39,7 @@ export const checkMessagingAccess = async (recruiterId, candidateId) => {
   const recruiterProfile = await RecruiterProfile.findOne({ userId: recruiterId })
     .select('_id')
     .lean();
-  
+
   if (!recruiterProfile) {
     return { canMessage: false, reason: 'RECRUITER_PROFILE_NOT_FOUND' };
   }
@@ -48,14 +48,14 @@ export const checkMessagingAccess = async (recruiterId, candidateId) => {
   const candidateProfile = await CandidateProfile.findOne({ userId: candidateId })
     .select('_id')
     .lean();
-  
+
   if (!candidateProfile) {
     return { canMessage: false, reason: 'CANDIDATE_PROFILE_NOT_FOUND' };
   }
 
   // 3. Get all jobs posted by this recruiter
-  const recruiterJobs = await Job.find({ 
-    recruiterProfileId: recruiterProfile._id 
+  const recruiterJobs = await Job.find({
+    recruiterProfileId: recruiterProfile._id
   })
     .select('_id')
     .lean();
@@ -67,8 +67,8 @@ export const checkMessagingAccess = async (recruiterId, candidateId) => {
     const application = await Application.findOne({
       jobId: { $in: jobIds },
       candidateProfileId: candidateProfile._id,
-      status: { 
-        $in: ['PENDING', 'REVIEWING', 'SCHEDULED_INTERVIEW', 'INTERVIEWED', 'ACCEPTED', 'REJECTED'] 
+      status: {
+        $in: ['PENDING', 'REVIEWING', 'SCHEDULED_INTERVIEW', 'INTERVIEWED', 'ACCEPTED', 'REJECTED']
       }
     }).lean();
 
@@ -110,15 +110,15 @@ export const sendMessage = async ({ senderId, conversationId, content, type = 't
   }
 
   // Kiểm tra người gửi có phải là participant trong conversation không
-  const isParticipant = conversation.participant1.toString() === senderId || 
-                       conversation.participant2.toString() === senderId;
+  const isParticipant = conversation.participant1.toString() === senderId ||
+    conversation.participant2.toString() === senderId;
   if (!isParticipant) {
     throw new BadRequestError('Bạn không có quyền gửi tin nhắn trong cuộc trò chuyện này.');
   }
 
   // Xác định recipientId
-  const recipientId = conversation.participant1.toString() === senderId 
-    ? conversation.participant2 
+  const recipientId = conversation.participant1.toString() === senderId
+    ? conversation.participant2
     : conversation.participant1;
 
   // Tạo và lưu tin nhắn
@@ -231,9 +231,9 @@ export const markConversationAsRead = async (userId, conversationId) => {
   const userIdStr = userId.toString();
   const participant1Str = conversation.participant1.toString();
   const participant2Str = conversation.participant2.toString();
-  
+
   const isParticipant = participant1Str === userIdStr || participant2Str === userIdStr;
-  
+
   if (!isParticipant) {
     // Log for debugging
     logger.warn(`Permission denied: User ${userIdStr} tried to mark conversation ${conversationId} as read. Participants: ${participant1Str}, ${participant2Str}`);
@@ -242,17 +242,17 @@ export const markConversationAsRead = async (userId, conversationId) => {
 
   // Đánh dấu tất cả tin nhắn chưa đọc mà user là recipient
   const updateResult = await ChatMessage.updateMany(
-    { 
-      conversationId: conversationId, 
-      recipientId: userId, 
-      isRead: false 
+    {
+      conversationId: conversationId,
+      recipientId: userId,
+      isRead: false
     },
-    { 
-      $set: { 
-        isRead: true, 
-        readAt: new Date(), 
-        status: 'READ' 
-      } 
+    {
+      $set: {
+        isRead: true,
+        readAt: new Date(),
+        status: 'READ'
+      }
     }
   );
 
@@ -267,45 +267,45 @@ export const markConversationAsRead = async (userId, conversationId) => {
  * @returns {Promise<Array>} Danh sách các cuộc trò chuyện gần đây.
  */
 export const getLatestConversations = async (userId) => {
-    const objectUserId = new mongoose.Types.ObjectId(userId);
+  const objectUserId = new mongoose.Types.ObjectId(userId);
 
-    const conversations = await Conversation.aggregate([
-        // Match conversations where the user is a participant (either participant1 or participant2)
-        {
-            $match: {
-                $or: [
-                    { participant1: objectUserId },
-                    { participant2: objectUserId }
-                ],
-                lastMessage: { $ne: null } // Chỉ lấy các cuộc trò chuyện có ít nhất một tin nhắn
-            }
-        },
-        // Populate lastMessage (tin nhắn cuối cùng trong cuộc trò chuyện)
-        {
-            $lookup: {
-                from: 'chatmessages', // Tên collection của ChatMessage model
-                localField: 'lastMessage',
-                foreignField: '_id',
-                as: 'latestMessage'
-            }
-        },
-        { $unwind: '$latestMessage' }, // Biến đổi mảng 1 phần tử thành object
+  const conversations = await Conversation.aggregate([
+    // Match conversations where the user is a participant (either participant1 or participant2)
+    {
+      $match: {
+        $or: [
+          { participant1: objectUserId },
+          { participant2: objectUserId }
+        ],
+        lastMessage: { $ne: null } // Chỉ lấy các cuộc trò chuyện có ít nhất một tin nhắn
+      }
+    },
+    // Populate lastMessage (tin nhắn cuối cùng trong cuộc trò chuyện)
+    {
+      $lookup: {
+        from: 'chatmessages', // Tên collection của ChatMessage model
+        localField: 'lastMessage',
+        foreignField: '_id',
+        as: 'latestMessage'
+      }
+    },
+    { $unwind: '$latestMessage' }, // Biến đổi mảng 1 phần tử thành object
 
-        // Populate participant1 details
-        {
-            $lookup: {
-                from: 'users',
-                let: { uid: '$participant1' },
-                pipeline: [
-                  { $match: { $expr: { $eq: ['$_id', '$$uid'] } } },
-                  { $project: { _id: 1, role: 1, email: 1 } }
-                ],
-                as: 'participant1Details'
-            }
-        },
+    // Populate participant1 details
+    {
+      $lookup: {
+        from: 'users',
+        let: { uid: '$participant1' },
+        pipeline: [
+          { $match: { $expr: { $eq: ['$_id', '$$uid'] } } },
+          { $project: { _id: 1, role: 1, email: 1 } }
+        ],
+        as: 'participant1Details'
+      }
+    },
     { $unwind: { path: '$participant1Details', preserveNullAndEmptyArrays: true } },
-        
-        {
+
+    {
       $lookup: {
         from: 'users',
         let: { uid: '$participant2' },
@@ -317,7 +317,7 @@ export const getLatestConversations = async (userId) => {
       }
     },
     { $unwind: { path: '$participant2Details', preserveNullAndEmptyArrays: true } },
-         // 4) Xác định "đối tác trò chuyện" (không phải current user)
+    // 4) Xác định "đối tác trò chuyện" (không phải current user)
     {
       $addFields: {
         otherParticipantObj: {
@@ -337,33 +337,33 @@ export const getLatestConversations = async (userId) => {
     },
 
 
-        // Tính toán số tin nhắn chưa đọc cho người dùng hiện tại trong mỗi cuộc trò chuyện
-        {
-            $lookup: {
-                from: 'chatmessages',
-                let: { convoId: '$_id' }, // Biến cục bộ để sử dụng trong pipeline con
-                pipeline: [
-                    {
-                        $match: {
-                            $expr: {
-                                $and: [
-                                    { $eq: ['$conversationId', '$$convoId'] }, // Tin nhắn thuộc cuộc trò chuyện hiện tại
-                                    { $eq: ['$recipientId', objectUserId] },   // Tin nhắn được gửi đến người dùng hiện tại
-                                    { $eq: ['$isRead', false] }                // Tin nhắn chưa được đọc
-                                ]
-                            }
-                        }
-                    }
-                ],
-                as: 'unreadMessages'
+    // Tính toán số tin nhắn chưa đọc cho người dùng hiện tại trong mỗi cuộc trò chuyện
+    {
+      $lookup: {
+        from: 'chatmessages',
+        let: { convoId: '$_id' }, // Biến cục bộ để sử dụng trong pipeline con
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ['$conversationId', '$$convoId'] }, // Tin nhắn thuộc cuộc trò chuyện hiện tại
+                  { $eq: ['$recipientId', objectUserId] },   // Tin nhắn được gửi đến người dùng hiện tại
+                  { $eq: ['$isRead', false] }                // Tin nhắn chưa được đọc
+                ]
+              }
             }
-        },
-        {
-            $addFields: {
-                unreadCount: { $size: '$unreadMessages' } // Đếm số lượng tin nhắn chưa đọc
-            }
-        },
-         // == Lấy hồ sơ theo role → avatar/companyName/fullName
+          }
+        ],
+        as: 'unreadMessages'
+      }
+    },
+    {
+      $addFields: {
+        unreadCount: { $size: '$unreadMessages' } // Đếm số lượng tin nhắn chưa đọc
+      }
+    },
+    // == Lấy hồ sơ theo role → avatar/companyName/fullName
     // Candidate profile
     {
       $lookup: {
@@ -388,11 +388,13 @@ export const getLatestConversations = async (userId) => {
         as: 'recProfile'
       }
     },
-    { $addFields: {
+    {
+      $addFields: {
         candProfile: { $first: '$candProfile' },
-        recProfile:  { $first: '$recProfile' }
-    }},
-      // Tạo avatar + displayName theo role
+        recProfile: { $first: '$recProfile' }
+      }
+    },
+    // Tạo avatar + displayName theo role
     {
       $addFields: {
         otherParticipantAvatar: {
@@ -418,68 +420,73 @@ export const getLatestConversations = async (userId) => {
                   name1: { $ifNull: ['$candProfile.fullname', ''] },
                 },
                 in: {
-                  $ifNull: ['$$name1','']
+                  $ifNull: ['$$name1', '']
                 }
               }
             },
-            // recruiter: dùng company.name → fallback user.name
-            { $ifNull: ['$recProfile.company.name',''] }
+            // recruiter: dùng company.name → fallback fullname → fallback user.name
+            {
+              $ifNull: [
+                '$recProfile.company.name',
+                { $ifNull: ['$recProfile.fullname', '$participant2Details.name'] }
+              ]
+            }
           ]
         }
       }
     },
 
-        // Project để định hình lại output
-        {
-            $project: {
-                _id: 1, // conversationId
-                lastMessageAt: 1,
-                latestMessage: { // Định hình lại thông tin tin nhắn cuối cùng
-                    _id: '$latestMessage._id',
-                    senderId: '$latestMessage.senderId',
-                    recipientId: '$latestMessage.recipientId',
-                    content: '$latestMessage.content',
-                    sentAt: '$latestMessage.sentAt',
-                    isRead: '$latestMessage.isRead',
-                    status: '$latestMessage.status'
-                },
-                // Lấy thông tin người đối diện (người không phải là userId hiện tại)
-                otherParticipant: {
+    // Project để định hình lại output
+    {
+      $project: {
+        _id: 1, // conversationId
+        lastMessageAt: 1,
+        latestMessage: { // Định hình lại thông tin tin nhắn cuối cùng
+          _id: '$latestMessage._id',
+          senderId: '$latestMessage.senderId',
+          recipientId: '$latestMessage.recipientId',
+          content: '$latestMessage.content',
+          sentAt: '$latestMessage.sentAt',
+          isRead: '$latestMessage.isRead',
+          status: '$latestMessage.status'
+        },
+        // Lấy thông tin người đối diện (người không phải là userId hiện tại)
+        otherParticipant: {
           _id: '$otherParticipantObj._id',
           role: '$otherParticipantObj.role',
           email: '$otherParticipantObj.email',
           name: '$otherParticipantDisplayName',
           avatar: '$otherParticipantAvatar'
         },
-                unreadCount: 1
-            }
-        },
-        // Sắp xếp các cuộc trò chuyện theo thời gian của tin nhắn cuối cùng
-        { $sort: { lastMessageAt: -1 } }
-    ]);
+        unreadCount: 1
+      }
+    },
+    // Sắp xếp các cuộc trò chuyện theo thời gian của tin nhắn cuối cùng
+    { $sort: { lastMessageAt: -1 } }
+  ]);
 
-    // Bổ sung thông tin avatar/logo cho `otherParticipant` dựa trên vai trò của họ
-    for (const convo of conversations) {
-        if (convo.otherParticipant) {
-            const otherParticipantId = convo.otherParticipant._id;
-            const otherParticipantRole = convo.otherParticipant.role;
-            let avatarUrl = null;
+  // Bổ sung thông tin avatar/logo cho `otherParticipant` dựa trên vai trò của họ
+  for (const convo of conversations) {
+    if (convo.otherParticipant) {
+      const otherParticipantId = convo.otherParticipant._id;
+      const otherParticipantRole = convo.otherParticipant.role;
+      let avatarUrl = null;
 
-            if (otherParticipantRole === 'candidate') {
-                const profile = await CandidateProfile.findOne({ userId: otherParticipantId }).select('avatar').lean();
-                avatarUrl = profile ? profile.avatar : null;
-            } else if (otherParticipantRole === 'recruiter') {
-                const profile = await RecruiterProfile.findOne({ userId: otherParticipantId }).select('company.logo').lean();
-                avatarUrl = profile && profile.company ? profile.company.logo : null;
-            }
-            convo.otherParticipant.avatar = avatarUrl;
-        } else {
-            // Trường hợp không tìm thấy `otherParticipant` (ví dụ: người dùng đã bị xóa)
-            convo.otherParticipant = null; // Đặt thành null để tránh lỗi frontend
-        }
+      if (otherParticipantRole === 'candidate') {
+        const profile = await CandidateProfile.findOne({ userId: otherParticipantId }).select('avatar').lean();
+        avatarUrl = profile ? profile.avatar : null;
+      } else if (otherParticipantRole === 'recruiter') {
+        const profile = await RecruiterProfile.findOne({ userId: otherParticipantId }).select('company.logo').lean();
+        avatarUrl = profile && profile.company ? profile.company.logo : null;
+      }
+      convo.otherParticipant.avatar = avatarUrl;
+    } else {
+      // Trường hợp không tìm thấy `otherParticipant` (ví dụ: người dùng đã bị xóa)
+      convo.otherParticipant = null; // Đặt thành null để tránh lỗi frontend
     }
+  }
 
-    return conversations;
+  return conversations;
 };
 
 /**
@@ -492,7 +499,7 @@ export const createConversation = async (currentUserId, otherUserId) => {
   if (currentUserId === otherUserId) {
     throw new BadRequestError('Bạn không thể tạo cuộc trò chuyện với chính mình.');
   }
-  
+
   // Kiểm tra người dùng có tồn tại không
   const otherUser = await User.findById(otherUserId);
   if (!otherUser) {
@@ -514,7 +521,7 @@ export const createConversation = async (currentUserId, otherUserId) => {
   });
 
   logger.info(`Created new private conversation: ${newConversation._id} between ${currentUserId} and ${otherUserId}`);
-  
+
   // Populate thông tin để trả về cho client
   const populatedConversation = await getConversationById(newConversation._id.toString(), currentUserId);
   return populatedConversation;
@@ -540,9 +547,9 @@ export const getConversationById = async (conversationId, currentUserId) => {
   const currentUserIdStr = currentUserId.toString();
   const participant1IdStr = conversation.participant1._id.toString();
   const participant2IdStr = conversation.participant2._id.toString();
-  
+
   const isParticipant = [participant1IdStr, participant2IdStr].includes(currentUserIdStr);
-  
+
   if (!isParticipant) {
     console.error(`[getConversationById] Access denied. CurrentUser: ${currentUserIdStr}, Participants: [${participant1IdStr}, ${participant2IdStr}]`);
     throw new BadRequestError('Bạn không có quyền truy cập cuộc trò chuyện này.');
@@ -552,7 +559,7 @@ export const getConversationById = async (conversationId, currentUserId) => {
   const getParticipantDetails = async (user) => {
     let fullName = user.email; // fallback to email
     let avatar = null;
-    
+
     if (user.role === 'candidate') {
       const profile = await CandidateProfile.findOne({ userId: user._id }).select('fullname avatar').lean();
       if (profile) {
@@ -566,7 +573,7 @@ export const getConversationById = async (conversationId, currentUserId) => {
         avatar = profile.company?.logo || null;
       }
     }
-    
+
     return {
       ...user,
       name: fullName,
