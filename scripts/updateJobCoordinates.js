@@ -12,8 +12,8 @@ dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
 
 import Job from '../src/models/Job.js'; // Adjust path to your Job model
 
-const MONGODB_URI = 'mongodb://localhost:27018/careerzone?directConnection=true'
-const MAX_DISPLACEMENT_KM = 20;
+const MONGODB_URI = config.DB_URI;
+const MAX_DISPLACEMENT_KM = 50;
 
 /**
  * Generates a random coordinate within a certain radius of an original coordinate.

@@ -154,22 +154,22 @@ const checkDataIntegrity = async () => {
     console.log(`   ✓ Đã kiểm tra ${savedJobs.length} SavedJob`);
     console.log(`   ⚠️  Tìm thấy ${issues.savedJobs.length} vấn đề\n`);
 
-    // 6. Kiểm tra SearchHistory
-    console.log('📋 Kiểm tra SearchHistory...');
-    const searchHistory = await SearchHistory.find({}).lean();
-    for (const search of searchHistory) {
-      const userExists = await User.findById(search.userId);
-      if (!userExists) {
-        issues.searchHistory.push({
-          _id: search._id,
-          userId: search.userId,
-          query: search.query,
-          issue: 'userId không tồn tại trong collection User'
-        });
-      }
-    }
-    console.log(`   ✓ Đã kiểm tra ${searchHistory.length} SearchHistory`);
-    console.log(`   ⚠️  Tìm thấy ${issues.searchHistory.length} vấn đề\n`);
+    // // 6. Kiểm tra SearchHistory
+    // console.log('📋 Kiểm tra SearchHistory...');
+    // const searchHistory = await SearchHistory.find({}).lean();
+    // for (const search of searchHistory) {
+    //   const userExists = await User.findById(search.userId);
+    //   if (!userExists) {
+    //     issues.searchHistory.push({
+    //       _id: search._id,
+    //       userId: search.userId,
+    //       query: search.query,
+    //       issue: 'userId không tồn tại trong collection User'
+    //     });
+    //   }
+    // }
+    // console.log(`   ✓ Đã kiểm tra ${searchHistory.length} SearchHistory`);
+    // console.log(`   ⚠️  Tìm thấy ${issues.searchHistory.length} vấn đề\n`);
 
     // 7. Kiểm tra Notification
     console.log('📋 Kiểm tra Notification...');

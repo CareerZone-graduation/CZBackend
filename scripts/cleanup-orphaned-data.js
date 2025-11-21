@@ -57,35 +57,35 @@ const cleanupOrphanedData = async (dryRun = true) => {
   console.log(dryRun ? '🔍 CHẾ ĐỘ KIỂM TRA (Dry Run) - Không xóa dữ liệu thực tế\n' : '⚠️  CHẾ ĐỘ XÓA THỰC TẾ - Dữ liệu sẽ bị xóa vĩnh viễn!\n');
 
   try {
-    // // 1. Xóa CandidateProfile không có userId hợp lệ
-    // console.log('📋 Xử lý CandidateProfile...');
-    // const candidateProfiles = await CandidateProfile.find({}).lean();
-    // for (const profile of candidateProfiles) {
-    //   const userExists = await User.findById(profile.userId);
-    //   if (!userExists) {
-    //     console.log(`   ⚠️  Tìm thấy orphaned CandidateProfile: ${profile._id} (userId: ${profile.userId})`);
-    //     if (!dryRun) {
-    //       await CandidateProfile.deleteOne({ _id: profile._id });
-    //       deletionStats.candidateProfiles++;
-    //     }
-    //   }
-    // }
-    // console.log(`   ${dryRun ? 'Sẽ xóa' : 'Đã xóa'} ${dryRun ? candidateProfiles.filter(async p => !(await User.findById(p.userId))).length : deletionStats.candidateProfiles} CandidateProfile\n`);
+    // 1. Xóa CandidateProfile không có userId hợp lệ
+    console.log('📋 Xử lý CandidateProfile...');
+    const candidateProfiles = await CandidateProfile.find({}).lean();
+    for (const profile of candidateProfiles) {
+      const userExists = await User.findById(profile.userId);
+      if (!userExists) {
+        console.log(`   ⚠️  Tìm thấy orphaned CandidateProfile: ${profile._id} (userId: ${profile.userId})`);
+        if (!dryRun) {
+          await CandidateProfile.deleteOne({ _id: profile._id });
+          deletionStats.candidateProfiles++;
+        }
+      }
+    }
+    console.log(`   ${dryRun ? 'Sẽ xóa' : 'Đã xóa'} ${dryRun ? candidateProfiles.filter(async p => !(await User.findById(p.userId))).length : deletionStats.candidateProfiles} CandidateProfile\n`);
 
     // 2. Xóa RecruiterProfile không có userId hợp lệ
-    // console.log('📋 Xử lý RecruiterProfile...');
-    // const recruiterProfiles = await RecruiterProfile.find({}).lean();
-    // for (const profile of recruiterProfiles) {
-    //   const userExists = await User.findById(profile.userId);
-    //   if (!userExists) {
-    //     console.log(`   ⚠️  Tìm thấy orphaned RecruiterProfile: ${profile._id} (userId: ${profile.userId})`);
-    //     if (!dryRun) {
-    //       await RecruiterProfile.deleteOne({ _id: profile._id });
-    //       deletionStats.recruiterProfiles++;
-    //     }
-    //   }
-    // }
-    // console.log(`   ${dryRun ? 'Sẽ xóa' : 'Đã xóa'} ${dryRun ? recruiterProfiles.filter(async p => !(await User.findById(p.userId))).length : deletionStats.recruiterProfiles} RecruiterProfile\n`);
+    console.log('📋 Xử lý RecruiterProfile...');
+    const recruiterProfiles = await RecruiterProfile.find({}).lean();
+    for (const profile of recruiterProfiles) {
+      const userExists = await User.findById(profile.userId);
+      if (!userExists) {
+        console.log(`   ⚠️  Tìm thấy orphaned RecruiterProfile: ${profile._id} (userId: ${profile.userId})`);
+        if (!dryRun) {
+          await RecruiterProfile.deleteOne({ _id: profile._id });
+          deletionStats.recruiterProfiles++;
+        }
+      }
+    }
+    console.log(`   ${dryRun ? 'Sẽ xóa' : 'Đã xóa'} ${dryRun ? recruiterProfiles.filter(async p => !(await User.findById(p.userId))).length : deletionStats.recruiterProfiles} RecruiterProfile\n`);
 
     // 3. Xóa Job không có recruiterProfileId hợp lệ
     console.log('📋 Xử lý Job...');
@@ -103,21 +103,21 @@ const cleanupOrphanedData = async (dryRun = true) => {
     console.log(`   ${dryRun ? 'Sẽ xóa' : 'Đã xóa'} ${dryRun ? jobs.filter(async j => !(await RecruiterProfile.findById(j.recruiterProfileId))).length : deletionStats.jobs} Job\n`);
 
     // // 4. Xóa Application không hợp lệ
-    // console.log('📋 Xử lý Application...');
-    // const applications = await Application.find({}).lean();
-    // for (const app of applications) {
-    //   const jobExists = await Job.findById(app.jobId);
-    //   const candidateExists = await CandidateProfile.findById(app.candidateProfileId);
+    console.log('📋 Xử lý Application...');
+    const applications = await Application.find({}).lean();
+    for (const app of applications) {
+      const jobExists = await Job.findById(app.jobId);
+      const candidateExists = await CandidateProfile.findById(app.candidateProfileId);
       
-    //   if (!jobExists || !candidateExists) {
-    //     console.log(`   ⚠️  Tìm thấy orphaned Application: ${app._id}`);
-    //     if (!dryRun) {
-    //       await Application.deleteOne({ _id: app._id });
-    //       deletionStats.applications++;
-    //     }
-    //   }
-    // }
-    // console.log(`   ${dryRun ? 'Sẽ xóa' : 'Đã xóa'} ${deletionStats.applications} Application\n`);
+      if (!jobExists || !candidateExists) {
+        console.log(`   ⚠️  Tìm thấy orphaned Application: ${app._id}`);
+        if (!dryRun) {
+          await Application.deleteOne({ _id: app._id });
+          deletionStats.applications++;
+        }
+      }
+    }
+    console.log(`   ${dryRun ? 'Sẽ xóa' : 'Đã xóa'} ${deletionStats.applications} Application\n`);
 
     // // 5. Xóa SavedJob không hợp lệ
     // console.log('📋 Xử lý SavedJob...');
@@ -151,20 +151,20 @@ const cleanupOrphanedData = async (dryRun = true) => {
     // }
     // console.log(`   ${dryRun ? 'Sẽ xóa' : 'Đã xóa'} ${deletionStats.searchHistory} SearchHistory\n`);
 
-    // // 7. Xóa Notification không hợp lệ
-    // console.log('📋 Xử lý Notification...');
-    // const notifications = await Notification.find({}).lean();
-    // for (const notif of notifications) {
-    //   const userExists = await User.findById(notif.userId);
-    //   if (!userExists) {
-    //     console.log(`   ⚠️  Tìm thấy orphaned Notification: ${notif._id}`);
-    //     if (!dryRun) {
-    //       await Notification.deleteOne({ _id: notif._id });
-    //       deletionStats.notifications++;
-    //     }
-    //   }
-    // }
-    // console.log(`   ${dryRun ? 'Sẽ xóa' : 'Đã xóa'} ${deletionStats.notifications} Notification\n`);
+    // 7. Xóa Notification không hợp lệ
+    console.log('📋 Xử lý Notification...');
+    const notifications = await Notification.find({}).lean();
+    for (const notif of notifications) {
+      const userExists = await User.findById(notif.userId);
+      if (!userExists) {
+        console.log(`   ⚠️  Tìm thấy orphaned Notification: ${notif._id}`);
+        if (!dryRun) {
+          await Notification.deleteOne({ _id: notif._id });
+          deletionStats.notifications++;
+        }
+      }
+    }
+    console.log(`   ${dryRun ? 'Sẽ xóa' : 'Đã xóa'} ${deletionStats.notifications} Notification\n`);
 
     // // 8. Xóa ChatMessage không hợp lệ
     // console.log('📋 Xử lý ChatMessage...');

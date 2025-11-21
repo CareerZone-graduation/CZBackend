@@ -9,8 +9,16 @@ const jobAlertSubscriptionSchema = new mongoose.Schema({
   keyword: {
     type: String,
     trim: true,
+    lowercase: true,
     required: [true, 'Keyword is required'],
-    maxlength: [100, 'Keyword cannot exceed 100 characters']
+    maxlength: [50, 'Keyword cannot exceed 50 characters'],
+    validate: {
+      validator: function(value) {
+        // Kiểm tra keyword chỉ có 1 từ (không có khoảng trắng)
+        return value && value.trim().split(/\s+/).length === 1;
+      },
+      message: 'Keyword must be a single word without spaces'
+    }
   },
   location: {
     province: {

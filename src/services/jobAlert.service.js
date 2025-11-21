@@ -21,9 +21,26 @@ export const createJobAlert = async (candidateId, data) => {
     // Enhanced subscription limit validation
     await validateSubscriptionLimit(candidateId);
     
-    const subscription = await JobAlertSubscription.create({ ...data, candidateId });
-    // Update Redis with keyword mapping
-    await redisClient.sAdd(RedisKeys.getKeywordKey(subscription.keyword), candidateId.toString());
+    // Normalize keyword: trim, lowercase, ensure single word
+    const normalizedData = {
+        ...data,
+        keyword: data.keyword?.trim().toLowerCase()
+    };
+    
+    const subscription = await JobAlertSubscription.create({ ...normalizedData, candidateId });
+    
+    // Update Redis with keyword mapping (chỉ nếu subscription active)
+    // Mặc định subscription.active = true khi tạo mới (theo model default)
+    if (subscription.active) {
+        await redisClient.sAdd(
+            RedisKeys.getKeywordKey(subscription.keyword), 
+            candidateId.toString()
+        );
+        logger.info(`Subscription created and added to Redis: keyword=${subscription.keyword}`);
+    } else {
+        logger.info(`Subscription created but NOT added to Redis (inactive): keyword=${subscription.keyword}`);
+    }
+    
     return subscription;
 };
 
@@ -42,16 +59,66 @@ export const updateJobAlert = async (candidateId, subscriptionId, data) => {
     }
 
     const oldKeyword = subscription.keyword;
+    const oldActive = subscription.active;
+    
+    // Normalize keyword if provided
+    if (data.keyword) {
+        data.keyword = data.keyword.trim().toLowerCase();
+    }
+    
     Object.assign(subscription, data);
     await subscription.save();
 
-    // Handle Redis updates for keyword changes
-    if (data.keyword && data.keyword.toLowerCase() !== oldKeyword.toLowerCase()) {
-        const multi = redisClient.multi();
-        multi.sRem(RedisKeys.getKeywordKey(oldKeyword), candidateId.toString());
-        multi.sAdd(RedisKeys.getKeywordKey(data.keyword), candidateId.toString());
-        await multi.exec();
+    // Xử lý Redis dựa trên các trường hợp
+    const multi = redisClient.multi();
+    
+    // Case 1: Đổi keyword (bất kể active hay không)
+    if (data.keyword && data.keyword !== oldKeyword) {
+        // Remove khỏi set cũ
+        multi.sRem(
+            RedisKeys.getKeywordKey(oldKeyword),
+            candidateId.toString()
+        );
+        
+        // Add vào set mới (chỉ nếu subscription đang active)
+        if (subscription.active) {
+            multi.sAdd(
+                RedisKeys.getKeywordKey(subscription.keyword),
+                candidateId.toString()
+            );
+        }
+        
+        logger.info(`Keyword changed: ${oldKeyword} → ${subscription.keyword}, active: ${subscription.active}`);
     }
+    // Case 2: Không đổi keyword, nhưng thay đổi trạng thái active
+    else if (data.active !== undefined && data.active !== oldActive) {
+        if (subscription.active) {
+            // Kích hoạt lại → Add vào Redis
+            multi.sAdd(
+                RedisKeys.getKeywordKey(subscription.keyword),
+                candidateId.toString()
+            );
+            logger.info(`Subscription activated: keyword=${subscription.keyword}`);
+        } else {
+            // Tạm ngưng → Remove khỏi Redis
+            multi.sRem(
+                RedisKeys.getKeywordKey(subscription.keyword),
+                candidateId.toString()
+            );
+            logger.info(`Subscription deactivated: keyword=${subscription.keyword}`);
+        }
+    }
+    // Case 3: Không đổi keyword, không đổi active → Đảm bảo consistency
+    else if (subscription.active) {
+        // Nếu subscription đang active, đảm bảo user có trong Redis
+        multi.sAdd(
+            RedisKeys.getKeywordKey(subscription.keyword),
+            candidateId.toString()
+        );
+    }
+    
+    await multi.exec();
+    
     return subscription;
 };
 

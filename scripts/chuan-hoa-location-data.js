@@ -5,9 +5,9 @@ import { findBestMatch } from 'string-similarity';
 
  
   // DB_URI= "mongodb://localhost:27017/?directConnection=true",
-const  DB_URI= "mongodb://localhost:27017/";
-  // DB_URI= "mongodb+srv://lienhuetien01_db_user:iOpfkbGdqH3RyWu7@cluster0.iah0c5u.mongodb.net/",
-const  MONGODB_DB = "careerzone3";
+// const  DB_URI= "mongodb://localhost:27017/";
+const DB_URI= "mongodb+srv://lienhuetien01_db_user:iOpfkbGdqH3RyWu7@cluster0.iah0c5u.mongodb.net/";
+const MONGODB_DB = "careerzone";
 const DRY_RUN = 'false';
 
 

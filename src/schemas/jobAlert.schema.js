@@ -25,7 +25,14 @@ const locationAlertSchema = z.object({
 
 // Enhanced job alert subscription schema with new fields
 const createJobAlertSchema = z.object({
-    keyword: z.string().max(100).optional(),
+    keyword: z.string()
+        .min(1, 'Từ khóa không được để trống')
+        .max(50, 'Từ khóa không được vượt quá 50 ký tự')
+        .refine(
+            (val) => val.trim().split(/\s+/).length === 1,
+            'Từ khóa chỉ được phép là 1 từ duy nhất (không có khoảng trắng)'
+        )
+        .transform((val) => val.trim().toLowerCase()),
     location: locationAlertSchema,
     frequency: z.enum(['daily', 'weekly'], {
       errorMap: () => ({ message: 'Frequency must be either daily or weekly' })

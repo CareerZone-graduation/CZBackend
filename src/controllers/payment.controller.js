@@ -121,7 +121,7 @@ export const handleZaloPayRedirect = asyncHandler(async (req, res) => {
 
 /**
  * @desc    Handle VNPay return URL (user redirect back)
- * @route   GET /api/payment/vnpay-return
+ * @route   GET /api/payment/vnpay-redirect
  * @access  Public
  */
 export const handleVNPayReturn = asyncHandler(async (req, res) => {
