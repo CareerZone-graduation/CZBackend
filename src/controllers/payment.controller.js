@@ -9,21 +9,21 @@ import * as vnpayService from "../services/vnpay.service.js";
 import { BadRequestError } from "../utils/AppError.js";
 
 function getClientIp(req) {
-    let ip = req.headers['x-forwarded-for'];
+  let ip = req.headers['x-forwarded-for'];
 
-    if (ip) {
-        // Nếu có nhiều IP, lấy IP đầu tiên (chuẩn VNPAY)
-        ip = ip.split(",")[0].trim();
-    } else {
-        ip = req.socket.remoteAddress;
-    }
+  if (ip) {
+    // Nếu có nhiều IP, lấy IP đầu tiên (chuẩn VNPAY)
+    ip = ip.split(",")[0].trim();
+  } else {
+    ip = req.socket.remoteAddress;
+  }
 
-    // Nếu IP dạng ::ffff:192.168.1.1 → convert về IPv4
-    if (ip && ip.includes("::ffff:")) {
-        ip = ip.replace("::ffff:", "");
-    }
+  // Nếu IP dạng ::ffff:192.168.1.1 → convert về IPv4
+  if (ip && ip.includes("::ffff:")) {
+    ip = ip.replace("::ffff:", "");
+  }
 
-    return ip || "127.0.0.1";
+  return ip || "127.0.0.1";
 }
 
 /**
@@ -36,7 +36,7 @@ export const createPaymentOrder = asyncHandler(async (req, res) => {
   const userId = req.user._id;
 
   let result;
-  
+
   if (paymentMethod === "VNPAY") {
     // Get client IP address
     const ipAddr = getClientIp(req);
@@ -51,14 +51,14 @@ export const createPaymentOrder = asyncHandler(async (req, res) => {
     );
   }
   res.status(200).json({
-      success: true,
-      message: "Tạo đơn hàng thanh toán thành công.",
-      data: result,
-    });
+    success: true,
+    message: "Tạo đơn hàng thanh toán thành công.",
+    data: result,
+  });
 });
 
 export const handleMomoRedirect = asyncHandler(async (req, res) => {
-  logger.info("Received MoMo Redirect:", req.query);
+  logger.info("Received MoMo:", req.query);
   try {
     const { resultCode } = req.query;
     const resp = await paymentService.handleMomoCallback(req.query);
@@ -84,7 +84,7 @@ export const handleMomoRedirect = asyncHandler(async (req, res) => {
       }
     }
   } catch (error) {
-    logger.error("MoMo Redirect Error:", error.message);
+    logger.error("MoMo Redirect Error:", error);
   }
 });
 
@@ -126,7 +126,7 @@ export const handleZaloPayRedirect = asyncHandler(async (req, res) => {
  */
 export const handleVNPayReturn = asyncHandler(async (req, res) => {
   try {
-    const vnpParams = req.query;   
+    const vnpParams = req.query;
     const result = await vnpayService.handleVNPayReturn(vnpParams);
     const role = result.role.role;
     if (vnpParams.vnp_ResponseCode === "00") {

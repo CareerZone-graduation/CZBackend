@@ -151,7 +151,6 @@ export const handleMomoCallback = async (callbackData) => {
 
     if (recharge.status !== 'PENDING') {
         logger.warn(`MoMo callback: Order ${orderId} is not in PENDING state. Current state: ${recharge.status}. Ignoring callback.`);
-        return; // Already processed
     }
 
     if (resultCode === '0') {
