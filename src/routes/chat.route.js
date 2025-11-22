@@ -16,7 +16,7 @@ router.use(passport.authenticate('jwt', { session: false }));
 // Check messaging access (recruiter or candidate)
 router.get(
   '/access-check/:candidateId',
-  validationMiddleware.validateParams(z.object({ 
+  validationMiddleware.validateParams(z.object({
     candidateId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID ứng viên không hợp lệ')
   })),
   chatController.checkMessagingAccess
@@ -25,7 +25,6 @@ router.get(
 // Create or get conversation with candidate (recruiter only)
 router.post(
   '/conversations',
-  authMiddleware.recruiterOnly,
   validationMiddleware.validateBody(chatSchema.createOrGetConversationSchema),
   chatController.createOrGetConversation
 );
@@ -71,6 +70,14 @@ router.put(
   '/conversations/:conversationId/read',
   validationMiddleware.validateParams(z.object({ conversationId: commonSchema.idParamSchema.shape.id })),
   chatController.markConversationAsRead
+);
+
+// Cập nhật ngữ cảnh cuộc trò chuyện
+router.put(
+  '/conversations/:conversationId/context',
+  validationMiddleware.validateParams(z.object({ conversationId: commonSchema.idParamSchema.shape.id })),
+  validationMiddleware.validateBody(chatSchema.updateContextSchema),
+  chatController.updateConversationContext
 );
 
 export default router;

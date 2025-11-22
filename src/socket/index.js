@@ -84,6 +84,10 @@ export const initializeSocket = (io) => {
       isOnline: true
     });
 
+    // Send list of online users to the newly connected client
+    const onlineUserIds = Array.from(connectedUsers.keys());
+    socket.emit('online:users', onlineUserIds);
+
     // Register handlers
     registerChatHandlers(io, socket, connectedUsers);
     registerInterviewHandlers(io, socket, interviewRoomParticipants);
@@ -135,6 +139,12 @@ export const initializeSocket = (io) => {
           socket.leave(`job-alert:${keyword}`);
         });
       }
+    });
+
+    // Handle request for online users
+    socket.on('get:online:users', () => {
+      const onlineUserIds = Array.from(connectedUsers.keys());
+      socket.emit('online:users', onlineUserIds);
     });
 
     // Handle errors from socket events

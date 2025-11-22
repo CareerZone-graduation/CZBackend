@@ -2,6 +2,10 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import Conversation from '../src/models/Conversation.js';
 import ChatMessage from '../src/models/ChatMessage.js';
+import Job from '../src/models/Job.js';
+import Application from '../src/models/Application.js';
+import RecruiterProfile from '../src/models/RecruiterProfile.js';
+import CandidateProfile from '../src/models/CandidateProfile.js';
 
 dotenv.config();
 
@@ -75,6 +79,75 @@ function getRandomDate(daysAgo) {
   return new Date(now.getTime() - (randomDays * 24 * 60 * 60 * 1000) - (randomHours * 60 * 60 * 1000) - (randomMinutes * 60 * 1000));
 }
 
+async function ensureApplication(recruiterId, candidateId) {
+  try {
+    const recruiterProfile = await RecruiterProfile.findOne({ userId: recruiterId });
+    const candidateProfile = await CandidateProfile.findOne({ userId: candidateId });
+
+    if (!recruiterProfile || !candidateProfile) {
+      // console.warn(`⚠️ Cannot create application: Profile missing for Recruiter ${recruiterId} or Candidate ${candidateId}`);
+      return;
+    }
+
+    // Find or create a job for this recruiter
+    let job = await Job.findOne({ recruiterProfileId: recruiterProfile._id });
+    if (!job) {
+      job = await Job.create({
+        title: 'Senior Software Engineer (Seeded)',
+        description: 'This is a seeded job description for testing purposes.',
+        requirements: 'React, Node.js, MongoDB',
+        benefits: 'Competitive salary, Remote work',
+        location: {
+          province: 'Ho Chi Minh',
+          district: 'District 1',
+          commune: 'Ben Nghe Ward'
+        },
+        address: '123 Tech Street',
+        type: 'FULL_TIME',
+        workType: 'REMOTE',
+        minSalary: 20000000,
+        maxSalary: 50000000,
+        deadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+        experience: 'SENIOR_LEVEL',
+        category: 'IT',
+        recruiterProfileId: recruiterProfile._id,
+        status: 'ACTIVE'
+      });
+    }
+
+    // Check if application exists
+    const existingApp = await Application.findOne({
+      jobId: job._id,
+      candidateProfileId: candidateProfile._id
+    });
+
+    if (!existingApp) {
+      await Application.create({
+        jobId: job._id,
+        candidateProfileId: candidateProfile._id,
+        coverLetter: 'I am interested in this position.',
+        status: 'PENDING', // Valid status for messaging
+        candidateName: candidateProfile.fullname,
+        candidateEmail: 'seeded@example.com', // Placeholder
+        candidatePhone: candidateProfile.phone || '0123456789',
+        submittedCV: {
+          name: 'CV.pdf',
+          path: 'https://example.com/cv.pdf',
+          source: 'UPLOADED'
+        },
+        jobSnapshot: {
+          title: job.title,
+          company: recruiterProfile.company.name,
+          logo: recruiterProfile.company.logo
+        }
+      });
+      console.log(`   ✅ Created application for Candidate ${candidateId} to Job ${job._id}`);
+    }
+  } catch (error) {
+    console.error(`   ❌ Error creating application: ${error.message}`);
+  }
+}
+
 async function seedChatData() {
   try {
     await mongoose.connect(process.env.DB_URI);
@@ -95,13 +168,13 @@ async function seedChatData() {
     };
 
     // Helper để thêm conversation
-    const addConversation = (recruiterId, candidateId) => {
+    const addConversation = async (recruiterId, candidateId) => {
       const key = getConvKey(recruiterId, candidateId);
       if (conversationSet.has(key)) return false;
-      
+
       conversationSet.add(key);
-      const [p1, p2] = recruiterId < candidateId 
-        ? [recruiterId, candidateId] 
+      const [p1, p2] = recruiterId < candidateId
+        ? [recruiterId, candidateId]
         : [candidateId, recruiterId];
 
       conversations.push({
@@ -109,6 +182,10 @@ async function seedChatData() {
         participant2: new mongoose.Types.ObjectId(p2),
         lastMessageAt: getRandomDate(30)
       });
+
+      // Đảm bảo có application để có thể nhắn tin
+      await ensureApplication(recruiterId, candidateId);
+
       return true;
     };
 
@@ -116,17 +193,15 @@ async function seedChatData() {
     console.log(`📌 Tạo 20 conversations cho candidate ${SPECIAL_CANDIDATE}...`);
     const shuffledRecruiters = [...recruiterIds].sort(() => Math.random() - 0.5);
     for (let i = 0; i < Math.min(20, shuffledRecruiters.length); i++) {
-      addConversation(shuffledRecruiters[i], SPECIAL_CANDIDATE);
+      await addConversation(shuffledRecruiters[i], SPECIAL_CANDIDATE);
     }
 
     // 2. Tạo 20 conversations cho recruiter đặc biệt với các candidates khác nhau
     console.log(`📌 Tạo 20 conversations cho recruiter ${SPECIAL_RECRUITER}...`);
     const shuffledCandidates = [...candidateIds].sort(() => Math.random() - 0.5);
     for (let i = 0; i < Math.min(20, shuffledCandidates.length); i++) {
-      addConversation(SPECIAL_RECRUITER, shuffledCandidates[i]);
+      await addConversation(SPECIAL_RECRUITER, shuffledCandidates[i]);
     }
-
-
 
     console.log(`📝 Tạo ${conversations.length} conversations...`);
     const savedConversations = await Conversation.insertMany(conversations);
@@ -135,7 +210,7 @@ async function seedChatData() {
     for (const conv of savedConversations) {
       const numMessages = Math.floor(Math.random() * 15) + 5; // 5-20 messages
       const conversationMessages = [];
-      
+
       // Xác định ai là recruiter, ai là candidate
       const isP1Recruiter = recruiterIds.includes(conv.participant1.toString());
       const recruiterId = isP1Recruiter ? conv.participant1 : conv.participant2;
@@ -188,7 +263,7 @@ async function seedChatData() {
       const lastMessage = savedMessages
         .filter(m => m.conversationId.toString() === conv._id.toString())
         .sort((a, b) => b.sentAt - a.sentAt)[0];
-      
+
       if (lastMessage) {
         conv.lastMessage = lastMessage._id;
         await conv.save();
@@ -198,7 +273,7 @@ async function seedChatData() {
     console.log('✅ Hoàn thành seed dữ liệu chat!');
     console.log(`   - ${savedConversations.length} conversations`);
     console.log(`   - ${savedMessages.length} messages`);
-    
+
     // Thống kê
     const unreadCount = savedMessages.filter(m => !m.isRead).length;
     console.log(`   - ${unreadCount} tin nhắn chưa đọc`);

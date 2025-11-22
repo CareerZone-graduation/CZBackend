@@ -354,7 +354,7 @@ export const joinInterview = async (interviewId, userId) => {
   }
 
   if (now > windowEnd) {
-    throw new BadRequestError('Interview join window has expired (30 minutes after scheduled time)');
+    throw new BadRequestError('Chỉ có thể tham gia phòng phỏng vấn 15 phút trước cho đến 30 phút sau phỏng vấn bắt đầu');
   }
 
   logger.info(`User ${userId} validated to join interview ${interviewId}`);

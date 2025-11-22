@@ -1,6 +1,7 @@
 // src/controllers/chat.controller.js
 import asyncHandler from 'express-async-handler';
 import * as chatService from '../services/chat.service.js';
+import Conversation from '../models/Conversation.js';
 import {
   markAsReadSchema,
   createConversationSchema,
@@ -56,13 +57,13 @@ export const markMessagesAsRead = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getLatestConversations = asyncHandler(async (req, res) => {
-    const conversations = await chatService.getLatestConversations(req.user._id);
+  const conversations = await chatService.getLatestConversations(req.user._id);
 
-    res.status(200).json({
-        success: true,
-        message: 'Lấy danh sách cuộc trò chuyện thành công.',
-        data: conversations,
-    });
+  res.status(200).json({
+    success: true,
+    message: 'Lấy danh sách cuộc trò chuyện thành công.',
+    data: conversations,
+  });
 });
 
 /**
@@ -141,7 +142,7 @@ export const checkMessagingAccess = asyncHandler(async (req, res) => {
   // If current user is a recruiter, check access rules
   if (currentUserRole === 'recruiter') {
     const accessResult = await chatService.checkMessagingAccess(currentUserId, candidateId);
-    
+
     return res.status(200).json({
       success: true,
       data: accessResult
@@ -161,32 +162,89 @@ export const checkMessagingAccess = asyncHandler(async (req, res) => {
  * @access  Private (Recruiter only)
  */
 export const createOrGetConversation = asyncHandler(async (req, res) => {
-  const { candidateId } = req.body;
-  const recruiterId = req.user._id;
+  const { candidateId, recipientId } = req.body;
+  const currentUserId = req.user._id;
+  const currentUserRole = req.user.role;
 
-  logger.info(`Recruiter ${recruiterId} attempting to create/get conversation with candidate ${candidateId}`);
+  // Determine target user ID (recipient)
+  const targetUserId = recipientId || candidateId;
 
-  // Check messaging access first
-  const accessResult = await chatService.checkMessagingAccess(recruiterId, candidateId);
-  
-  if (!accessResult.canMessage) {
-    return res.status(403).json({
+  if (!targetUserId) {
+    return res.status(400).json({
       success: false,
-      message: 'Bạn không có quyền nhắn tin cho ứng viên này. Vui lòng mở khóa hồ sơ hoặc đợi ứng viên ứng tuyển vào công việc của bạn.',
-      reason: accessResult.reason
+      message: 'Vui lòng cung cấp ID người nhận.'
     });
   }
 
+  logger.info(`User ${currentUserId} (${currentUserRole}) attempting to create/get conversation with ${targetUserId}`);
+
+  // Specific logic for Recruiter -> Candidate
+  if (currentUserRole === 'recruiter') {
+    // Check messaging access
+    const accessResult = await chatService.checkMessagingAccess(currentUserId, targetUserId);
+
+    if (!accessResult.canMessage) {
+      return res.status(403).json({
+        success: false,
+        message: 'Bạn không có quyền nhắn tin cho ứng viên này. Vui lòng mở khóa hồ sơ hoặc đợi ứng viên ứng tuyển vào công việc của bạn.',
+        reason: accessResult.reason
+      });
+    }
+  }
+
+  // Logic for Candidate -> Recruiter
+  // Currently we allow candidates to initiate conversation if they have the Recruiter ID (e.g. from Job Detail)
+  // We could add checks here if needed (e.g. must have applied)
+
   // Check if conversation already exists
-  const existingConversation = await chatService.findPrivateConversation(recruiterId, candidateId);
-  
-  if (existingConversation) {
+  let conversation = await chatService.findPrivateConversation(currentUserId, targetUserId);
+
+  // Context handling logic
+  let contextToUpdate = null;
+
+  // If jobId is provided (usually by Candidate), try to find the specific application context
+  if (req.body.jobId && currentUserRole === 'candidate') {
+    const { Application } = await import('../models/index.js');
+    const candidateProfile = await import('../models/CandidateProfile.js').then(m => m.default.findOne({ userId: currentUserId }));
+
+    if (candidateProfile) {
+      const application = await Application.findOne({
+        jobId: req.body.jobId,
+        candidateProfileId: candidateProfile._id
+      }).populate('jobId', 'title');
+
+      if (application) {
+        contextToUpdate = {
+          type: 'APPLICATION',
+          contextId: application._id,
+          title: application.jobId.title,
+          data: {
+            jobId: application.jobId._id,
+            status: application.status,
+            appliedAt: application.appliedAt
+          },
+          isManual: false,
+          attachedAt: new Date()
+        };
+      }
+    }
+  }
+
+  if (conversation) {
+    // If we found a specific context and it's different or newer, update it
+    if (contextToUpdate) {
+      // Use findByIdAndUpdate since conversation is a lean object
+      await Conversation.findByIdAndUpdate(conversation._id, {
+        $set: { context: contextToUpdate }
+      });
+    }
+
     // Return existing conversation with details
     const conversationDetails = await chatService.getConversationById(
-      existingConversation._id.toString(), 
-      recruiterId
+      conversation._id.toString(),
+      currentUserId
     );
-    
+
     return res.status(200).json({
       success: true,
       message: 'Lấy cuộc trò chuyện thành công.',
@@ -195,11 +253,42 @@ export const createOrGetConversation = asyncHandler(async (req, res) => {
   }
 
   // Create new conversation
-  const newConversation = await chatService.createConversation(recruiterId, candidateId);
+  // If we have a specific context, we should pass it to createConversation
+  // But createConversation currently calls determineConversationContext internally.
+  // We might need to update createConversation to accept an override context, OR update it after creation.
+
+  const newConversation = await chatService.createConversation(currentUserId, targetUserId);
+
+  if (contextToUpdate) {
+    newConversation.context = contextToUpdate;
+    await newConversation.save();
+  }
 
   res.status(201).json({
     success: true,
     message: 'Tạo cuộc trò chuyện thành công.',
     data: newConversation
+  });
+});
+
+/**
+ * @desc    Update conversation context manually
+ * @route   PUT /api/chat/conversations/:conversationId/context
+ * @access  Private
+ */
+export const updateConversationContext = asyncHandler(async (req, res) => {
+  const { conversationId } = req.params;
+  const contextData = req.body;
+
+  const updatedConversation = await chatService.updateConversationContext(
+    conversationId,
+    req.user._id,
+    contextData
+  );
+
+  res.status(200).json({
+    success: true,
+    message: 'Cập nhật ngữ cảnh cuộc trò chuyện thành công.',
+    data: updatedConversation
   });
 });

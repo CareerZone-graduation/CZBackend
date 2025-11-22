@@ -56,7 +56,7 @@ export const createJob = async (userId, jobData) => {
   // Kiểm tra số dư xu
   const user = await User.findById(userId);
   const JOB_POST_COST = 100; // Chi phí đăng tin tuyển dụng
-  
+
   if (user.coinBalance < JOB_POST_COST) {
     throw new BadRequestError(`Không đủ xu để đăng tin. Cần ${JOB_POST_COST} xu, bạn hiện có ${user.coinBalance} xu.`);
   }
@@ -362,7 +362,7 @@ export const getJobDetailsForRecruiter = async (jobId, userId) => {
 export const getJobById = async (jobId, userId = null) => {
   const jobDoc = await Job.findById(jobId).populate({
     path: 'recruiterProfileId',
-    select: 'company.name company.logo company._id company.industry'
+    select: 'company.name company.logo company._id company.industry userId'
   });
 
   if (!jobDoc) {
@@ -421,6 +421,10 @@ export const getJobById = async (jobId, userId = null) => {
     area: job.area,
     status: job.status,
     approved: job.approved,
+    recruiterProfileId: {
+      _id: job.recruiterProfileId._id,
+      userId: job.recruiterProfileId.userId
+    },
     company: {
       name: job.recruiterProfileId.company.name,
       logo: job.recruiterProfileId.company.logo,
@@ -667,7 +671,7 @@ export const applyToJob = async (userId, jobId, applicationData) => {
     logActivity(application, 'APPLICATION_SUBMITTED', 'Ứng viên đã nộp đơn');
 
     // TODO: Gửi sự kiện APPLY_JOB KAFKA
-    
+
 
     // --- BẮT ĐẦU GỬI SỰ KIỆN THÔNG BÁO ---
     try {
@@ -885,7 +889,7 @@ export const getJobsByCompany = async (companyId, options = {}) => {
 
   // Find recruiter profile - Thử tìm theo RecruiterProfile._id trước (cho analytics)
   let recruiterProfile = await RecruiterProfile.findById(companyId).lean();
-  
+
   // Nếu không thấy, thử tìm theo company._id (subdocument)
   if (!recruiterProfile) {
     recruiterProfile = await RecruiterProfile.findOne({

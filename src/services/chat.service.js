@@ -12,6 +12,105 @@ import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
 
 /**
+ * Determine the context for a conversation between a recruiter and a candidate.
+ * Prioritizes Application over Profile Unlock.
+ * @param {string} recruiterId
+ * @param {string} candidateId
+ * @returns {Promise<Object|null>} Context object or null
+ */
+export const determineConversationContext = async (recruiterId, candidateId) => {
+  try {
+    const recruiterProfile = await RecruiterProfile.findOne({ userId: recruiterId }).select('_id');
+    const candidateProfile = await CandidateProfile.findOne({ userId: candidateId }).select('_id');
+
+    if (!recruiterProfile || !candidateProfile) return null;
+
+    // 1. Check for Applications (Prioritize most recent)
+    const jobs = await Job.find({ recruiterProfileId: recruiterProfile._id }).select('_id title');
+    const jobIds = jobs.map(j => j._id);
+
+    if (jobIds.length > 0) {
+      const application = await Application.findOne({
+        jobId: { $in: jobIds },
+        candidateProfileId: candidateProfile._id
+      })
+        .sort({ appliedAt: -1 }) // Get most recent
+        .populate('jobId', 'title')
+        .lean();
+
+      if (application) {
+        return {
+          type: 'APPLICATION',
+          contextId: application._id,
+          title: application.jobId.title,
+          data: {
+            jobId: application.jobId._id,
+            status: application.status,
+            appliedAt: application.appliedAt
+          },
+          isManual: false,
+          attachedAt: new Date()
+        };
+      }
+    }
+
+    // 2. Check for Profile Unlock
+    const unlockTransaction = await CreditTransaction.findOne({
+      userId: recruiterId,
+      category: 'PROFILE_UNLOCK',
+      'metadata.candidateId': candidateId
+    }).sort({ createdAt: -1 }).lean();
+
+    if (unlockTransaction) {
+      return {
+        type: 'PROFILE_UNLOCK',
+        contextId: unlockTransaction._id,
+        title: 'Hồ sơ đã mở khóa',
+        data: {
+          unlockedAt: unlockTransaction.createdAt
+        },
+        isManual: false,
+        attachedAt: new Date()
+      };
+    }
+
+    return null;
+  } catch (error) {
+    logger.error('Error determining conversation context:', error);
+    return null;
+  }
+};
+
+/**
+ * Update conversation context manually.
+ * @param {string} conversationId
+ * @param {string} userId
+ * @param {Object} contextData
+ */
+export const updateConversationContext = async (conversationId, userId, contextData) => {
+  const conversation = await Conversation.findById(conversationId);
+  if (!conversation) throw new NotFoundError('Cuộc trò chuyện không tồn tại.');
+
+  // Verify user is participant
+  const isParticipant = [conversation.participant1.toString(), conversation.participant2.toString()].includes(userId.toString());
+  if (!isParticipant) throw new BadRequestError('Bạn không có quyền chỉnh sửa cuộc trò chuyện này.');
+
+  // Validate context data (simplified for now, can add more strict checks)
+  if (!['APPLICATION', 'PROFILE_UNLOCK'].includes(contextData.type)) {
+    throw new BadRequestError('Loại ngữ cảnh không hợp lệ.');
+  }
+
+  conversation.context = {
+    ...contextData,
+    isManual: true,
+    attachedAt: new Date()
+  };
+
+  await conversation.save();
+  return conversation;
+};
+
+/**
  * Tìm một cuộc trò chuyện 1-1 duy nhất giữa hai người dùng.
  * @param {string} userId1 - ID của người dùng thứ nhất.
  * @param {string} userId2 - ID của người dùng thứ hai.
@@ -458,7 +557,8 @@ export const getLatestConversations = async (userId) => {
           name: '$otherParticipantDisplayName',
           avatar: '$otherParticipantAvatar'
         },
-        unreadCount: 1
+        unreadCount: 1,
+        context: 1 // Include context in the projection
       }
     },
     // Sắp xếp các cuộc trò chuyện theo thời gian của tin nhắn cuối cùng
@@ -515,9 +615,35 @@ export const createConversation = async (currentUserId, otherUserId) => {
   // Sắp xếp ID để lưu vào DB một cách nhất quán
   const [p1, p2] = [new mongoose.Types.ObjectId(currentUserId), new mongoose.Types.ObjectId(otherUserId)].sort((a, b) => a.toString().localeCompare(b.toString()));
 
+  // Determine context
+  let context = null;
+  // Identify roles to call determineConversationContext correctly
+  // We need to know who is recruiter and who is candidate
+  // This is a bit tricky without fetching user roles, but we can try to fetch profiles
+  // Or we can rely on the caller to provide roles, but createConversation signature is fixed.
+  // Let's try to fetch users to be sure.
+  const user1 = await User.findById(currentUserId);
+  const user2 = await User.findById(otherUserId);
+
+  if (user1 && user2) {
+    let recruiterId, candidateId;
+    if (user1.role === 'recruiter' && user2.role === 'candidate') {
+      recruiterId = currentUserId;
+      candidateId = otherUserId;
+    } else if (user1.role === 'candidate' && user2.role === 'recruiter') {
+      recruiterId = otherUserId;
+      candidateId = currentUserId;
+    }
+
+    if (recruiterId && candidateId) {
+      context = await determineConversationContext(recruiterId, candidateId);
+    }
+  }
+
   const newConversation = await Conversation.create({
     participant1: p1,
     participant2: p2,
+    context: context
   });
 
   logger.info(`Created new private conversation: ${newConversation._id} between ${currentUserId} and ${otherUserId}`);
@@ -598,5 +724,6 @@ export const getConversationById = async (conversationId, currentUserId) => {
     otherParticipant: otherParticipant,
     createdAt: conversation.createdAt,
     updatedAt: conversation.updatedAt,
+    context: conversation.context // Include context in response
   };
 };

@@ -39,7 +39,7 @@ export const getProfile = async (userId) => {
  * @returns {Promise<Object>}
  */
 export const updateProfile = async (userId, updateData) => {
-    const { 
+    const {
         fullname, phone, bio, skills, educations, experiences,
         address, website, linkedin, github, certificates, projects,
         expectedSalary, preferredLocations, workPreferences
@@ -300,7 +300,14 @@ export const getMyApplications = async (userId, options = {}) => {
     // Thực hiện truy vấn với pagination
     const [applications, totalCount] = await Promise.all([
         Application.find(filter)
-            .select('jobId status appliedAt lastStatusUpdateAt coverLetter submittedCV jobSnapshot candidateName candidateEmail candidatePhone')
+            .populate({
+                path: 'jobId',
+                select: 'title recruiterProfileId',
+                populate: {
+                    path: 'recruiterProfileId',
+                    select: 'userId company.name'
+                }
+            })
             .sort(sortOptions)
             .skip(skip)
             .limit(limit)

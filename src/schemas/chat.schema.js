@@ -77,4 +77,23 @@ export const createConversationSchema = z.object({
 export const createOrGetConversationSchema = z.object({
   candidateId: z.string()
     .regex(/^[0-9a-fA-F]{24}$/, 'ID ứng viên không hợp lệ')
+    .optional(),
+  recipientId: z.string()
+    .regex(/^[0-9a-fA-F]{24}$/, 'ID người nhận không hợp lệ')
+    .optional(),
+  jobId: z.string()
+    .regex(/^[0-9a-fA-F]{24}$/, 'ID công việc không hợp lệ')
+    .optional()
+}).refine(data => data.candidateId || data.recipientId, {
+  message: "Phải cung cấp candidateId hoặc recipientId"
+});
+
+/**
+ * Update conversation context request validation schema
+ */
+export const updateContextSchema = z.object({
+  type: z.enum(['APPLICATION', 'PROFILE_UNLOCK']),
+  contextId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID ngữ cảnh không hợp lệ'),
+  title: z.string().optional(),
+  data: z.record(z.any()).optional()
 });

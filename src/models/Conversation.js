@@ -24,22 +24,50 @@ const conversationSchema = new mongoose.Schema({
   lastMessageAt: {
     type: Date,
     default: Date.now
+  },
+  // Ngữ cảnh của cuộc trò chuyện
+  context: {
+    type: {
+      type: String,
+      enum: ['APPLICATION', 'PROFILE_UNLOCK'],
+      default: null
+    },
+    contextId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null
+    },
+    title: {
+      type: String,
+      default: null
+    },
+    data: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null
+    },
+    isManual: {
+      type: Boolean,
+      default: false
+    },
+    attachedAt: {
+      type: Date,
+      default: Date.now
+    }
   }
 }, {
   timestamps: true
 });
 
 // Validation để đảm bảo participant1 luôn nhỏ hơn participant2
-conversationSchema.pre('save', function(next) {
+conversationSchema.pre('save', function (next) {
   if (this.participant1.toString() === this.participant2.toString()) {
     return next(new Error('Không thể tạo cuộc trò chuyện với chính mình'));
   }
-  
+
   // Đảm bảo participant1 luôn nhỏ hơn participant2
   if (this.participant1.toString() > this.participant2.toString()) {
     [this.participant1, this.participant2] = [this.participant2, this.participant1];
   }
-  
+
   next();
 });
 
@@ -48,5 +76,6 @@ conversationSchema.index({ participant1: 1, participant2: 1 }, { unique: true })
 // Index để tìm cuộc trò chuyện theo từng người tham gia
 conversationSchema.index({ participant1: 1, lastMessageAt: -1 });
 conversationSchema.index({ participant2: 1, lastMessageAt: -1 });
+conversationSchema.index({ 'context.contextId': 1 });
 
 export default mongoose.model('Conversation', conversationSchema);
