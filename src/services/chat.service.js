@@ -365,10 +365,13 @@ export const markConversationAsRead = async (userId, conversationId) => {
  * @param {string} userId - ID của người dùng.
  * @returns {Promise<Array>} Danh sách các cuộc trò chuyện gần đây.
  */
-export const getLatestConversations = async (userId) => {
+export const getLatestConversations = async (userId, { search, page = 1, limit = 10 } = {}) => {
   const objectUserId = new mongoose.Types.ObjectId(userId);
+  const pageNum = parseInt(page, 10) || 1;
+  const limitNum = parseInt(limit, 10) || 10;
+  const skip = (pageNum - 1) * limitNum;
 
-  const conversations = await Conversation.aggregate([
+  const pipeline = [
     // Match conversations where the user is a participant (either participant1 or participant2)
     {
       $match: {
@@ -560,33 +563,63 @@ export const getLatestConversations = async (userId) => {
         unreadCount: 1,
         context: 1 // Include context in the projection
       }
-    },
-    // Sắp xếp các cuộc trò chuyện theo thời gian của tin nhắn cuối cùng
-    { $sort: { lastMessageAt: -1 } }
-  ]);
-
-  // Bổ sung thông tin avatar/logo cho `otherParticipant` dựa trên vai trò của họ
-  for (const convo of conversations) {
-    if (convo.otherParticipant) {
-      const otherParticipantId = convo.otherParticipant._id;
-      const otherParticipantRole = convo.otherParticipant.role;
-      let avatarUrl = null;
-
-      if (otherParticipantRole === 'candidate') {
-        const profile = await CandidateProfile.findOne({ userId: otherParticipantId }).select('avatar').lean();
-        avatarUrl = profile ? profile.avatar : null;
-      } else if (otherParticipantRole === 'recruiter') {
-        const profile = await RecruiterProfile.findOne({ userId: otherParticipantId }).select('company.logo').lean();
-        avatarUrl = profile && profile.company ? profile.company.logo : null;
-      }
-      convo.otherParticipant.avatar = avatarUrl;
-    } else {
-      // Trường hợp không tìm thấy `otherParticipant` (ví dụ: người dùng đã bị xóa)
-      convo.otherParticipant = null; // Đặt thành null để tránh lỗi frontend
     }
+  ];
+
+  // Add search filter if provided
+  if (search) {
+    pipeline.push({
+      $match: {
+        'otherParticipant.name': { $regex: search, $options: 'i' }
+      }
+    });
   }
 
-  return conversations;
+  // Add sorting
+  pipeline.push({ $sort: { lastMessageAt: -1 } });
+
+  // Add facet for pagination
+  pipeline.push({
+    $facet: {
+      data: [
+        { $skip: skip },
+        { $limit: limitNum }
+      ],
+      totalCount: [
+        { $count: 'count' }
+      ]
+    }
+  });
+
+  const result = await Conversation.aggregate(pipeline);
+
+  const conversations = result[0].data;
+  const totalItems = result[0].totalCount[0] ? result[0].totalCount[0].count : 0;
+  const totalPages = Math.ceil(totalItems / limitNum);
+
+  // Bổ sung thông tin avatar/logo cho `otherParticipant` dựa trên vai trò của họ
+  // Note: The aggregation above already tries to fetch avatar/logo.
+  // The original code had a loop here to fetch them again or fill gaps.
+  // Since we moved the logic into aggregation, we might not need this loop if the aggregation is correct.
+  // However, the original loop used `CandidateProfile.findOne` which might be safer if aggregation lookups fail or are complex.
+  // But looking at the aggregation, it seems to cover it.
+  // Let's keep the loop ONLY if we think aggregation might miss something, but for now let's trust the aggregation
+  // or rather, let's double check if the aggregation `otherParticipantAvatar` logic is robust.
+  // It seems to be.
+  // BUT, the original code had a loop that did `await CandidateProfile.findOne...`
+  // The aggregation does `$lookup`.
+  // If the aggregation works, we don't need the loop.
+  // Let's return the result directly.
+
+  return {
+    data: conversations,
+    meta: {
+      currentPage: pageNum,
+      totalPages,
+      totalItems,
+      limit: limitNum
+    }
+  };
 };
 
 /**

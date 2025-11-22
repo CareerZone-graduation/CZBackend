@@ -57,12 +57,19 @@ export const markMessagesAsRead = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getLatestConversations = asyncHandler(async (req, res) => {
-  const conversations = await chatService.getLatestConversations(req.user._id);
+  const { search, page, limit } = req.query;
+
+  const result = await chatService.getLatestConversations(req.user._id, {
+    search,
+    page,
+    limit
+  });
 
   res.status(200).json({
     success: true,
     message: 'Lấy danh sách cuộc trò chuyện thành công.',
-    data: conversations,
+    data: result.data,
+    meta: result.meta
   });
 });
 
