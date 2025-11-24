@@ -30,25 +30,23 @@ export const determineConversationContext = async (recruiterId, candidateId) => 
     const jobIds = jobs.map(j => j._id);
 
     if (jobIds.length > 0) {
-      const application = await Application.findOne({
+      const applications = await Application.find({
         jobId: { $in: jobIds },
         candidateProfileId: candidateProfile._id
       })
-        .sort({ appliedAt: -1 }) // Get most recent
+        .sort({ appliedAt: -1 }) // Get most recent first
         .populate('jobId', 'title')
         .lean();
 
-      if (application) {
+      if (applications.length > 0) {
+        const latestApp = applications[0];
         return {
           type: 'APPLICATION',
-          contextId: application._id,
-          title: application.jobId.title,
-          data: {
-            jobId: application.jobId._id,
-            status: application.status,
-            appliedAt: application.appliedAt
-          },
-          isManual: false,
+          contextId: latestApp._id, // Keep latest as primary for backward compatibility
+          applicationIds: applications.map(app => app._id),
+          title: applications.length > 1
+            ? `${latestApp.jobId.title} (+${applications.length - 1} vị trí khác)`
+            : latestApp.jobId.title,
           attachedAt: new Date()
         };
       }
@@ -66,10 +64,6 @@ export const determineConversationContext = async (recruiterId, candidateId) => 
         type: 'PROFILE_UNLOCK',
         contextId: unlockTransaction._id,
         title: 'Hồ sơ đã mở khóa',
-        data: {
-          unlockedAt: unlockTransaction.createdAt
-        },
-        isManual: false,
         attachedAt: new Date()
       };
     }
@@ -81,34 +75,7 @@ export const determineConversationContext = async (recruiterId, candidateId) => 
   }
 };
 
-/**
- * Update conversation context manually.
- * @param {string} conversationId
- * @param {string} userId
- * @param {Object} contextData
- */
-export const updateConversationContext = async (conversationId, userId, contextData) => {
-  const conversation = await Conversation.findById(conversationId);
-  if (!conversation) throw new NotFoundError('Cuộc trò chuyện không tồn tại.');
 
-  // Verify user is participant
-  const isParticipant = [conversation.participant1.toString(), conversation.participant2.toString()].includes(userId.toString());
-  if (!isParticipant) throw new BadRequestError('Bạn không có quyền chỉnh sửa cuộc trò chuyện này.');
-
-  // Validate context data (simplified for now, can add more strict checks)
-  if (!['APPLICATION', 'PROFILE_UNLOCK'].includes(contextData.type)) {
-    throw new BadRequestError('Loại ngữ cảnh không hợp lệ.');
-  }
-
-  conversation.context = {
-    ...contextData,
-    isManual: true,
-    attachedAt: new Date()
-  };
-
-  await conversation.save();
-  return conversation;
-};
 
 /**
  * Tìm một cuộc trò chuyện 1-1 duy nhất giữa hai người dùng.
@@ -538,31 +505,72 @@ export const getLatestConversations = async (userId, { search, page = 1, limit =
       }
     },
 
-    // Populate application status for context if type is APPLICATION
+    // Populate applications for context if type is APPLICATION
     {
       $lookup: {
         from: 'applications',
-        localField: 'context.contextId',
-        foreignField: '_id',
-        as: 'applicationContext'
+        let: {
+          appIds: { $ifNull: ['$context.applicationIds', []] },
+          ctxId: '$context.contextId'
+        },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $or: [
+                  { $in: ['$_id', '$$appIds'] },
+                  { $eq: ['$_id', '$$ctxId'] }
+                ]
+              }
+            }
+          },
+          {
+            $lookup: {
+              from: 'jobs',
+              localField: 'jobId',
+              foreignField: '_id',
+              as: 'job'
+            }
+          },
+          { $unwind: { path: '$job', preserveNullAndEmptyArrays: true } },
+          {
+            $project: {
+              applicationId: '$_id',
+              jobId: '$jobId',
+              jobTitle: '$job.title',
+              status: 1,
+              appliedAt: 1
+            }
+          },
+          { $sort: { appliedAt: -1 } }
+        ],
+        as: 'contextApplications'
       }
     },
     {
       $addFields: {
-        'context.data.status': {
+        'context.applications': {
+          $cond: {
+            if: { $eq: ['$context.type', 'APPLICATION'] },
+            then: '$contextApplications',
+            else: []
+          }
+        },
+        'context.status': {
           $cond: {
             if: {
               $and: [
                 { $eq: ['$context.type', 'APPLICATION'] },
-                { $gt: [{ $size: '$applicationContext' }, 0] }
+                { $gt: [{ $size: '$contextApplications' }, 0] }
               ]
             },
-            then: { $arrayElemAt: ['$applicationContext.status', 0] },
-            else: '$context.data.status'
+            then: { $arrayElemAt: ['$contextApplications.status', 0] },
+            else: null
           }
         }
       }
     },
+
 
     // Project để định hình lại output
     {
@@ -738,9 +746,9 @@ export const getConversationById = async (conversationId, currentUserId) => {
         avatar = profile.avatar;
       }
     } else if (user.role === 'recruiter') {
-      const profile = await RecruiterProfile.findOne({ userId: user._id }).select('fullname company.logo').lean();
+      const profile = await RecruiterProfile.findOne({ userId: user._id }).select('fullname company.name company.logo').lean();
       if (profile) {
-        fullName = profile.fullname || fullName;
+        fullName = profile.company?.name || profile.fullname || fullName;
         avatar = profile.company?.logo || null;
       }
     }
@@ -762,13 +770,30 @@ export const getConversationById = async (conversationId, currentUserId) => {
     : conversation.participant1;
 
   // Update context status if APPLICATION
-  if (conversation.context && conversation.context.type === 'APPLICATION' && conversation.context.contextId) {
-    const application = await Application.findById(conversation.context.contextId).select('status').lean();
-    if (application) {
-      conversation.context.data = {
-        ...conversation.context.data,
-        status: application.status
-      };
+  if (conversation.context && conversation.context.type === 'APPLICATION') {
+    // Populate applications from applicationIds
+    if (conversation.context.applicationIds && conversation.context.applicationIds.length > 0) {
+      const applications = await Application.find({ _id: { $in: conversation.context.applicationIds } })
+        .populate('jobId', 'title')
+        .select('_id status appliedAt jobId')
+        .lean();
+
+      // Sort applications to match the order in applicationIds or just by appliedAt
+      // Let's sort by appliedAt desc
+      applications.sort((a, b) => new Date(b.appliedAt) - new Date(a.appliedAt));
+
+      conversation.context.applications = applications.map(app => ({
+        applicationId: app._id,
+        jobId: app.jobId._id,
+        jobTitle: app.jobId.title,
+        status: app.status,
+        appliedAt: app.appliedAt
+      }));
+
+      // Set primary status from the first application (most recent)
+      if (applications.length > 0) {
+        conversation.context.status = applications[0].status;
+      }
     }
   }
 

@@ -210,30 +210,14 @@ export const createOrGetConversation = asyncHandler(async (req, res) => {
   let contextToUpdate = null;
 
   // If jobId is provided (usually by Candidate), try to find the specific application context
+  // We use determineConversationContext to get the full context including all applications
   if (req.body.jobId && currentUserRole === 'candidate') {
-    const { Application } = await import('../models/index.js');
-    const candidateProfile = await import('../models/CandidateProfile.js').then(m => m.default.findOne({ userId: currentUserId }));
+    // We need the recruiter's ID. We have recipientId (targetUserId).
+    // determineConversationContext expects (recruiterId, candidateId)
+    const newContext = await chatService.determineConversationContext(targetUserId, currentUserId);
 
-    if (candidateProfile) {
-      const application = await Application.findOne({
-        jobId: req.body.jobId,
-        candidateProfileId: candidateProfile._id
-      }).populate('jobId', 'title');
-
-      if (application) {
-        contextToUpdate = {
-          type: 'APPLICATION',
-          contextId: application._id,
-          title: application.jobId.title,
-          data: {
-            jobId: application.jobId._id,
-            status: application.status,
-            appliedAt: application.appliedAt
-          },
-          isManual: false,
-          attachedAt: new Date()
-        };
-      }
+    if (newContext) {
+      contextToUpdate = newContext;
     }
   }
 

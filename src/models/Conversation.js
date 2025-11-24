@@ -36,17 +36,13 @@ const conversationSchema = new mongoose.Schema({
       type: mongoose.Schema.Types.ObjectId,
       default: null
     },
+    applicationIds: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Application'
+    }],
     title: {
       type: String,
       default: null
-    },
-    data: {
-      type: mongoose.Schema.Types.Mixed,
-      default: null
-    },
-    isManual: {
-      type: Boolean,
-      default: false
     },
     attachedAt: {
       type: Date,
