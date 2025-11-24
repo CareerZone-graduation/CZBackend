@@ -496,10 +496,31 @@ export const updateJob = async (jobId, userId, updateData) => {
     }
   }
 
-  Object.assign(job, finalUpdateData);
-  await job.save();
+  // Logic cập nhật status dựa trên deadline
+  if (finalUpdateData.deadline) {
+    const newDeadline = new Date(finalUpdateData.deadline);
+    const now = new Date();
 
-  return job;
+    if (newDeadline < now) {
+      // Nếu deadline mới là quá khứ -> EXPIRED
+      finalUpdateData.status = 'EXPIRED';
+    } else {
+      // Nếu deadline mới là tương lai
+      // Nếu user không gửi status mới VÀ status hiện tại là EXPIRED -> tự động chuyển thành ACTIVE
+      if (job.status === 'EXPIRED') {
+        finalUpdateData.status = 'ACTIVE';
+      }
+      // Nếu user có gửi status (VD: INACTIVE) thì giữ nguyên status user gửi
+      // Nếu status hiện tại là INACTIVE (đóng thủ công) và user không gửi status -> giữ nguyên INACTIVE
+    }
+  }
+
+  const updatedJob = await Job.findByIdAndUpdate(jobId, finalUpdateData, {
+    new: true,
+    runValidators: true
+  });
+
+  return updatedJob;
 };
 
 /**

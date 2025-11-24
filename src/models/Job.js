@@ -83,8 +83,7 @@ const jobSchema = new mongoose.Schema({
     },
     commune: {
       type: String,
-      required: [true, 'Commune/Ward is required'],
-      default: '' // Default value if not provided
+      default: ''
     },
     coordinates: {
       type: {
@@ -95,10 +94,10 @@ const jobSchema = new mongoose.Schema({
       coordinates: {
         type: [Number], // [longitude, latitude]
         validate: {
-          validator: function(coords) {
+          validator: function (coords) {
             return coords && coords.length === 2 &&
-                   coords[0] >= -180 && coords[0] <= 180 &&
-                   coords[1] >= -90 && coords[1] <= 90;
+              coords[0] >= -180 && coords[0] <= 180 &&
+              coords[1] >= -90 && coords[1] <= 90;
           },
           message: 'Invalid coordinates format'
         }
@@ -139,7 +138,7 @@ const jobSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.Decimal128,
     get: v => v?.toString(),
     validate: {
-      validator: function(value) {
+      validator: function (value) {
         // Ensure this.minSalary is defined and compare their string representations as numbers
         if (this.minSalary === undefined) return true;
         return parseFloat(value.toString()) >= parseFloat(this.minSalary.toString());
@@ -193,7 +192,7 @@ const jobSchema = new mongoose.Schema({
     },
     default: 'ACTIVE'
   },
-   recruiterProfileId: {
+  recruiterProfileId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'RecruiterProfile',
     required: [true, 'Recruiter ID is required']
@@ -226,7 +225,7 @@ const jobSchema = new mongoose.Schema({
 
 // Create indexes for better search and query performance
 jobSchema.index({ title: 'text', description: 'text', 'location.province': 'text', 'location.district': 'text' });
-jobSchema.index({ recruiterProfileId: 1 }); 
+jobSchema.index({ recruiterProfileId: 1 });
 jobSchema.index({ type: 1 });
 jobSchema.index({ workType: 1 }); // Added index for workType
 jobSchema.index({ category: 1 });

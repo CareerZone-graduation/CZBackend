@@ -15,6 +15,7 @@ import app from './app.js';
 import './cron/interviewReminder.cron.js';
 import './cron/jobAlert.cron.js';
 import './cron/emailVerificationCleanup.cron.js';
+import './cron/jobExpiration.cron.js';
 
 // Import watchers
 import { watchCandidateProfileChanges } from './watchers/candidateEmbedding.watcher.js';
@@ -25,8 +26,8 @@ dotenv.config();
 const server = http.createServer(app);
 const io = new socketio.Server(server, {
   cors: {
-    origin: [config.CLIENT_URL,config.RECRUITER_FE_URL,"http://localhost:3001","http://localhost:3000","http://localhost:3002", "http://localhost:3003"],
-    methods: ['GET', 'POST','PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
+    origin: [config.CLIENT_URL, config.RECRUITER_FE_URL, "http://localhost:3001", "http://localhost:3000", "http://localhost:3002", "http://localhost:3003"],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
     credentials: true,
   },
 });
