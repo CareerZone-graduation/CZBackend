@@ -57,4 +57,30 @@ router.post(
   recruiterController.unlockProfile
 );
 
+
+
+/**
+ * @route GET /api/v1/recruiters/dashboard-stats
+ * @desc Get dashboard statistics
+ * @access Private (Recruiter)
+ */
+router.get(
+  '/dashboard-stats',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.recruiterOnly,
+  recruiterController.getDashboardStats
+);
+
+/**
+ * @route GET /api/v1/recruiters/dashboard/export
+ * @desc Export dashboard data to CSV
+ * @access Private (Recruiter)
+ */
+router.get(
+  '/dashboard/export',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.recruiterOnly,
+  recruiterController.exportDashboardData
+);
+
 export default router;

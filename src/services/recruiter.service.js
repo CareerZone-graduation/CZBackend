@@ -1,4 +1,4 @@
-import { RecruiterProfile, User, CandidateProfile, ProfileUnlock, CreditTransaction } from '../models/index.js';
+import { RecruiterProfile, User, CandidateProfile, ProfileUnlock, CreditTransaction, Job, Application, InterviewRoom } from '../models/index.js';
 import { NotFoundError, BadRequestError, ForbiddenError } from '../utils/AppError.js';
 import { TRANSACTION_TYPES, TRANSACTION_CATEGORIES } from '../constants/index.js';
 import logger from '../utils/logger.js';
@@ -138,7 +138,7 @@ export const unlockCandidateProfile = async (candidateId, recruiterId) => {
 
   if (existingUnlock) {
     logger.info(`Profile already unlocked for candidateId: ${candidateId} by recruiter: ${recruiterId}`);
-    
+
     // Get the transaction for this unlock
     const existingTransaction = await CreditTransaction.findOne({
       userId: recruiterId,
@@ -196,7 +196,7 @@ export const unlockCandidateProfile = async (candidateId, recruiterId) => {
   });
 
   logger.info(`Successfully unlocked candidate profile candidateId: ${candidateId} by recruiter: ${recruiterId}`);
-  
+
   return {
     unlocked: true,
     transaction: transaction,
@@ -204,4 +204,264 @@ export const unlockCandidateProfile = async (candidateId, recruiterId) => {
     remainingBalance: balanceAfter,
     candidateName: candidateName
   };
+};
+
+// --- Dashboard Analytics Helpers ---
+
+const getDateRange = (timeRange) => {
+  const endDate = new Date();
+  let startDate = new Date();
+
+  switch (timeRange) {
+    case '7d':
+      startDate.setDate(endDate.getDate() - 7);
+      break;
+    case '90d':
+      startDate.setDate(endDate.getDate() - 90);
+      break;
+    case '1y':
+      startDate.setFullYear(endDate.getFullYear() - 1);
+      break;
+    case '30d':
+    default:
+      startDate.setDate(endDate.getDate() - 30);
+      break;
+  }
+  return { startDate, endDate };
+};
+
+const getPreviousDateRange = (startDate, endDate) => {
+  const duration = endDate.getTime() - startDate.getTime();
+  const previousEndDate = new Date(startDate.getTime());
+  const previousStartDate = new Date(previousEndDate.getTime() - duration);
+  return { startDate: previousStartDate, endDate: previousEndDate };
+};
+
+/**
+ * Get dashboard statistics
+ * @param {string} userId
+ * @param {Object} query - { timeRange, from, to }
+ */
+export const getDashboardStats = async (userId, query) => {
+  const { timeRange, from, to } = query;
+  const recruiterProfile = await RecruiterProfile.findOne({ userId });
+  if (!recruiterProfile) throw new NotFoundError('Recruiter profile not found');
+
+  const recruiterProfileId = recruiterProfile._id;
+  const recruiterId = userId;
+
+  let startDate, endDate;
+
+  if (from && to) {
+    startDate = new Date(from);
+    endDate = new Date(to);
+    // Ensure endDate includes the full day
+    endDate.setHours(23, 59, 59, 999);
+  } else {
+    const range = getDateRange(timeRange || '30d');
+    startDate = range.startDate;
+    endDate = range.endDate;
+  }
+
+  const duration = endDate.getTime() - startDate.getTime();
+  const previousEndDate = new Date(startDate.getTime());
+  const previousStartDate = new Date(previousEndDate.getTime() - duration);
+
+  // 1. Summary Metrics
+  const [
+    activeJobs,
+    prevActiveJobs,
+    totalApplications,
+    prevTotalApplications,
+    pendingApplications,
+    scheduledInterviews,
+    prevScheduledInterviews
+  ] = await Promise.all([
+    Job.countDocuments({ recruiterProfileId, status: 'ACTIVE' }),
+    Job.countDocuments({ recruiterProfileId, status: 'ACTIVE' }), // Placeholder for prev active jobs
+    Application.countDocuments({
+      jobId: { $in: await Job.find({ recruiterProfileId }).distinct('_id') },
+      createdAt: { $gte: startDate, $lte: endDate }
+    }),
+    Application.countDocuments({
+      jobId: { $in: await Job.find({ recruiterProfileId }).distinct('_id') },
+      createdAt: { $gte: previousStartDate, $lte: previousEndDate }
+    }),
+    Application.countDocuments({
+      jobId: { $in: await Job.find({ recruiterProfileId }).distinct('_id') },
+      status: { $in: ['PENDING', 'REVIEWING'] }
+    }),
+    InterviewRoom.countDocuments({
+      recruiterId,
+      scheduledTime: { $gte: startDate, $lte: endDate },
+      status: { $ne: 'CANCELLED' }
+    }),
+    InterviewRoom.countDocuments({
+      recruiterId,
+      scheduledTime: { $gte: previousStartDate, $lte: previousEndDate },
+      status: { $ne: 'CANCELLED' }
+    })
+  ]);
+
+  // 2. Funnel Metrics
+  const funnelStats = await Application.aggregate([
+    {
+      $match: {
+        jobId: { $in: await Job.find({ recruiterProfileId }).distinct('_id') },
+        createdAt: { $gte: startDate, $lte: endDate }
+      }
+    },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: 1 },
+        underReview: {
+          $sum: { $cond: [{ $in: ['$status', ['PENDING', 'REVIEWING']] }, 1, 0] }
+        },
+        interview: {
+          $sum: { $cond: [{ $in: ['$status', ['SCHEDULED_INTERVIEW', 'INTERVIEWED']] }, 1, 0] }
+        },
+        hired: {
+          $sum: { $cond: [{ $eq: ['$status', 'ACCEPTED'] }, 1, 0] }
+        }
+      }
+    }
+  ]);
+
+  // 3. Chart Data (Application Volume)
+  const granularity = (timeRange === '90d' || timeRange === '1y' || (endDate - startDate) > 1000 * 60 * 60 * 24 * 60) ? 'week' : 'day';
+  const chartData = await Application.aggregate([
+    {
+      $match: {
+        jobId: { $in: await Job.find({ recruiterProfileId }).distinct('_id') },
+        createdAt: { $gte: startDate, $lte: endDate }
+      }
+    },
+    {
+      $group: {
+        _id: {
+          $dateToString: {
+            format: '%Y-%m-%d',
+            date: { $dateTrunc: { date: '$createdAt', unit: granularity } }
+          }
+        },
+        count: { $sum: 1 }
+      }
+    },
+    { $sort: { _id: 1 } }
+  ]);
+
+  // 4. Top Jobs
+  const topJobs = await Job.aggregate([
+    { $match: { recruiterProfileId } },
+    {
+      $lookup: {
+        from: 'applications',
+        localField: '_id',
+        foreignField: 'jobId',
+        as: 'applications'
+      }
+    },
+    {
+      $project: {
+        title: 1,
+        status: 1,
+        applicationCount: { $size: '$applications' },
+        newApplications: {
+          $size: {
+            $filter: {
+              input: '$applications',
+              as: 'app',
+              cond: { $gte: ['$$app.createdAt', startDate] }
+            }
+          }
+        }
+      }
+    },
+    { $sort: { applicationCount: -1 } },
+    { $limit: 5 }
+  ]);
+
+  // 5. Candidate Quality (Rating Distribution)
+  const candidateQuality = await Application.aggregate([
+    {
+      $match: {
+        jobId: { $in: await Job.find({ recruiterProfileId }).distinct('_id') },
+        createdAt: { $gte: startDate, $lte: endDate }
+      }
+    },
+    {
+      $group: {
+        _id: '$candidateRating',
+        count: { $sum: 1 }
+      }
+    }
+  ]);
+
+  // 6. Upcoming Interviews
+  logger.info(`Fetching upcoming interviews for recruiterId: ${recruiterId}`);
+  const upcomingInterviews = await InterviewRoom.find({
+    recruiterId,
+    scheduledTime: { $gte: new Date() },
+    status: { $ne: 'CANCELLED' }
+  })
+    .sort({ scheduledTime: 1 })
+    .limit(5)
+    .populate('candidateId', 'email')
+    .populate('jobId', 'title')
+    .lean();
+
+  logger.info(`Found ${upcomingInterviews.length} upcoming interviews`);
+
+  // Populate candidate details (fullname, avatar) from CandidateProfile
+  await Promise.all(upcomingInterviews.map(async (interview) => {
+    if (interview.candidateId) {
+      const profile = await CandidateProfile.findOne({ userId: interview.candidateId._id }).select('fullname avatar');
+      if (profile) {
+        interview.candidateId.fullname = profile.fullname;
+        interview.candidateId.avatar = profile.avatar;
+      }
+    }
+  }));
+
+  return {
+    summary: {
+      activeJobs: { value: activeJobs, change: activeJobs - prevActiveJobs },
+      applications: { value: totalApplications, change: totalApplications - prevTotalApplications },
+      pendingReview: { value: pendingApplications, change: 0 },
+      interviews: { value: scheduledInterviews, change: scheduledInterviews - prevScheduledInterviews }
+    },
+    funnel: funnelStats[0] || { total: 0, underReview: 0, interview: 0, offer: 0, hired: 0 },
+    chart: chartData.map(d => ({ date: d._id, value: d.count })),
+    topJobs,
+    candidateQuality: candidateQuality.map(q => ({ name: q._id, value: q.count })),
+    upcomingInterviews
+  };
+};
+
+export const exportDashboardData = async (recruiterId, query) => {
+  const stats = await getDashboardStats(recruiterId, query);
+
+  // Simple CSV construction
+  const rows = [];
+  rows.push(['Metric', 'Value']);
+  rows.push(['Active Jobs', stats.summary.activeJobs.value]);
+  rows.push(['Total Applications', stats.summary.applications.value]);
+  rows.push(['Pending Review', stats.summary.pendingReview.value]);
+  rows.push(['Scheduled Interviews', stats.summary.interviews.value]);
+  rows.push([]);
+
+  rows.push(['Funnel Stage', 'Count']);
+  rows.push(['Total', stats.funnel.total]);
+  rows.push(['Under Review', stats.funnel.underReview]);
+  rows.push(['Interview', stats.funnel.interview]);
+  rows.push(['Hired', stats.funnel.hired]);
+  rows.push([]);
+
+  rows.push(['Top Jobs', 'Applications']);
+  stats.topJobs.forEach(job => {
+    rows.push([job.title, job.applicationCount]);
+  });
+
+  return rows.map(row => row.join(',')).join('\n');
 };

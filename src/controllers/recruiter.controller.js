@@ -25,7 +25,7 @@ export const getRecruiterProfile = asyncHandler(async (req, res) => {
 export const getCandidateProfile = asyncHandler(async (req, res) => {
   const { userId } = req.params;
   const recruiterId = req.user._id;
-  
+
   const profile = await recruiterService.getCandidateProfile(userId, recruiterId);
 
   res.status(200).json({
@@ -43,14 +43,14 @@ export const getCandidateProfile = asyncHandler(async (req, res) => {
 export const unlockProfile = asyncHandler(async (req, res) => {
   const { candidateId } = req.body;
   const recruiterId = req.user._id;
-  
+
   try {
     const result = await recruiterService.unlockCandidateProfile(candidateId, recruiterId);
 
     res.status(200).json({
       success: true,
-      message: result.alreadyUnlocked 
-        ? 'Hồ sơ đã được mở khóa trước đó.' 
+      message: result.alreadyUnlocked
+        ? 'Hồ sơ đã được mở khóa trước đó.'
         : 'Mở khóa hồ sơ ứng viên thành công.',
       data: {
         transaction: result.transaction,
@@ -71,4 +71,45 @@ export const unlockProfile = asyncHandler(async (req, res) => {
     // Re-throw other errors to be handled by error middleware
     throw error;
   }
+});
+
+
+/**
+ * Get dashboard statistics for recruiter
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ */
+/**
+ * Get dashboard statistics for recruiter
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ */
+export const getDashboardStats = asyncHandler(async (req, res) => {
+  const recruiterId = req.user._id;
+  const query = req.query;
+
+  const stats = await recruiterService.getDashboardStats(recruiterId, query);
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy thống kê dashboard thành công.',
+    data: stats,
+  });
+});
+
+/**
+ * Export dashboard data to CSV
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ */
+export const exportDashboardData = asyncHandler(async (req, res) => {
+  const recruiterId = req.user._id;
+  const query = req.query;
+
+  const csvData = await recruiterService.exportDashboardData(recruiterId, query);
+
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', `attachment; filename=dashboard-stats-${query.timeRange || 'custom'}-${new Date().toISOString().split('T')[0]}.csv`);
+
+  res.status(200).send(csvData);
 });
