@@ -538,6 +538,32 @@ export const getLatestConversations = async (userId, { search, page = 1, limit =
       }
     },
 
+    // Populate application status for context if type is APPLICATION
+    {
+      $lookup: {
+        from: 'applications',
+        localField: 'context.contextId',
+        foreignField: '_id',
+        as: 'applicationContext'
+      }
+    },
+    {
+      $addFields: {
+        'context.data.status': {
+          $cond: {
+            if: {
+              $and: [
+                { $eq: ['$context.type', 'APPLICATION'] },
+                { $gt: [{ $size: '$applicationContext' }, 0] }
+              ]
+            },
+            then: { $arrayElemAt: ['$applicationContext.status', 0] },
+            else: '$context.data.status'
+          }
+        }
+      }
+    },
+
     // Project để định hình lại output
     {
       $project: {
@@ -596,20 +622,6 @@ export const getLatestConversations = async (userId, { search, page = 1, limit =
   const conversations = result[0].data;
   const totalItems = result[0].totalCount[0] ? result[0].totalCount[0].count : 0;
   const totalPages = Math.ceil(totalItems / limitNum);
-
-  // Bổ sung thông tin avatar/logo cho `otherParticipant` dựa trên vai trò của họ
-  // Note: The aggregation above already tries to fetch avatar/logo.
-  // The original code had a loop here to fetch them again or fill gaps.
-  // Since we moved the logic into aggregation, we might not need this loop if the aggregation is correct.
-  // However, the original loop used `CandidateProfile.findOne` which might be safer if aggregation lookups fail or are complex.
-  // But looking at the aggregation, it seems to cover it.
-  // Let's keep the loop ONLY if we think aggregation might miss something, but for now let's trust the aggregation
-  // or rather, let's double check if the aggregation `otherParticipantAvatar` logic is robust.
-  // It seems to be.
-  // BUT, the original code had a loop that did `await CandidateProfile.findOne...`
-  // The aggregation does `$lookup`.
-  // If the aggregation works, we don't need the loop.
-  // Let's return the result directly.
 
   return {
     data: conversations,
@@ -748,6 +760,17 @@ export const getConversationById = async (conversationId, currentUserId) => {
   const otherParticipant = participant1IdStr === currentUserIdStr
     ? conversation.participant2
     : conversation.participant1;
+
+  // Update context status if APPLICATION
+  if (conversation.context && conversation.context.type === 'APPLICATION' && conversation.context.contextId) {
+    const application = await Application.findById(conversation.context.contextId).select('status').lean();
+    if (application) {
+      conversation.context.data = {
+        ...conversation.context.data,
+        status: application.status
+      };
+    }
+  }
 
   return {
     _id: conversation._id,

@@ -6,6 +6,7 @@ import {
   CandidateProfile,
   RecruiterProfile,
   InterviewRoom,
+  TalentPool,
 } from '../models/index.js';
 import { NotFoundError, UnauthorizedError, BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
@@ -22,7 +23,7 @@ import { pushNotification } from './notification.service.js';
  * Hàm này không tự save, việc save sẽ do hàm gọi nó quyết định.
  */
 export const logActivity = (application, action, detail) => {
-  console.log("Logging activity: ", {action, detail });
+  console.log("Logging activity: ", { action, detail });
   application.activityHistory.push({
     action,
     detail,
@@ -65,20 +66,20 @@ export const getApplicationsByJob = async (jobId, recruiterId, options = {}) => 
   // Xây dựng query filter
   const filter = { jobId: new mongoose.Types.ObjectId(jobId) };
   console.log(filter);
-  
+
   if (options.status) {
     filter.status = options.status;
   }
-  
+
   if (options.candidateRating) {
     filter.candidateRating = options.candidateRating;
   }
-  
+
   if (options.isReapplied !== undefined) {
     filter.isReapplied = options.isReapplied;
   }
 
-//   Xây dựng sort options
+  //   Xây dựng sort options
   let sortOptions = {};
   if (options.sort) {
     if (options.sort.startsWith('-')) {
@@ -95,6 +96,15 @@ export const getApplicationsByJob = async (jobId, recruiterId, options = {}) => 
   const pipeline = [
     { $match: filter },
     {
+      $lookup: {
+        from: 'candidateprofiles',
+        localField: 'candidateProfileId',
+        foreignField: '_id',
+        as: 'candidateProfile'
+      }
+    },
+    { $unwind: { path: '$candidateProfile', preserveNullAndEmptyArrays: true } },
+    {
       $project: {
         _id: 1,
         jobId: 1,
@@ -108,11 +118,12 @@ export const getApplicationsByJob = async (jobId, recruiterId, options = {}) => 
         submittedCV: 1,
         jobSnapshot: 1,
         // Thông tin cơ bản của ứng viên từ form hoặc từ thông tin người dùng
-        candidateName: { $ifNull: ['$candidateName', '$user.fullName'] },
-        candidateEmail: { $ifNull: ['$candidateEmail', '$user.email'] },
-        candidatePhone: { $ifNull: ['$candidatePhone', '$user.phoneNumber'] },
-        candidateAvatar: '$user.avatar',
+        candidateName: { $ifNull: ['$candidateName', '$candidateProfile.fullname'] },
+        candidateEmail: { $ifNull: ['$candidateEmail', '$candidateProfile.email'] },
+        candidatePhone: { $ifNull: ['$candidatePhone', '$candidateProfile.phone'] },
+        candidateAvatar: '$candidateProfile.avatar',
         candidateTitle: '$candidateProfile.title',
+        candidateUserId: '$candidateProfile.userId',
       }
     },
     { $sort: sortOptions },
@@ -123,7 +134,7 @@ export const getApplicationsByJob = async (jobId, recruiterId, options = {}) => 
   // Nếu có tìm kiếm, thêm điều kiện tìm kiếm
   if (options.search) {
     const searchRegex = new RegExp(options.search, 'i');
-    
+
     // Thêm một stage riêng cho tìm kiếm sau khi đã lookup để có thể tìm trong các trường
     pipeline.splice(3, 0, {
       $match: {
@@ -164,13 +175,13 @@ export const getApplicationById = async (applicationId, recruiterId) => {
   const application = await Application.findById(applicationId)
     .populate({
       path: 'candidateProfileId',
-      select: 'fullname avatar bio phone email address skills experiences educations certificates projects expectedSalary workPreferences preferredLocations'
+      select: 'userId fullname avatar bio phone email address skills experiences educations certificates projects expectedSalary workPreferences preferredLocations'
     })
     .populate({
       path: 'jobId',
       select: 'title company location salary employmentType description requirements benefits'
     });
-    
+
   if (!application) {
     throw new NotFoundError('Không tìm thấy đơn ứng tuyển');
   }
@@ -194,18 +205,27 @@ export const getApplicationById = async (applicationId, recruiterId) => {
   // Lấy thông tin phỏng vấn nếu có
   const interview = await InterviewRoom.findOne({ applicationId: application._id }).lean();
 
+  // Check if candidate is in talent pool
+  const isInTalentPool = application.candidateProfileId ? await TalentPool.exists({
+    recruiterProfileId: recruiterProfile._id,
+    candidateProfileId: application.candidateProfileId._id
+  }) : null;
+
   // Tạo và trả về đối tượng thông tin (candidateProfileId đã được populate đầy đủ)
   const applicationDetails = {
     ...application.toObject(),
+    candidateUserId: application.candidateProfileId?.userId,
     candidateAvatar: application.candidateProfileId?.avatar,
+    isInTalentPool: !!isInTalentPool,
+    talentPoolId: isInTalentPool ? isInTalentPool._id : null,
     hasInterview: !!interview,
     interviewInfo: interview
       ? {
-          interviewId: interview._id,
-          scheduledTime: interview.scheduledTime,
-          status: interview.status,
-          roomName: interview.roomName,
-        }
+        interviewId: interview._id,
+        scheduledTime: interview.scheduledTime,
+        status: interview.status,
+        roomName: interview.roomName,
+      }
       : null,
   };
 
@@ -248,15 +268,15 @@ export const updateCandidateRating = async (applicationId, recruiterId, rating) 
     throw new UnauthorizedError('Bạn không có quyền cập nhật đánh giá ứng viên này');
   }
   const ratingMessage = rating === "NOT_RATED" ? "chưa được đánh giá" :
-              rating === "NOT_SUITABLE" ? "không phù hợp" :
-              rating === "MAYBE" ? "có thể phù hợp" :
-              rating === "SUITABLE" ? "phù hợp" :
-              rating === "PERFECT_MATCH" ? "rất phù hợp" : rating;
+    rating === "NOT_SUITABLE" ? "không phù hợp" :
+      rating === "MAYBE" ? "có thể phù hợp" :
+        rating === "SUITABLE" ? "phù hợp" :
+          rating === "PERFECT_MATCH" ? "rất phù hợp" : rating;
   if (application.status === 'PENDING') {
     application.status = 'REVIEWING';
   }
   logActivity(application, 'RATING_UPDATE', `Đã đánh giá đơn ứng tuyển là: ${ratingMessage}`);
-  
+
   application.candidateRating = rating;
   await application.save();
 
@@ -358,7 +378,7 @@ export const scheduleInterview = async (applicationId, recruiterId, scheduledTim
   if (!candidateProfile) {
     throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
   }
-  
+
   // 4. Tạo phòng phỏng vấn
   const roomName = `Phỏng vấn vị trí ${job.title} - Ứng viên: ${application.candidateName}`;
   const newInterview = await InterviewRoom.create({
@@ -381,10 +401,10 @@ export const scheduleInterview = async (applicationId, recruiterId, scheduledTim
   application.lastStatusUpdateAt = new Date();
 
   // Ghi log cho việc lên lịch và việc đổi trạng thái
-  logActivity(application, 'INTERVIEW_SCHEDULED', 
+  logActivity(application, 'INTERVIEW_SCHEDULED',
     "Lên lịch phỏng vấn vào " + new Date(scheduledTime).toLocaleString('vi-VN'),
   );
-  
+
   await application.save();
 
   // Gửi thông báo
@@ -420,10 +440,10 @@ export const getAllApplications = async (recruiterId, options = {}) => {
   }
 
   // Lấy tất cả jobs của recruiter này
-  const recruiterJobs = await Job.find({ 
-    recruiterProfileId: recruiterProfile._id 
+  const recruiterJobs = await Job.find({
+    recruiterProfileId: recruiterProfile._id
   }).select('_id');
-  
+
   const jobIds = recruiterJobs.map(job => job._id);
 
   // Xử lý options
@@ -433,21 +453,21 @@ export const getAllApplications = async (recruiterId, options = {}) => {
 
   // Build filter
   const filter = { jobId: { $in: jobIds } };
-  
+
   // Filter by status
   if (options.status && options.status !== 'all') {
     filter.status = options.status;
   }
-  
+
   // Filter by rating
   if (options.candidateRating && options.candidateRating !== 'all') {
     filter.candidateRating = options.candidateRating;
   }
-  
+
   // Filter by specific jobs
   if (options.jobIds && options.jobIds.length > 0) {
-    filter.jobId = { 
-      $in: options.jobIds.map(id => new mongoose.Types.ObjectId(id)) 
+    filter.jobId = {
+      $in: options.jobIds.map(id => new mongoose.Types.ObjectId(id))
     };
   }
 
@@ -544,7 +564,7 @@ export const getAllApplications = async (recruiterId, options = {}) => {
   const countPipeline = [
     { $match: filter }
   ];
-  
+
   if (options.search) {
     const searchRegex = new RegExp(options.search, 'i');
     countPipeline.push({
@@ -557,12 +577,12 @@ export const getAllApplications = async (recruiterId, options = {}) => {
       }
     });
   }
-  
+
   const countResult = await Application.aggregate([
     ...countPipeline,
     { $count: 'total' }
   ]);
-  
+
   const totalApplications = countResult.length > 0 ? countResult[0].total : 0;
 
   return {
@@ -590,22 +610,22 @@ export const getApplicationsStatistics = async (recruiterId, filters = {}) => {
   }
 
   // Lấy tất cả jobs của recruiter
-  const recruiterJobs = await Job.find({ 
-    recruiterProfileId: recruiterProfile._id 
+  const recruiterJobs = await Job.find({
+    recruiterProfileId: recruiterProfile._id
   }).select('_id title');
-  
+
   const jobIds = recruiterJobs.map(job => job._id);
 
   // Build base filter
   const baseFilter = { jobId: { $in: jobIds } };
-  
+
   // Apply additional filters if provided
   if (filters.jobIds && filters.jobIds.length > 0) {
-    baseFilter.jobId = { 
-      $in: filters.jobIds.map(id => new mongoose.Types.ObjectId(id)) 
+    baseFilter.jobId = {
+      $in: filters.jobIds.map(id => new mongoose.Types.ObjectId(id))
     };
   }
-  
+
   if (filters.fromDate || filters.toDate) {
     baseFilter.appliedAt = {};
     if (filters.fromDate) {

@@ -262,6 +262,19 @@ export const getJobsByRecruiter = async (userId, options) => {
 
   const totalJobs = await Job.countDocuments(query);
 
+  // Get application counts for these jobs
+  const jobIds = jobs.map(job => job._id);
+  const applicationCounts = await Application.aggregate([
+    { $match: { jobId: { $in: jobIds } } },
+    { $group: { _id: '$jobId', count: { $sum: 1 } } }
+  ]);
+
+  // Create a map for quick lookup
+  const countMap = {};
+  applicationCounts.forEach(item => {
+    countMap[item._id.toString()] = item.count;
+  });
+
   const plainJobs = jobs.map(job => ({
     _id: job._id,
     title: job.title,
@@ -279,6 +292,7 @@ export const getJobsByRecruiter = async (userId, options) => {
     recruiterProfileId: job.recruiterProfileId,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
+    totalApply: countMap[job._id.toString()] || 0, // Add totalApply field
   }));
 
   return {
@@ -323,6 +337,7 @@ export const getJobDetailsForRecruiter = async (jobId, userId) => {
         // Thống kê theo từng trạng thái
         pendingCount: { $sum: { $cond: [{ $eq: ['$status', 'PENDING'] }, 1, 0] } },
         reviewingCount: { $sum: { $cond: [{ $eq: ['$status', 'REVIEWING'] }, 1, 0] } },
+        scheduledInterviewCount: { $sum: { $cond: [{ $eq: ['$status', 'SCHEDULED_INTERVIEW'] }, 1, 0] } },
         interviewedCount: { $sum: { $cond: [{ $eq: ['$status', 'INTERVIEWED'] }, 1, 0] } },
         acceptedCount: { $sum: { $cond: [{ $eq: ['$status', 'ACCEPTED'] }, 1, 0] } },
         rejectedCount: { $sum: { $cond: [{ $eq: ['$status', 'REJECTED'] }, 1, 0] } },
@@ -343,6 +358,7 @@ export const getJobDetailsForRecruiter = async (jobId, userId) => {
       byStatus: {
         pending: stats?.pendingCount || 0,
         reviewing: stats?.reviewingCount || 0,
+        scheduledInterview: stats?.scheduledInterviewCount || 0,
         interviewed: stats?.interviewedCount || 0,
         accepted: stats?.acceptedCount || 0,
         rejected: stats?.rejectedCount || 0,

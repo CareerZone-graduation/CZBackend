@@ -1,7 +1,7 @@
 import { NotFoundError, BadRequestError, ForbiddenError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
 import InterviewRoom from '../models/InterviewRoom.js';
-import { User, Application, Job } from '../models/index.js';
+import { User, Application, Job, RecruiterProfile } from '../models/index.js';
 import * as queueService from './queue.service.js';
 import * as rabbitmq from '../queues/rabbitmq.js';
 import mongoose from 'mongoose';
@@ -52,9 +52,9 @@ export const scheduleInterview = async (recruiterId, candidateId, jobId, applica
   if (!job) {
     throw new NotFoundError('Job not found');
   }
-
+  const recruiterUserId = (await RecruiterProfile.findById(job.recruiterProfileId).lean()).userId;
   // Verify recruiter owns the job
-  if (job.recruiterProfileId.toString() !== recruiterId.toString()) {
+  if (recruiterUserId.toString() !== recruiterId.toString()) {
     throw new ForbiddenError('You do not have permission to schedule interviews for this job');
   }
 
