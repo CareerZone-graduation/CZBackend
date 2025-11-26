@@ -247,7 +247,9 @@ export const getApplicationById = async (applicationId, recruiterId) => {
     }
   }
 
-  return applicationDetails;
+  return {
+    ...applicationDetails,
+  };
 
 };
 

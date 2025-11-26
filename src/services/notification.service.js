@@ -4,7 +4,7 @@ import { NotFoundError, BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
 import { logActivity } from './application.service.js';
-import e, { application } from 'express';
+
 
 /**
  * Gửi và lưu thông báo
@@ -724,6 +724,7 @@ export const handleStatusUpdate = async (payload) => {
         },
         metadata: {
           applicationId: applicationId.toString(),
+          jobId: application.jobId.toString(),
         }
       });
 
@@ -732,7 +733,7 @@ export const handleStatusUpdate = async (payload) => {
         title: "Nộp đơn thành công",
         body: `Bạn đã nộp đơn thành công vào vị trí "${application.jobSnapshot.title}" tại ${application.jobSnapshot.company}.`,
         data: {
-          url: `/applications/${applicationId}`,
+          url: `/jobs/${application.jobId}/applications/${applicationId}`,
         }
       });
       break;
@@ -788,6 +789,7 @@ export const createApplicationViewedNotification = async (applicationId) => {
     },
     metadata: {
       applicationId: applicationId.toString(),
+      jobId: application.jobId.toString(),
       status: 'APPLICATION_VIEWED'
     }
   });
@@ -796,7 +798,7 @@ export const createApplicationViewedNotification = async (applicationId) => {
     title,
     body: message,
     data: {
-      url: `/applications/${applicationId}`
+      url: `/jobs/${application.jobId}/applications/${applicationId}`
     }
   });
 
@@ -854,17 +856,17 @@ export const createStatusChangeNotification = async (applicationId, newStatus) =
     },
     metadata: {
       applicationId: applicationId.toString(),
+      jobId: application.jobId.toString(),
       status: newStatus
     }
   });
 
   // đồng thời push thông báo đẩy
-  console.log("🚀 ~ createStatusChangeNotification ~ candidateId:", candidateId)
   await pushNotification(candidateId, {
     title: notification.title,
     body: notification.message,
     data: {
-      url: `/applications/${applicationId}`,
+      url: `/jobs/${application.jobId}/applications/${applicationId}`,
     }
   });
 };
@@ -913,6 +915,7 @@ export const createOfferResponseNotification = async (applicationId, status) => 
     },
     metadata: {
       applicationId: applicationId.toString(),
+      jobId: job._id.toString(),
       status: status
     }
   });
@@ -922,7 +925,7 @@ export const createOfferResponseNotification = async (applicationId, status) => 
     title,
     body: message,
     data: {
-      url: `/recruiter/applications/${applicationId}`
+      url: `/jobs/${job._id}/applications/${applicationId}`
     }
   });
 
