@@ -1,0 +1,78 @@
+doctype html
+html
+  head
+    meta(name='viewport', content='width=device-width')
+    meta(http-equiv='Content-Type', content='text/html; charset=UTF-8')
+    title= subject
+    style.
+      body { font-family: sans-serif; -webkit-font-smoothing: antialiased; font-size: 14px; line-height: 1.4; margin: 0; padding: 0; -ms-text-size-adjust: 100%; -webkit-text-size-adjust: 100%; }
+      table { border-collapse: separate; mso-table-lspace: 0pt; mso-table-rspace: 0pt; width: 100%; }
+      td { font-family: sans-serif; font-size: 14px; vertical-align: top; }
+      .body { background-color: #f6f6f6; width: 100%; }
+      .container { display: block; margin: 0 auto !important; max-width: 580px; padding: 10px; width: 580px; }
+      .main { background: #ffffff; border-radius: 3px; width: 100%; }
+      .wrapper { box-sizing: border-box; padding: 20px; }
+      .header { background-color: #3498db; padding: 20px; text-align: center; color: #ffffff; border-radius: 3px 3px 0 0; }
+      .header h1 { margin: 0; font-size: 24px; }
+      p { font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px; }
+      .response-box { background-color: #f9f9f9; border-left: 4px solid #3498db; padding: 15px; margin: 20px 0; }
+      .info-box { background-color: #e8f4f8; padding: 15px; margin: 20px 0; border-radius: 5px; }
+      .footer { text-align: center; padding: 20px; color: #999999; font-size: 12px; }
+      a { color: #3498db; text-decoration: underline; }
+      .btn { box-sizing: border-box; width: 100%; margin-top: 20px; }
+      .btn > tbody > tr > td { padding-bottom: 15px; }
+      .btn table { width: auto; }
+      .btn table td { background-color: #ffffff; border-radius: 5px; text-align: center; }
+      .btn a { background-color: #3498db; border: solid 1px #3498db; border-radius: 5px; box-sizing: border-box; color: #ffffff; cursor: pointer; display: inline-block; font-size: 14px; font-weight: bold; margin: 0; padding: 12px 25px; text-decoration: none; }
+  body
+    table.body(role='presentation', border='0', cellpadding='0', cellspacing='0')
+      tr
+        td
+        td.container
+          .main
+            .header
+              h1 CareerZone Support
+            table(role='presentation', border='0', cellpadding='0', cellspacing='0')
+              tr
+                td.wrapper
+                  p Chào #{requesterName},
+                  p Cảm ơn bạn đã liên hệ với chúng tôi. Chúng tôi đã nhận được yêu cầu hỗ trợ của bạn và đã có phản hồi.
+                  
+                  .info-box
+                    p
+                      strong Tiêu đề yêu cầu:
+                      |  #{subject}
+                    p
+                      strong Danh mục:
+                      |  #{category}
+                    p
+                      strong Trạng thái:
+                      |  #{status}
+                  
+                  p
+                    strong Phản hồi từ đội ngũ hỗ trợ:
+                  .response-box
+                    p(style='white-space: pre-wrap;')= response
+                  
+                  if statusChanged
+                    p
+                      em Trạng thái yêu cầu đã được cập nhật thành: #{newStatus}
+                  
+                  if priorityChanged
+                    p
+                      em Độ ưu tiên đã được cập nhật thành: #{newPriority}
+                  
+                  p Nếu bạn có thêm câu hỏi hoặc cần hỗ trợ thêm, vui lòng trả lời email này hoặc liên hệ với chúng tôi qua:
+                  p
+                    | Email: support@careerzone.vn
+                    br
+                    | Hotline: 1900-xxxx
+                  
+                  p Trân trọng,
+                  p
+                    strong Đội ngũ hỗ trợ CareerZone
+            
+            .footer
+              p © 2024 CareerZone. All rights reserved.
+              p Đây là email tự động, vui lòng không trả lời trực tiếp email này.
+        td

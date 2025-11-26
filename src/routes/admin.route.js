@@ -130,3 +130,104 @@ router
   );
 
 export default router;
+
+// =================================================================
+// Quản lý Yêu cầu Hỗ trợ (Support Requests)
+// =================================================================
+
+import {
+  getSupportRequestsQuerySchema,
+  respondToRequestSchema,
+  updateStatusSchema,
+  updatePrioritySchema,
+  getAnalyticsQuerySchema,
+  supportRequestIdSchema
+} from '../schemas/supportRequest.schema.js';
+
+/**
+ * @route   GET /api/admin/support-requests/analytics
+ * @desc    Get support request analytics
+ * @access  Private (Admin only)
+ * @note    This route must come BEFORE /:id to avoid route conflicts
+ */
+router
+  .route('/support-requests/analytics')
+  .get(
+    validationMiddleware.validateQuery(getAnalyticsQuerySchema),
+    adminController.getAnalytics
+  );
+
+/**
+ * @route   GET /api/admin/support-requests
+ * @desc    Get all support requests with filters
+ * @access  Private (Admin only)
+ */
+router
+  .route('/support-requests')
+  .get(
+    validationMiddleware.validateQuery(getSupportRequestsQuerySchema),
+    adminController.getAllSupportRequests
+  );
+
+/**
+ * @route   GET /api/admin/support-requests/:id
+ * @desc    Get support request by ID
+ * @access  Private (Admin only)
+ */
+router
+  .route('/support-requests/:id')
+  .get(
+    validationMiddleware.validateParams(supportRequestIdSchema),
+    adminController.getAdminSupportRequestById
+  );
+
+/**
+ * @route   POST /api/admin/support-requests/:id/respond
+ * @desc    Respond to support request
+ * @access  Private (Admin only)
+ */
+router
+  .route('/support-requests/:id/respond')
+  .post(
+    validationMiddleware.validateParams(supportRequestIdSchema),
+    validationMiddleware.validateBody(respondToRequestSchema),
+    adminController.respondToRequest
+  );
+
+/**
+ * @route   PATCH /api/admin/support-requests/:id/status
+ * @desc    Update support request status
+ * @access  Private (Admin only)
+ */
+router
+  .route('/support-requests/:id/status')
+  .patch(
+    validationMiddleware.validateParams(supportRequestIdSchema),
+    validationMiddleware.validateBody(updateStatusSchema),
+    adminController.updateRequestStatus
+  );
+
+/**
+ * @route   PATCH /api/admin/support-requests/:id/priority
+ * @desc    Update support request priority
+ * @access  Private (Admin only)
+ */
+router
+  .route('/support-requests/:id/priority')
+  .patch(
+    validationMiddleware.validateParams(supportRequestIdSchema),
+    validationMiddleware.validateBody(updatePrioritySchema),
+    adminController.updateRequestPriority
+  );
+
+/**
+ * @route   POST /api/admin/support-requests/:id/reopen
+ * @desc    Reopen closed support request
+ * @access  Private (Admin only)
+ */
+router
+  .route('/support-requests/:id/reopen')
+  .post(
+    validationMiddleware.validateParams(supportRequestIdSchema),
+    adminController.reopenRequest
+  );

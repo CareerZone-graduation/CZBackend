@@ -48,6 +48,8 @@ import viewHistoryRoutes from './routes/viewHistory.route.js'; // Job view histo
 import creditHistoryRoutes from './routes/creditHistory.route.js'; // Credit history API
 import sharePreviewRoutes from './routes/sharePreview.route.js'; // Facebook share preview
 import talentPoolRoutes from './routes/talentPool.route.js'; // Talent pool management
+import supportRequestRoutes from './routes/supportRequest.route.js'; // Support request system
+import contactRoutes from './routes/contact.route.js'; // Public contact form
 
 // 🚧 Middlewares
 import * as errorMiddleware from './middleware/error.middleware.js';
@@ -146,6 +148,8 @@ app.use('/api/job-view-history', viewHistoryRoutes); // Job view history API
 app.use('/api/credit-history', creditHistoryRoutes); // Credit history API
 app.use('/api/share-preview', sharePreviewRoutes); // Facebook share preview
 app.use('/api/talent-pool', talentPoolRoutes); // Talent pool management
+app.use('/api/support-requests', supportRequestRoutes); // Support request system
+app.use('/api/contact', contactRoutes); // Public contact form
 
 // 404 & error
 app.use(notFoundMiddleware.notFound);

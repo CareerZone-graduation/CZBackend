@@ -21,3 +21,4 @@ export { default as OnboardingSession } from './OnboardingSession.js';
 export { default as JobRecommendation } from './JobRecommendation.js';
 export { default as TalentPool } from './TalentPool.js';
 export { default as ProfileUnlock } from './ProfileUnlock.js';
+export { default as SupportRequest } from './SupportRequest.js';

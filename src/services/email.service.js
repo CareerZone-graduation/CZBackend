@@ -106,3 +106,44 @@ export const sendVerificationEmail = async (user, url) => {
         data: { firstName: user.email || user.fullName || 'Người dùng', url },
     });
 };
+
+export const sendSupportResponseEmail = async (supportRequest, adminResponse) => {
+    const statusLabels = {
+        'pending': 'Đang chờ xử lý',
+        'in-progress': 'Đang xử lý',
+        'resolved': 'Đã giải quyết',
+        'closed': 'Đã đóng'
+    };
+
+    const categoryLabels = {
+        'technical': 'Kỹ thuật',
+        'account': 'Tài khoản',
+        'billing': 'Thanh toán',
+        'general': 'Chung',
+        'other': 'Khác'
+    };
+
+    const priorityLabels = {
+        'low': 'Thấp',
+        'medium': 'Trung bình',
+        'high': 'Cao',
+        'urgent': 'Khẩn cấp'
+    };
+
+    await sendEmail({
+        to: supportRequest.requester.email,
+        subject: `Phản hồi yêu cầu hỗ trợ: ${supportRequest.subject}`,
+        template: 'supportResponse',
+        data: {
+            requesterName: supportRequest.requester.name,
+            subject: supportRequest.subject,
+            category: categoryLabels[supportRequest.category] || supportRequest.category,
+            status: statusLabels[supportRequest.status] || supportRequest.status,
+            response: adminResponse.response,
+            statusChanged: adminResponse.statusChange && adminResponse.statusChange.from !== adminResponse.statusChange.to,
+            newStatus: adminResponse.statusChange ? statusLabels[adminResponse.statusChange.to] : null,
+            priorityChanged: adminResponse.priorityChange && adminResponse.priorityChange.from !== adminResponse.priorityChange.to,
+            newPriority: adminResponse.priorityChange ? priorityLabels[adminResponse.priorityChange.to] : null
+        }
+    });
+};

@@ -152,3 +152,179 @@ export const deactivateJob = asyncHandler(async (req, res) => {
 });
 
 
+
+// =================================================================
+// Quản lý Yêu cầu Hỗ trợ (Support Requests)
+// =================================================================
+
+import * as supportRequestService from '../services/supportRequest.service.js';
+import logger from '../utils/logger.js';
+
+/**
+ * Get all support requests with filters
+ * @route GET /api/admin/support-requests
+ * @access Private (Admin only)
+ */
+export const getAllSupportRequests = asyncHandler(async (req, res) => {
+  const filters = {
+    status: req.validatedQuery?.status,
+    category: req.validatedQuery?.category,
+    priority: req.validatedQuery?.priority,
+    userType: req.validatedQuery?.userType,
+    keyword: req.validatedQuery?.keyword,
+    dateFrom: req.validatedQuery?.fromDate,
+    dateTo: req.validatedQuery?.toDate
+  };
+
+  const sort = {
+    priority: req.validatedQuery?.sortBy?.includes('priority') ? 'desc' : undefined,
+    createdAt: req.validatedQuery?.sortBy?.includes('createdAt') ? 'desc' : undefined
+  };
+
+  const pagination = {
+    page: req.validatedQuery?.page,
+    limit: req.validatedQuery?.limit
+  };
+
+  const result = await supportRequestService.getAllSupportRequests(filters, sort, pagination);
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy danh sách yêu cầu hỗ trợ thành công',
+    ...result
+  });
+});
+
+/**
+ * Get support request by ID (admin view)
+ * @route GET /api/admin/support-requests/:id
+ * @access Private (Admin only)
+ */
+export const getAdminSupportRequestById = asyncHandler(async (req, res) => {
+  const requestId = req.params.id;
+  
+  const { SupportRequest } = await import('../models/index.js');
+  const supportRequest = await SupportRequest.findById(requestId).lean();
+
+  if (!supportRequest) {
+    return res.status(404).json({
+      success: false,
+      message: 'Không tìm thấy yêu cầu hỗ trợ'
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy chi tiết yêu cầu hỗ trợ thành công',
+    data: supportRequest
+  });
+});
+
+/**
+ * Respond to support request
+ * @route POST /api/admin/support-requests/:id/respond
+ * @access Private (Admin only)
+ */
+export const respondToRequest = asyncHandler(async (req, res) => {
+  const adminId = req.user._id.toString();
+  const requestId = req.params.id;
+  const { response, statusUpdate, priorityUpdate } = req.validatedBody || req.body;
+
+  const supportRequest = await supportRequestService.respondToRequest(
+    requestId,
+    adminId,
+    response,
+    statusUpdate,
+    priorityUpdate
+  );
+
+  res.status(200).json({
+    success: true,
+    message: 'Phản hồi yêu cầu hỗ trợ thành công',
+    data: supportRequest
+  });
+});
+
+/**
+ * Update support request status
+ * @route PATCH /api/admin/support-requests/:id/status
+ * @access Private (Admin only)
+ */
+export const updateRequestStatus = asyncHandler(async (req, res) => {
+  const adminId = req.user._id.toString();
+  const requestId = req.params.id;
+  const { status } = req.validatedBody || req.body;
+
+  const supportRequest = await supportRequestService.updateRequestStatus(
+    requestId,
+    adminId,
+    status
+  );
+
+  res.status(200).json({
+    success: true,
+    message: 'Cập nhật trạng thái yêu cầu hỗ trợ thành công',
+    data: supportRequest
+  });
+});
+
+/**
+ * Update support request priority
+ * @route PATCH /api/admin/support-requests/:id/priority
+ * @access Private (Admin only)
+ */
+export const updateRequestPriority = asyncHandler(async (req, res) => {
+  const adminId = req.user._id.toString();
+  const requestId = req.params.id;
+  const { priority } = req.validatedBody || req.body;
+
+  const supportRequest = await supportRequestService.updateRequestPriority(
+    requestId,
+    adminId,
+    priority
+  );
+
+  res.status(200).json({
+    success: true,
+    message: 'Cập nhật độ ưu tiên yêu cầu hỗ trợ thành công',
+    data: supportRequest
+  });
+});
+
+/**
+ * Reopen closed support request
+ * @route POST /api/admin/support-requests/:id/reopen
+ * @access Private (Admin only)
+ */
+export const reopenRequest = asyncHandler(async (req, res) => {
+  const adminId = req.user._id.toString();
+  const requestId = req.params.id;
+
+  const supportRequest = await supportRequestService.reopenRequest(requestId, adminId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Mở lại yêu cầu hỗ trợ thành công',
+    data: supportRequest
+  });
+});
+
+/**
+ * Get support request analytics
+ * @route GET /api/admin/support-requests/analytics
+ * @access Private (Admin only)
+ */
+export const getAnalytics = asyncHandler(async (req, res) => {
+  const dateRange = {
+    dateFrom: req.validatedQuery?.fromDate,
+    dateTo: req.validatedQuery?.toDate
+  };
+
+  const analytics = await supportRequestService.getAnalytics(dateRange);
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy dữ liệu phân tích thành công',
+    data: analytics
+  });
+});
