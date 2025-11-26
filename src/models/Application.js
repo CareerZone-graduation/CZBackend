@@ -5,16 +5,17 @@ const activityLogSchema = new mongoose.Schema({
   action: {
     type: String,
     enum: [
-      'APPLICATION_SUBMITTED',
-      'RATING_UPDATE',
-      'NOTES_UPDATE',
-      'INTERVIEW_SCHEDULED',
-      
-      'STATUS_CHANGE',
-      'INTERVIEW_RESCHEDULED',
-      'INTERVIEW_CANCELLED',
-      'INTERVIEW_COMPLETED',
-      'APPLICATION_VIEWED'
+      'APPLICATION_SUBMITTED', // khi ứng viên nộp đơn
+      'INTERVIEW_RESCHEDULED', // khi người tuyển dụng thay đổi lịch phỏng vấn
+      'INTERVIEW_CANCELLED', // khi người tuyển dụng hủy phỏng vấn
+      'INTERVIEW_COMPLETED', // khi người ứng tuyển hoàn thành phỏng vấn
+      'APPLICATION_VIEWED', // khi nhà tuyển dụng xem hồ sơ lần đầu
+      'SUITABLE', // khi người tuyển dụng đánh giá hồ sơ
+      'SCHEDULED_INTERVIEW', // khi người tuyển dụng đặt lịch phỏng vấn
+      'OFFER_SENT', // khi người tuyển dụng gửi lời mời
+      'OFFER_ACCEPTED', // khi người ứng tuyển chấp nhận lời mời
+      'OFFER_DECLINED', // khi người ứng tuyển từ chối lời mời
+      'REJECTED' // khi người tuyển dụng từ chối ứng viên
     ],
     required: true
   },
@@ -70,7 +71,7 @@ const applicationSchema = new mongoose.Schema({
     type: String,
     trim: true,
     maxlength: [2000, 'Cover letter cannot exceed 2000 characters']
-  }, 
+  },
   appliedAt: {
     type: Date,
     default: Date.now
@@ -78,7 +79,14 @@ const applicationSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: {
-      values: ['PENDING', 'REVIEWING', 'SCHEDULED_INTERVIEW', 'INTERVIEWED', 'ACCEPTED', 'REJECTED', 'WITHDRAWN'],
+      values: [
+        'PENDING', //default when application is created
+        'SUITABLE', //perform by recruiter
+        'SCHEDULED_INTERVIEW', //perform by recruiter
+        'OFFER_SENT', //perform by recruiter
+        'ACCEPTED', //perform by candidate
+        'REJECTED' //perform by recruiter
+      ],
       message: '{VALUE} is not a valid application status'
     },
     default: 'PENDING',
@@ -87,14 +95,6 @@ const applicationSchema = new mongoose.Schema({
   lastStatusUpdateAt: {
     type: Date,
     default: Date.now
-  },
-  candidateRating: {
-    type: String,
-    enum: {
-      values: ['NOT_RATED', 'NOT_SUITABLE', 'MAYBE', 'SUITABLE', 'PERFECT_MATCH'],
-      message: '{VALUE} is not a valid candidate rating'
-    },
-    default: 'NOT_RATED'
   },
   isReapplied: {
     type: Boolean,
@@ -161,12 +161,13 @@ applicationSchema.index({ appliedAt: -1 });
 applicationSchema.index({ status: 1 }); // Index for status
 
 // Compound indexes for common queries
-applicationSchema.index({ jobId: 1, candidateProfileId: 1 }, { unique: true, 
-  partialFilterExpression: { isReapplied: { $ne: true } } }); // Prevent duplicate applications except reapplications
+applicationSchema.index({ jobId: 1, candidateProfileId: 1 }, {
+  unique: true,
+  partialFilterExpression: { isReapplied: { $ne: true } }
+}); // Prevent duplicate applications except reapplications
 applicationSchema.index({ jobId: 1, status: 1 });
 applicationSchema.index({ candidateProfileId: 1, appliedAt: -1 });
 applicationSchema.index({ status: 1, appliedAt: -1 }); // Compound index for status and appliedAt
-applicationSchema.index({ jobId: 1, candidateRating: 1 }); // Index for candidate rating
 applicationSchema.index({ lastStatusUpdateAt: -1 }); // Index for sorting by status update time
 
 export default mongoose.model('Application', applicationSchema);

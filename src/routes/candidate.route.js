@@ -64,7 +64,7 @@ router.get(
 // Toggle allow search setting with optional CV selection
 router.patch(
     '/settings/allow-search',
-    validationMiddleware.validateBody(z.object({ 
+    validationMiddleware.validateBody(z.object({
         allowSearch: z.boolean(),
         selectedCvId: z.string().optional()
     })),
@@ -123,6 +123,14 @@ router.get(
     '/recommendations',
     validationMiddleware.validateQuery(recommendationSchema.getRecommendationsQuerySchema),
     recommendationController.getRecommendations
+);
+
+// Route để candidate phản hồi offer (Accept/Decline)
+router.patch(
+    '/my-applications/:applicationId/respond',
+    validationMiddleware.validateParams(applicationSchema.applicationIdParam),
+    validationMiddleware.validateBody(applicationSchema.respondToOfferBody),
+    candidateController.respondToOffer
 );
 
 export default router;

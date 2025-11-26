@@ -242,6 +242,11 @@ const getPreviousDateRange = (startDate, endDate) => {
  * @param {string} userId
  * @param {Object} query - { timeRange, from, to }
  */
+/**
+ * Get dashboard statistics
+ * @param {string} userId
+ * @param {Object} query - { timeRange, from, to }
+ */
 export const getDashboardStats = async (userId, query) => {
   const { timeRange, from, to } = query;
   const recruiterProfile = await RecruiterProfile.findOne({ userId });
@@ -289,7 +294,7 @@ export const getDashboardStats = async (userId, query) => {
     }),
     Application.countDocuments({
       jobId: { $in: await Job.find({ recruiterProfileId }).distinct('_id') },
-      status: { $in: ['PENDING', 'REVIEWING'] }
+      status: { $in: ['PENDING', 'SUITABLE'] }
     }),
     InterviewRoom.countDocuments({
       recruiterId,
@@ -316,10 +321,13 @@ export const getDashboardStats = async (userId, query) => {
         _id: null,
         total: { $sum: 1 },
         underReview: {
-          $sum: { $cond: [{ $in: ['$status', ['PENDING', 'REVIEWING']] }, 1, 0] }
+          $sum: { $cond: [{ $in: ['$status', ['PENDING', 'SUITABLE']] }, 1, 0] }
         },
         interview: {
-          $sum: { $cond: [{ $in: ['$status', ['SCHEDULED_INTERVIEW', 'INTERVIEWED']] }, 1, 0] }
+          $sum: { $cond: [{ $in: ['$status', ['SCHEDULED_INTERVIEW']] }, 1, 0] }
+        },
+        offer: {
+          $sum: { $cond: [{ $eq: ['$status', 'OFFER_SENT'] }, 1, 0] }
         },
         hired: {
           $sum: { $cond: [{ $eq: ['$status', 'ACCEPTED'] }, 1, 0] }
@@ -382,22 +390,6 @@ export const getDashboardStats = async (userId, query) => {
     { $limit: 5 }
   ]);
 
-  // 5. Candidate Quality (Rating Distribution)
-  const candidateQuality = await Application.aggregate([
-    {
-      $match: {
-        jobId: { $in: await Job.find({ recruiterProfileId }).distinct('_id') },
-        createdAt: { $gte: startDate, $lte: endDate }
-      }
-    },
-    {
-      $group: {
-        _id: '$candidateRating',
-        count: { $sum: 1 }
-      }
-    }
-  ]);
-
   // 6. Upcoming Interviews
   logger.info(`Fetching upcoming interviews for recruiterId: ${recruiterId}`);
   const upcomingInterviews = await InterviewRoom.find({
@@ -434,7 +426,6 @@ export const getDashboardStats = async (userId, query) => {
     funnel: funnelStats[0] || { total: 0, underReview: 0, interview: 0, offer: 0, hired: 0 },
     chart: chartData.map(d => ({ date: d._id, value: d.count })),
     topJobs,
-    candidateQuality: candidateQuality.map(q => ({ name: q._id, value: q.count })),
     upcomingInterviews
   };
 };

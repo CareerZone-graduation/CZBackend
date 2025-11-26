@@ -3,7 +3,7 @@ import cron from 'node-cron';
 import logger from '../utils/logger.js';
 import { sendInterviewReminders } from '../services/interview.service.js';
 
-// Chạy mỗi 30 phút để kiểm tra
+// Chạy mỗi 1 phút để kiểm tra
 cron.schedule('*/1 * * * *', async () => {
   //TODO: 
   logger.info('Running interview reminder cron job...');

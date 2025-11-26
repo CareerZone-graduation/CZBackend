@@ -16,28 +16,27 @@ export const getApplicationsQuery = z.object({
   limit: z.string().regex(/^\d+$/, 'Limit phải là số').optional().transform(Number),
   status: z.string().optional(),
   sort: z.enum(['appliedAt', '-appliedAt', 'lastStatusUpdateAt', '-lastStatusUpdateAt']).optional(),
-  candidateRating: z.enum(['NOT_RATED', 'NOT_SUITABLE', 'MAYBE', 'SUITABLE', 'PERFECT_MATCH']).optional(),
   search: z.string().optional(),
   isReapplied: z.enum(['true', 'false']).optional().transform(val => val === 'true'),
 }).optional();
 
 // Validation schema cho cập nhật trạng thái đơn ứng tuyển
 export const updateApplicationStatusBody = z.object({
-  status: z.enum(['PENDING', 'REVIEWING', 'INTERVIEWED', 'ACCEPTED', 'REJECTED', 'WITHDRAWN', 'SCHEDULED_INTERVIEW'], {
+  status: z.enum(['PENDING', 'SUITABLE', 'SCHEDULED_INTERVIEW', 'OFFER_SENT', 'ACCEPTED', 'REJECTED'], {
     errorMap: () => ({ message: 'Status không hợp lệ' })
-  })
-});
-
-// Validation schema cho cập nhật đánh giá ứng viên
-export const updateCandidateRatingBody = z.object({
-  rating: z.enum(['NOT_RATED', 'NOT_SUITABLE', 'MAYBE', 'SUITABLE', 'PERFECT_MATCH'], {
-    errorMap: () => ({ message: 'Rating không hợp lệ' })
   })
 });
 
 // Validation schema cho cập nhật ghi chú đơn ứng tuyển
 export const updateApplicationNotesBody = z.object({
   notes: z.string().max(2000, 'Ghi chú không thể vượt quá 2000 ký tự')
+});
+
+// Validation schema cho phản hồi offer của candidate
+export const respondToOfferBody = z.object({
+  status: z.enum(['ACCEPTED', 'OFFER_DECLINED'], {
+    errorMap: () => ({ message: 'Status phải là ACCEPTED hoặc OFFER_DECLINED' })
+  })
 });
 
 // Validation schema cho query parameters lấy danh sách đơn ứng tuyển của candidate
@@ -58,7 +57,6 @@ export const getAllApplicationsQuery = z.object({
   page: z.string().regex(/^\d+$/, 'Page phải là số').optional().transform(Number),
   limit: z.string().regex(/^\d+$/, 'Limit phải là số').optional().transform(Number),
   status: z.string().optional(),
-  candidateRating: z.string().optional(),
   search: z.string().optional(),
   sort: z.enum(['appliedAt', '-appliedAt', 'lastStatusUpdateAt', '-lastStatusUpdateAt']).optional(),
   jobIds: z.string().optional().transform(val => val ? val.split(',') : []),
@@ -76,16 +74,8 @@ export const getStatisticsQuery = z.object({
 // Validation schema cho bulk update status
 export const bulkUpdateStatusBody = z.object({
   applicationIds: z.array(z.string().regex(/^[0-9a-fA-F]{24}$/, 'Application ID không hợp lệ')),
-  status: z.enum(['PENDING', 'REVIEWING', 'INTERVIEWED', 'ACCEPTED', 'REJECTED', 'WITHDRAWN', 'SCHEDULED_INTERVIEW'], {
+  status: z.enum(['PENDING', 'SUITABLE', 'SCHEDULED_INTERVIEW', 'OFFER_SENT', 'ACCEPTED', 'OFFER_DECLINED', 'REJECTED'], {
     errorMap: () => ({ message: 'Status không hợp lệ' })
-  })
-});
-
-// Validation schema cho bulk update rating
-export const bulkUpdateRatingBody = z.object({
-  applicationIds: z.array(z.string().regex(/^[0-9a-fA-F]{24}$/, 'Application ID không hợp lệ')),
-  rating: z.enum(['NOT_RATED', 'NOT_SUITABLE', 'MAYBE', 'SUITABLE', 'PERFECT_MATCH'], {
-    errorMap: () => ({ message: 'Rating không hợp lệ' })
   })
 });
 

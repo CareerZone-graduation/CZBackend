@@ -60,14 +60,14 @@ export const renameCvUpload = asyncHandler(async (req, res) => {
     const userId = req.user._id;
     const { cvId } = req.params;
     const { name } = req.body;
-    
+
     if (!name || !name.trim()) {
         return res.status(400).json({
             success: false,
             message: 'Tên CV không được để trống.',
         });
     }
-    
+
     const cvs = await candidateService.renameCv(userId, cvId, name.trim());
     res.status(200).json({
         success: true,
@@ -78,16 +78,16 @@ export const renameCvUpload = asyncHandler(async (req, res) => {
 
 export const updateProfile = asyncHandler(async (req, res) => {
     const userId = req.user._id;
-    logger.info('Updating candidate profile', { 
-        userId, 
-        fields: Object.keys(req.body) 
+    logger.info('Updating candidate profile', {
+        userId,
+        fields: Object.keys(req.body)
     });
-    
+
     const updatedProfile = await candidateService.updateProfile(userId, req.body);
-    
+
     // Get updated completeness to return to frontend
     const profileWithCompleteness = await candidateService.getProfile(userId);
-    
+
     res.status(200).json({
         success: true,
         message: 'Cập nhật hồ sơ thành công.',
@@ -103,9 +103,9 @@ export const updateAvatar = asyncHandler(async (req, res) => {
 
     logger.info(`Uploading avatar for user: ${userId}`);
     const result = await uploadService.uploadToCloudinary(req.file.buffer, 'avatars');
-    
+
     await candidateService.updateAvatar(userId, result.secure_url);
-    
+
     // Get updated profile with completeness to return to frontend
     const profileWithCompleteness = await candidateService.getProfile(userId);
 
@@ -119,9 +119,9 @@ export const updateAvatar = asyncHandler(async (req, res) => {
 export const getMyApplications = asyncHandler(async (req, res) => {
     const userId = req.user._id;
     const options = req.validatedQuery || req.query;
-    
+
     const result = await candidateService.getMyApplications(userId, options);
-    
+
     res.status(200).json({
         success: true,
         message: 'Lấy danh sách đơn ứng tuyển thành công.',
@@ -133,9 +133,9 @@ export const getMyApplications = asyncHandler(async (req, res) => {
 export const getApplicationById = asyncHandler(async (req, res) => {
     const userId = req.user._id;
     const { applicationId } = req.params;
-    
+
     const application = await candidateService.getApplicationById(userId, applicationId);
-    
+
     res.status(200).json({
         success: true,
         message: 'Lấy chi tiết đơn ứng tuyển thành công.',
@@ -150,11 +150,11 @@ export const getApplicationById = asyncHandler(async (req, res) => {
 export const getProfileCompleteness = asyncHandler(async (req, res) => {
     const userId = req.user._id;
     const { recalculate } = req.validatedQuery || req.query;
-    
+
     logger.info('Getting profile completeness', { userId, recalculate });
-    
+
     const completeness = await candidateService.getProfileCompleteness(userId, recalculate);
-    
+
     res.status(200).json({
         success: true,
         message: 'Lấy thông tin độ hoàn thiện hồ sơ thành công.',
@@ -169,17 +169,17 @@ export const getProfileCompleteness = asyncHandler(async (req, res) => {
 export const updateProfilePreferences = asyncHandler(async (req, res) => {
     const userId = req.user._id;
     const preferences = req.body;
-    
-    logger.info('Updating profile preferences', { 
-        userId, 
+
+    logger.info('Updating profile preferences', {
+        userId,
         hasExpectedSalary: !!preferences.expectedSalary,
         hasPreferredLocations: !!preferences.preferredLocations,
         hasWorkPreferences: !!preferences.workPreferences,
         hasPreferredCategories: !!preferences.preferredCategories
     });
-    
+
     const updatedProfile = await candidateService.updateProfilePreferences(userId, preferences);
-    
+
     res.status(200).json({
         success: true,
         message: 'Cập nhật thông tin ưu tiên thành công.',
@@ -193,11 +193,11 @@ export const updateProfilePreferences = asyncHandler(async (req, res) => {
  */
 export const getProfileRecommendations = asyncHandler(async (req, res) => {
     const userId = req.user._id;
-    
+
     logger.info('Getting profile recommendations', { userId });
-    
+
     const recommendations = await candidateService.getProfileRecommendations(userId);
-    
+
     res.status(200).json({
         success: true,
         message: 'Lấy gợi ý cải thiện hồ sơ thành công.',
@@ -212,11 +212,11 @@ export const getProfileRecommendations = asyncHandler(async (req, res) => {
 export const updatePrivacySettings = asyncHandler(async (req, res) => {
     const userId = req.user._id;
     const { allowSearch } = req.body;
-    
+
     logger.info('Updating privacy settings', { userId, allowSearch });
-    
+
     const settings = await candidateService.updatePrivacySettings(userId, allowSearch);
-    
+
     res.status(200).json({
         success: true,
         message: 'Cập nhật cài đặt riêng tư thành công.',
@@ -231,15 +231,15 @@ export const updatePrivacySettings = asyncHandler(async (req, res) => {
 export const toggleAllowSearch = asyncHandler(async (req, res) => {
     const userId = req.user._id;
     const { allowSearch, selectedCvId } = req.body;
-    
+
     logger.info('Toggling allow search setting', { userId, allowSearch, selectedCvId });
-    
+
     const user = await candidateService.toggleAllowSearch(userId, allowSearch, selectedCvId);
-    
+
     res.status(200).json({
         success: true,
         message: 'Cập nhật cài đặt cho phép tìm kiếm thành công.',
-        data: { 
+        data: {
             allowSearch: user.allowSearch,
             selectedCvId: user.selectedCvId
         }
@@ -252,12 +252,32 @@ export const toggleAllowSearch = asyncHandler(async (req, res) => {
  */
 export const getAllowSearchSettings = asyncHandler(async (req, res) => {
     const userId = req.user._id;
-    
+
     const settings = await candidateService.getAllowSearchSettings(userId);
-    
+
     res.status(200).json({
         success: true,
         message: 'Lấy cài đặt tìm kiếm thành công.',
         data: settings
+    });
+});
+
+/**
+ * Respond to offer (Accept/Decline)
+ * PATCH /api/v1/candidates/my-applications/:applicationId/respond
+ */
+export const respondToOffer = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    const { applicationId } = req.params;
+    const { status } = req.body;
+
+    logger.info('Candidate responding to offer', { userId, applicationId, status });
+
+    const application = await candidateService.respondToOffer(userId, applicationId, status);
+
+    res.status(200).json({
+        success: true,
+        message: status === 'ACCEPTED' ? 'Đã chấp nhận lời mời làm việc.' : 'Đã từ chối lời mời làm việc.',
+        data: application
     });
 });

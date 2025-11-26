@@ -336,9 +336,9 @@ export const getJobDetailsForRecruiter = async (jobId, userId) => {
         },
         // Thống kê theo từng trạng thái
         pendingCount: { $sum: { $cond: [{ $eq: ['$status', 'PENDING'] }, 1, 0] } },
-        reviewingCount: { $sum: { $cond: [{ $eq: ['$status', 'REVIEWING'] }, 1, 0] } },
+        suitableCount: { $sum: { $cond: [{ $eq: ['$status', 'SUITABLE'] }, 1, 0] } },
         scheduledInterviewCount: { $sum: { $cond: [{ $eq: ['$status', 'SCHEDULED_INTERVIEW'] }, 1, 0] } },
-        interviewedCount: { $sum: { $cond: [{ $eq: ['$status', 'INTERVIEWED'] }, 1, 0] } },
+        offerSentCount: { $sum: { $cond: [{ $eq: ['$status', 'OFFER_SENT'] }, 1, 0] } },
         acceptedCount: { $sum: { $cond: [{ $eq: ['$status', 'ACCEPTED'] }, 1, 0] } },
         rejectedCount: { $sum: { $cond: [{ $eq: ['$status', 'REJECTED'] }, 1, 0] } },
       }
@@ -357,9 +357,9 @@ export const getJobDetailsForRecruiter = async (jobId, userId) => {
       totalReapplications: stats?.totalReapplications || 0,
       byStatus: {
         pending: stats?.pendingCount || 0,
-        reviewing: stats?.reviewingCount || 0,
+        suitable: stats?.suitableCount || 0,
         scheduledInterview: stats?.scheduledInterviewCount || 0,
-        interviewed: stats?.interviewedCount || 0,
+        offerSent: stats?.offerSentCount || 0,
         accepted: stats?.acceptedCount || 0,
         rejected: stats?.rejectedCount || 0,
       }
@@ -706,9 +706,8 @@ export const applyToJob = async (userId, jobId, applicationData) => {
       },
     });
     logActivity(application, 'APPLICATION_SUBMITTED', 'Ứng viên đã nộp đơn');
-
-    // TODO: Gửi sự kiện APPLY_JOB KAFKA
-
+    await application.save();
+    // TODO: Gửi sự kiện APPLY_JOB KAFKA for recommendation (not implemented)
 
     // --- BẮT ĐẦU GỬI SỰ KIỆN THÔNG BÁO ---
     try {
@@ -720,15 +719,11 @@ export const applyToJob = async (userId, jobId, applicationData) => {
         recipientId: userId.toString(),
         data: {
           applicationId: application._id.toString(),
-          // jobId: job._id.toString(),
-          // jobTitle: job.title,
-          // companyName: job.recruiterProfileId.company.name,
         }
       });
 
-      // 2. Gửi sự kiện để thông báo cho NHÀ TUYỂN DỤNG
+      // 2. Gửi sự kiện để thông báo (gộp nhóm) cho NHÀ TUYỂN DỤNG
       queueService.publishNotification(ROUTING_KEYS.NEW_APPLICATION, {
-        type: 'NEW_APPLICATION',
         recipientId: recruiterUserId.toString(),
         data: {
           applicationId: application._id.toString()

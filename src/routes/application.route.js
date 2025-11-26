@@ -39,14 +39,7 @@ router.patch(
   applicationController.bulkUpdateStatus
 );
 
-// Route để bulk update rating
-router.patch(
-  '/recruiter/bulk/rating',
-  passport.authenticate('jwt', { session: false }),
-  authMiddleware.recruiterOnly,
-  validationMiddleware.validateBody(applicationSchema.bulkUpdateRatingBody),
-  applicationController.bulkUpdateRating
-);
+
 
 // Route để export applications to CSV
 router.post(
@@ -90,15 +83,7 @@ router.patch(
   applicationController.updateApplicationStatus
 );
 
-// Route để đánh giá ứng viên
-router.patch(
-  '/:applicationId/rating',
-  passport.authenticate('jwt', { session: false }),
-  authMiddleware.recruiterOnly,
-  validationMiddleware.validateParams(applicationSchema.applicationIdParam),
-  validationMiddleware.validateBody(applicationSchema.updateCandidateRatingBody),
-  applicationController.updateCandidateRating
-);
+
 
 // Route để cập nhật ghi chú cho đơn ứng tuyển
 router.patch(
@@ -108,16 +93,6 @@ router.patch(
   validationMiddleware.validateParams(applicationSchema.applicationIdParam),
   validationMiddleware.validateBody(applicationSchema.updateApplicationNotesBody),
   applicationController.updateApplicationNotes
-);
-
-// Route để nhà tuyển dụng tạo lịch phỏng vấn cho một đơn ứng tuyển
-router.post(
-  '/:applicationId/interviews',
-  passport.authenticate('jwt', { session: false }),
-  authMiddleware.recruiterOnly,
-  validationMiddleware.validateParams(applicationSchema.applicationIdParam),
-  validationMiddleware.validateBody(interviewSchema.scheduleInterviewBody),
-  applicationController.scheduleInterview
 );
 
 export default router;

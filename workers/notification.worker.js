@@ -24,15 +24,14 @@ const handlerRegistry = {
   [ROUTING_KEYS.EMAIL_SEND]: emailService.sendEmail,
 
   // === Application Related ===
-  [ROUTING_KEYS.NEW_APPLICATION]: notificationService.handleNewApplication,
-  [ROUTING_KEYS.STATUS_UPDATE]: notificationService.handleStatusUpdate,
+  [ROUTING_KEYS.NEW_APPLICATION]: notificationService.handleNewApplication, //xử lý thông báo gom nhóm khi có ứng viên mới
+  [ROUTING_KEYS.STATUS_UPDATE]: notificationService.handleStatusUpdate, //xử lý khi có thay đổi trạng thái ở đơn application
 
   // === Interview Related ===
   [ROUTING_KEYS.INTERVIEW_REMINDER]: notificationService.handleInterviewReminder,
   [ROUTING_KEYS.INTERVIEW_RESCHEDULE]: notificationService.handleInterviewReschedule,
   [ROUTING_KEYS.INTERVIEW_CANCEL]: notificationService.handleInterviewCancel,
   [ROUTING_KEYS.INTERVIEW_COMPLETE]: notificationService.handleInterviewEnded,
-  [ROUTING_KEYS.INTERVIEW_SCHEDULED]: notificationService.handleStatusUpdate,
   [ROUTING_KEYS.INTERVIEW_STARTED]: notificationService.handleInterviewStarted,
   [ROUTING_KEYS.RECORDING_AVAILABLE]: notificationService.handleRecordingAvailable,
 

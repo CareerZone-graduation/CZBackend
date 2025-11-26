@@ -4,6 +4,9 @@ import logger from '../utils/logger.js';
 import * as uploadService from './upload.service.js';
 import { calculateProfileCompleteness, updateProfileCompleteness } from '../controllers/candidateOnboardingController.js';
 import mongoose from 'mongoose';
+import { logActivity } from './application.service.js';
+import * as queueService from './queue.service.js';
+import * as rabbitmq from '../queues/rabbitmq.js';
 
 /**
  * Get candidate profile by user ID
@@ -595,4 +598,66 @@ export const getAllowSearchSettings = async (userId) => {
             uploadedAt: selectedCv.uploadedAt
         } : null
     };
+};
+
+/**
+ * Candidate responds to an offer
+ * @param {string} userId
+ * @param {string} applicationId
+ * @param {string} status - ACCEPTED or OFFER_DECLINED
+ * @returns {Promise<Object>}
+ */
+export const respondToOffer = async (userId, applicationId, status) => {
+    // 1. Get candidate profile
+    const candidateProfile = await CandidateProfile.findOne({ userId });
+    if (!candidateProfile) {
+        throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
+    }
+
+    // 2. Get application
+    const application = await Application.findOne({
+        _id: applicationId,
+        candidateProfileId: candidateProfile._id
+    }).populate('jobId');
+
+    if (!application) {
+        throw new NotFoundError('Không tìm thấy đơn ứng tuyển.');
+    }
+
+    // 3. Verify current status
+    if (application.status !== 'OFFER_SENT') {
+        throw new BadRequestError('Bạn chỉ có thể phản hồi khi đơn ứng tuyển đang ở trạng thái "Đã gửi lời mời".');
+    }
+
+    // 4. Update status
+    if (status === 'ACCEPTED') {
+        application.status = status;
+        application.lastStatusUpdateAt = new Date();
+    }
+
+    // 5. Log activity
+    // Map ACCEPTED status to OFFER_ACCEPTED action for activity log
+    const action = status === 'ACCEPTED' ? 'OFFER_ACCEPTED' : 'OFFER_DECLINED';
+    const detail = status === 'ACCEPTED'
+        ? 'Ứng viên đã chấp nhận lời mời làm việc'
+        : 'Ứng viên đã từ chối lời mời làm việc';
+
+    logActivity(application, action, detail);
+
+    await application.save();
+
+    // 6. Send notification to recruiter
+    const job = application.jobId;
+    if (job && job.recruiterProfileId) {
+        queueService.publishNotification(rabbitmq.ROUTING_KEYS.STATUS_UPDATE, {
+            type: action,
+            recipientId: job.recruiterProfileId.toString(),
+            data: {
+                applicationId: application._id.toString(),
+                status: status
+            }
+        });
+    }
+
+    return application;
 };

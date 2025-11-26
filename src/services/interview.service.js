@@ -6,6 +6,7 @@ import * as queueService from './queue.service.js';
 import * as rabbitmq from '../queues/rabbitmq.js';
 import mongoose from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
+import { logActivity } from './application.service.js';
 
 // =================================================================
 // Core Interview Management Functions (Task 2.1)
@@ -40,8 +41,7 @@ export const scheduleInterview = async (recruiterId, candidateId, jobId, applica
 
   // Verify application exists and belongs to the candidate
   const application = await Application.findById(applicationId)
-    .populate('candidateProfileId', 'userId')
-    .lean();
+    .populate('candidateProfileId', 'userId');
   
   if (!application) {
     throw new NotFoundError('Application not found');
@@ -62,7 +62,7 @@ export const scheduleInterview = async (recruiterId, candidateId, jobId, applica
   const roomId = `interview-${uuidv4()}`;
   
   // Create room name
-  const roomName = `Interview for ${application.jobSnapshot?.title || 'Position'} - ${new Date(scheduledAt).toLocaleString('vi-VN')}`;
+  const roomName = `Phỏng vấn vị trí ${application.jobSnapshot?.title} - ${new Date(scheduledAt).toLocaleString('vi-VN')} - Ứng viên: ${application.candidateName}`;
 
   // Create interview
   const interview = await InterviewRoom.create({
@@ -84,20 +84,13 @@ export const scheduleInterview = async (recruiterId, candidateId, jobId, applica
 
   // Update application activity history
   if (application) {
-    await Application.findByIdAndUpdate(applicationId, {
-      $push: {
-        activityHistory: {
-          action: 'INTERVIEW_SCHEDULED',
-          detail: `Interview scheduled for ${scheduledDate.toLocaleString('vi-VN')}`,
-          timestamp: new Date()
-        }
-      }
-    });
+    logActivity(application, 'SCHEDULED_INTERVIEW', `Nhà tuyển dụng đã lên lịch phỏng vấn vào ${scheduledDate.toLocaleString('vi-VN')}`);
+    await application.save();
   }
 
-  // Send notification to candidate and recruiter via RabbitMQ
+  // Send notification to candidate
   queueService.publishNotification(rabbitmq.ROUTING_KEYS.STATUS_UPDATE, {
-    type: 'INTERVIEW_SCHEDULED',
+    type: 'SCHEDULED_INTERVIEW',
     recipientId: candidateId.toString(),
     data: {
       interviewId: interview._id.toString(),
@@ -577,7 +570,7 @@ export const cancelInterview = async (interviewId, userId, reason = '') => {
       $push: {
         activityHistory: {
           action: 'INTERVIEW_CANCELLED',
-          detail: `Interview cancelled${reason ? `. Reason: ${reason}` : ''}`,
+          detail: `Nhà tuyển dụng đã hủy cuộc phỏng vấn. Lý do: ${reason || 'Không có lý do được cung cấp'}`,
           timestamp: new Date()
         }
       }
@@ -586,7 +579,6 @@ export const cancelInterview = async (interviewId, userId, reason = '') => {
 
   // Send notification via RabbitMQ
   queueService.publishNotification(rabbitmq.ROUTING_KEYS.INTERVIEW_CANCEL, {
-    type: 'INTERVIEW_CANCEL',
     recipientId: interview.candidateId._id.toString(),
     data: {
       interviewId: interview._id.toString()
@@ -650,7 +642,7 @@ export const rescheduleInterview = async (interviewId, userId, newScheduledAt, r
     action: 'RESCHEDULED',
     fromTime: oldScheduledTime,
     toTime: newScheduledDate,
-    reason: reason || 'Interview rescheduled',
+    reason: reason || 'Lịch phỏng vấn đã được dời',
     actor: userId
   });
 
@@ -662,7 +654,7 @@ export const rescheduleInterview = async (interviewId, userId, newScheduledAt, r
       $push: {
         activityHistory: {
           action: 'INTERVIEW_RESCHEDULED',
-          detail: `Interview rescheduled from ${oldScheduledTime.toLocaleString('vi-VN')} to ${newScheduledDate.toLocaleString('vi-VN')}`,
+          detail: `Nhà tuyển dụng đã thay đổi lịch phỏng vấn từ ${oldScheduledTime.toLocaleString('vi-VN')} sang ${newScheduledDate.toLocaleString('vi-VN')}`,
           timestamp: new Date()
         }
       }
@@ -671,7 +663,6 @@ export const rescheduleInterview = async (interviewId, userId, newScheduledAt, r
 
   // Send notification via RabbitMQ
   queueService.publishNotification(rabbitmq.ROUTING_KEYS.INTERVIEW_RESCHEDULE, {
-    type: 'INTERVIEW_RESCHEDULE',
     recipientId: interview.candidateId._id.toString(),
     data: {
       interviewId: interview._id.toString(),

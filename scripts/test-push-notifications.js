@@ -7,7 +7,6 @@ import {
   createProfileViewNotification,
   createJobRecommendationNotification,
   processJobAlertNotification,
-  createApplicationSubmittedNotification,
   createRatingUpdateNotification,
   createInterviewScheduledNotification,
   createInterviewRescheduledNotification,
@@ -237,7 +236,6 @@ async function testApplicationSubmitted(userId) {
       return;
     }
 
-    await createApplicationSubmittedNotification(application._id);
     console.log('✅ Application Submitted notification sent successfully!');
     console.log('Application ID:', application._id);
   } catch (error) {

@@ -71,10 +71,6 @@ export const getApplicationsByJob = async (jobId, recruiterId, options = {}) => 
     filter.status = options.status;
   }
 
-  if (options.candidateRating) {
-    filter.candidateRating = options.candidateRating;
-  }
-
   if (options.isReapplied !== undefined) {
     filter.isReapplied = options.isReapplied;
   }
@@ -204,7 +200,6 @@ export const getApplicationById = async (applicationId, recruiterId) => {
 
   // Lấy thông tin phỏng vấn nếu có
   const interview = await InterviewRoom.findOne({ applicationId: application._id }).lean();
-
   // Check if candidate is in talent pool
   const isInTalentPool = application.candidateProfileId ? await TalentPool.exists({
     recruiterProfileId: recruiterProfile._id,
@@ -229,31 +224,54 @@ export const getApplicationById = async (applicationId, recruiterId) => {
       : null,
   };
 
+  // Kiểm tra xem đã log APPLICATION_VIEWED chưa
+  const hasViewed = application.activityHistory.some(activity => activity.action === 'APPLICATION_VIEWED');
+
+  if (!hasViewed) {
+    // Log activity
+    logActivity(application, 'APPLICATION_VIEWED', 'Nhà tuyển dụng đã xem hồ sơ ứng tuyển');
+    await application.save();
+
+    // Gửi thông báo cho ứng viên
+    const candidateProfile = await CandidateProfile.findById(application.candidateProfileId);
+    if (candidateProfile) {
+      queueService.publishNotification(rabbitmq.ROUTING_KEYS.STATUS_UPDATE, {
+        type: 'APPLICATION_VIEWED',
+        recipientId: candidateProfile.userId.toString(),
+        data: {
+          applicationId: application._id.toString(),
+          jobTitle: job.title,
+          companyName: recruiterProfile.company.name
+        }
+      });
+    }
+  }
+
   return applicationDetails;
+
 };
 
-
 /**
- * Cập nhật đánh giá ứng viên
- * @param {string} applicationId ID của đơn ứng tuyển
- * @param {string} recruiterId ID của nhà tuyển dụng
- * @param {string} rating Đánh giá mới
+ * Cập nhật trạng thái đơn ứng tuyển (chỉ dành cho nhà tuyển dụng)
+ * @param {string} applicationId ID đơn ứng tuyển
+ * @param {string} recruiterId ID nhà tuyển dụng
+ * @param {string} status Trạng thái mới
  * @returns {Object} Đơn ứng tuyển đã cập nhật
  */
-export const updateCandidateRating = async (applicationId, recruiterId, rating) => {
+export const updateApplicationStatus = async (applicationId, recruiterId, status) => {
   // Kiểm tra ID hợp lệ
   if (!mongoose.Types.ObjectId.isValid(applicationId)) {
     throw new BadRequestError('ID đơn ứng tuyển không hợp lệ');
   }
 
   // Lấy thông tin đơn ứng tuyển
-  const application = await Application.findById(applicationId);
+  const application = await Application.findById(applicationId).populate('jobId');
   if (!application) {
     throw new NotFoundError('Không tìm thấy đơn ứng tuyển');
   }
 
   // Kiểm tra quyền sở hữu
-  const job = await Job.findById(application.jobId);
+  const job = application.jobId;
   if (!job) {
     throw new NotFoundError('Không tìm thấy công việc liên quan');
   }
@@ -265,41 +283,80 @@ export const updateCandidateRating = async (applicationId, recruiterId, rating) 
   }
 
   if (job.recruiterProfileId.toString() !== recruiterProfile._id.toString()) {
-    throw new UnauthorizedError('Bạn không có quyền cập nhật đánh giá ứng viên này');
+    throw new UnauthorizedError('Bạn không có quyền cập nhật trạng thái cho đơn ứng tuyển này');
   }
-  const ratingMessage = rating === "NOT_RATED" ? "chưa được đánh giá" :
-    rating === "NOT_SUITABLE" ? "không phù hợp" :
-      rating === "MAYBE" ? "có thể phù hợp" :
-        rating === "SUITABLE" ? "phù hợp" :
-          rating === "PERFECT_MATCH" ? "rất phù hợp" : rating;
-  if (application.status === 'PENDING') {
-    application.status = 'REVIEWING';
-  }
-  logActivity(application, 'RATING_UPDATE', `Đã đánh giá đơn ứng tuyển là: ${ratingMessage}`);
 
-  application.candidateRating = rating;
+  const oldStatus = application.status;
+  application.status = status;
+  application.lastStatusUpdateAt = new Date();
+
+  // Ghi log activity, cũng hiển thị cho ứng viên
+  if (status === 'SUITABLE') {
+    logActivity(application, 'SUITABLE', `Nhà tuyển dụng đã đánh giá đơn ứng tuyển này là phù hợp`);
+  } else if (status === 'SCHEDULED_INTERVIEW') {
+    logActivity(application, 'SCHEDULED_INTERVIEW', `Nhà tuyển dụng đã đặt lịch phỏng vấn cho đơn ứng tuyển này`);
+  } else if (status === 'OFFER_SENT') {
+    logActivity(application, 'OFFER_SENT', `Nhà tuyển dụng đã gửi lời mời cho đơn ứng tuyển này`);
+  } else if (status === 'REJECTED') {
+    logActivity(application, 'REJECTED', `Nhà tuyển dụng đã đánh giá đơn ứng tuyển này là không phù hợp`);
+  }
+
   await application.save();
 
-  // Gửi thông báo cho ứng viên
-  const candidateProfile = await CandidateProfile.findById(application.candidateProfileId).select('userId');
-  if (candidateProfile) {
-    await pushNotification(candidateProfile.userId, {
-      title: 'CV của bạn đã được duyệt!',
-      body: `Nhà tuyển dụng đã đánh giá hồ sơ của bạn cho vị trí "${application.jobSnapshot.title}" là: ${ratingMessage}.`,
-      type: 'application',
-      data: {
-        url: `/my-jobs/applied` // Link để người dùng click vào sẽ mở ra
-      }
-    });
+  // Gửi thông báo nếu trạng thái thay đổi
+  if (oldStatus !== status) {
+    const candidateProfile = await CandidateProfile.findById(application.candidateProfileId);
+    if (candidateProfile) {
+      queueService.publishNotification(rabbitmq.ROUTING_KEYS.STATUS_UPDATE, {
+        type: status,
+        recipientId: candidateProfile.userId.toString(),
+        data: {
+          applicationId: application._id.toString(),
+          newStatus: status
+        }
+      });
+    }
   }
 
-  return application;
+  // Populate candidateProfileId để lấy thông tin chi tiết
+  await application.populate({
+    path: 'candidateProfileId',
+    select: 'userId avatar'
+  });
+
+  // Lấy thông tin phỏng vấn nếu có
+  const interview = await InterviewRoom.findOne({ applicationId: application._id }).lean();
+  // Check if candidate is in talent pool
+  const isInTalentPool = application.candidateProfileId ? await TalentPool.exists({
+    recruiterProfileId: recruiterProfile._id,
+    candidateProfileId: application.candidateProfileId._id
+  }) : null;
+
+  // Tạo và trả về đối tượng thông tin đầy đủ
+  const applicationDetails = {
+    ...application.toObject(),
+    candidateUserId: application.candidateProfileId?.userId,
+    candidateAvatar: application.candidateProfileId?.avatar,
+    isInTalentPool: !!isInTalentPool,
+    talentPoolId: isInTalentPool ? isInTalentPool._id : null,
+    hasInterview: !!interview,
+    interviewInfo: interview
+      ? {
+        interviewId: interview._id,
+        scheduledTime: interview.scheduledTime,
+        status: interview.status,
+        roomName: interview.roomName,
+      }
+      : null,
+  };
+
+  return applicationDetails;
 };
 
 /**
  * Cập nhật ghi chú cho đơn ứng tuyển
- * @param {string} applicationId ID của đơn ứng tuyển
- * @param {string} recruiterId ID của nhà tuyển dụng
+ * @param {string} applicationId ID đơn ứng tuyển
+ * @param {string} recruiterId ID nhà tuyển dụng
  * @param {string} notes Ghi chú mới
  * @returns {Object} Đơn ứng tuyển đã cập nhật
  */
@@ -331,95 +388,10 @@ export const updateApplicationNotes = async (applicationId, recruiterId, notes) 
     throw new UnauthorizedError('Bạn không có quyền cập nhật ghi chú cho đơn ứng tuyển này');
   }
 
-
-  logActivity(application, 'NOTES_UPDATE', "Ghi chú cập nhật: " + notes);
-
   application.notes = notes;
-  if (application.status === 'PENDING') {
-    application.status = 'REVIEWING';
-  }
   await application.save();
 
   return application;
-};
-
-/**
- * Tạo lịch phỏng vấn cho một đơn ứng tuyển.
- * @param {string} applicationId - ID của đơn ứng tuyển.
- * @param {string} recruiterId - ID của nhà tuyển dụng (từ req.user).
- * @param {Date} scheduledTime - Thời gian phỏng vấn dự kiến.
- * @returns {Object} - Thông tin phòng phỏng vấn đã được tạo.
- */
-export const scheduleInterview = async (applicationId, recruiterId, scheduledTime) => {
-  // 1. Lấy thông tin cần thiết và kiểm tra quyền
-  const application = await Application.findById(applicationId).populate('jobId');
-  if (!application) {
-    throw new NotFoundError('Không tìm thấy đơn ứng tuyển.');
-  }
-
-  const job = application.jobId;
-  if (!job) {
-    throw new NotFoundError('Công việc liên quan đến đơn ứng tuyển không tồn tại.');
-  }
-
-  const recruiterProfile = await RecruiterProfile.findOne({ userId: recruiterId });
-  if (!recruiterProfile || job.recruiterProfileId.toString() !== recruiterProfile._id.toString()) {
-    throw new UnauthorizedError('Bạn không có quyền tạo phỏng vấn cho đơn ứng tuyển này.');
-  }
-
-  // 2. Kiểm tra xem đã có phỏng vấn cho đơn này chưa
-  const existingInterview = await InterviewRoom.findOne({ applicationId });
-  if (existingInterview) {
-    throw new BadRequestError('Đã có một lịch phỏng vấn được tạo cho đơn ứng tuyển này.');
-  }
-
-  // 3. Lấy thông tin ứng viên
-  const candidateProfile = await CandidateProfile.findById(application.candidateProfileId);
-  if (!candidateProfile) {
-    throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
-  }
-
-  // 4. Tạo phòng phỏng vấn
-  const roomName = `Phỏng vấn vị trí ${job.title} - Ứng viên: ${application.candidateName}`;
-  const newInterview = await InterviewRoom.create({
-    roomName,
-    recruiterId,
-    candidateId: candidateProfile.userId,
-    applicationId,
-    scheduledTime,
-    status: 'SCHEDULED',
-    changeHistory: [{
-      timestamp: new Date(),
-      action: 'CREATED',
-      actor: recruiterId
-    }]
-  });
-
-  // 5. Cập nhật trạng thái đơn ứng tuyển và ghi log
-  const oldStatus = application.status;
-  application.status = 'SCHEDULED_INTERVIEW';
-  application.lastStatusUpdateAt = new Date();
-
-  // Ghi log cho việc lên lịch và việc đổi trạng thái
-  logActivity(application, 'INTERVIEW_SCHEDULED',
-    "Lên lịch phỏng vấn vào " + new Date(scheduledTime).toLocaleString('vi-VN'),
-  );
-
-  await application.save();
-
-  // Gửi thông báo
-  // Gửi cho ứng viên
-  queueService.publishNotification(rabbitmq.ROUTING_KEYS.STATUS_UPDATE, {
-    type: 'INTERVIEW_SCHEDULED',
-    recipientId: candidateProfile.userId.toString(),
-    data: {
-      applicationId: application._id.toString(),
-      interviewId: newInterview._id.toString(),
-    },
-  });
-
-
-  return newInterview;
 };
 
 // ==========================================================
@@ -457,11 +429,6 @@ export const getAllApplications = async (recruiterId, options = {}) => {
   // Filter by status
   if (options.status && options.status !== 'all') {
     filter.status = options.status;
-  }
-
-  // Filter by rating
-  if (options.candidateRating && options.candidateRating !== 'all') {
-    filter.candidateRating = options.candidateRating;
   }
 
   // Filter by specific jobs
@@ -670,16 +637,7 @@ export const getApplicationsStatistics = async (recruiterId, filters = {}) => {
     }
   ]);
 
-  // Rating distribution
-  const ratingDistribution = await Application.aggregate([
-    { $match: baseFilter },
-    {
-      $group: {
-        _id: '$candidateRating',
-        count: { $sum: 1 }
-      }
-    }
-  ]);
+
 
   // Top jobs by application count
   const topJobs = await Application.aggregate([
@@ -718,7 +676,6 @@ export const getApplicationsStatistics = async (recruiterId, filters = {}) => {
       scheduledInterviews
     },
     statusDistribution,
-    ratingDistribution,
     topJobs
   };
 };
@@ -753,7 +710,18 @@ export const bulkUpdateStatus = async (recruiterId, applicationIds, newStatus) =
   const updatePromises = applications.map(async (app) => {
     app.status = newStatus;
     app.lastStatusUpdateAt = new Date();
-    logActivity(app, 'STATUS_CHANGE', `Trạng thái thay đổi thành ${newStatus} (bulk update)`);
+
+    let action;
+    if (newStatus === 'SUITABLE') action = 'SUITABLE';
+    else if (newStatus === 'SCHEDULED_INTERVIEW') action = 'SCHEDULED_INTERVIEW';
+    else if (newStatus === 'OFFER_SENT') action = 'OFFER_SENT';
+    else if (newStatus === 'ACCEPTED') action = 'OFFER_ACCEPTED';
+    else if (newStatus === 'OFFER_DECLINED') action = 'OFFER_DECLINED';
+    else if (newStatus === 'REJECTED') action = 'REJECTED';
+
+    if (action) {
+      logActivity(app, action, `Trạng thái thay đổi thành ${newStatus} (bulk update)`);
+    }
     return app.save();
   });
 
@@ -765,49 +733,8 @@ export const bulkUpdateStatus = async (recruiterId, applicationIds, newStatus) =
   };
 };
 
-/**
- * Bulk update rating cho nhiều applications
- * @param {string} recruiterId - ID của nhà tuyển dụng
- * @param {Array<string>} applicationIds - Array của application IDs
- * @param {string} newRating - Rating mới
- * @returns {Object} - Kết quả update
- */
-export const bulkUpdateRating = async (recruiterId, applicationIds, newRating) => {
-  // Verify recruiter
-  const recruiterProfile = await RecruiterProfile.findOne({ userId: recruiterId });
-  if (!recruiterProfile) {
-    throw new UnauthorizedError('Bạn không phải là nhà tuyển dụng');
-  }
 
-  // Get all applications
-  const applications = await Application.find({
-    _id: { $in: applicationIds }
-  }).populate('jobId');
 
-  // Verify ownership
-  for (const app of applications) {
-    if (!app.jobId || app.jobId.recruiterProfileId.toString() !== recruiterProfile._id.toString()) {
-      throw new UnauthorizedError('Bạn không có quyền cập nhật một số đơn ứng tuyển');
-    }
-  }
-
-  // Update all applications
-  const updatePromises = applications.map(async (app) => {
-    app.candidateRating = newRating;
-    if (app.status === 'PENDING') {
-      app.status = 'REVIEWING';
-    }
-    logActivity(app, 'RATING_UPDATE', `Đánh giá thay đổi thành ${newRating} (bulk update)`);
-    return app.save();
-  });
-
-  await Promise.all(updatePromises);
-
-  return {
-    success: true,
-    count: applications.length
-  };
-};
 
 /**
  * Export applications to CSV format
@@ -839,7 +766,6 @@ export const exportApplicationsToCSV = async (recruiterId, applicationIds) => {
       'Job Title': app.jobSnapshot?.title || app.jobId?.title,
       'Applied Date': new Date(app.appliedAt).toLocaleDateString('vi-VN'),
       'Status': app.status,
-      'Rating': app.candidateRating,
       'Notes': app.notes || '',
     };
   });

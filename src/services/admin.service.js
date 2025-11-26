@@ -124,12 +124,11 @@ export const getJobDetail = async (jobId) => {
           _id: null,
           total: { $sum: 1 },
           pending: { $sum: { $cond: [{ $eq: ['$status', 'PENDING'] }, 1, 0] } },
-          reviewing: { $sum: { $cond: [{ $eq: ['$status', 'REVIEWING'] }, 1, 0] } },
+          suitable: { $sum: { $cond: [{ $eq: ['$status', 'SUITABLE'] }, 1, 0] } },
           scheduled_interview: { $sum: { $cond: [{ $eq: ['$status', 'SCHEDULED_INTERVIEW'] }, 1, 0] } },
-          interviewed: { $sum: { $cond: [{ $eq: ['$status', 'INTERVIEWED'] }, 1, 0] } },
+          offer_sent: { $sum: { $cond: [{ $eq: ['$status', 'OFFER_SENT'] }, 1, 0] } },
           accepted: { $sum: { $cond: [{ $eq: ['$status', 'ACCEPTED'] }, 1, 0] } },
           rejected: { $sum: { $cond: [{ $eq: ['$status', 'REJECTED'] }, 1, 0] } },
-          withdrawn: { $sum: { $cond: [{ $eq: ['$status', 'WITHDRAWN'] }, 1, 0] } },
         }
       }
     ])
@@ -142,12 +141,11 @@ export const getJobDetail = async (jobId) => {
   const stats = applicationStats[0] || {
     total: 0,
     pending: 0,
-    reviewing: 0,
+    suitable: 0,
     scheduled_interview: 0,
-    interviewed: 0,
+    offer_sent: 0,
     accepted: 0,
     rejected: 0,
-    withdrawn: 0
   };
 
   return {
