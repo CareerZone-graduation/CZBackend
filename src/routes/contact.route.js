@@ -1,5 +1,6 @@
 import express from 'express';
 import { validateBody } from '../middleware/validation.middleware.js';
+import { uploadContactAttachments } from '../middleware/upload.middleware.js';
 import { optionalAuth } from '../middleware/optionalAuth.middleware.js';
 import { z } from 'zod';
 import { createContactRequest } from '../controllers/contact.controller.js';
@@ -8,6 +9,7 @@ const router = express.Router();
 
 // Contact form schema - make fields optional for authenticated users
 const contactFormSchema = z.object({
+  title: z.string().min(5).max(100).optional(), // Tiêu đề yêu cầu
   name: z.string().min(2).max(50).optional(),
   email: z.string().email().optional(),
   phone: z.string().min(10).max(15).optional(),
@@ -25,6 +27,7 @@ const contactFormSchema = z.object({
 router.post(
   '/',
   optionalAuth, // Try to authenticate if token provided
+  uploadContactAttachments.array('attachments'), // Handle file uploads
   validateBody(contactFormSchema),
   createContactRequest
 );

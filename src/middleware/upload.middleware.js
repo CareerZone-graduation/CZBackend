@@ -43,3 +43,27 @@ const uploadCvFile = multer({
 });
 
 export const uploadCv = uploadCvFile.single('cv');
+
+// File filter for Contact Attachments (Images + Docs)
+const contactFileFilter = (req, file, cb) => {
+    const allowedMimes = [
+        'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+        'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+    if (allowedMimes.includes(file.mimetype)) {
+        cb(null, true);
+    } else {
+        cb(new BadRequestError('Chỉ cho phép tải lên hình ảnh hoặc tài liệu (PDF, DOC, DOCX)!'), false);
+    }
+};
+
+const uploadContactFile = multer({
+    storage: storage,
+    fileFilter: contactFileFilter,
+    limits: {
+        fileSize: 10 * 1024 * 1024, // 10 MB
+        files: 5 // Max 5 files
+    },
+});
+
+export const uploadContactAttachments = uploadContactFile;
