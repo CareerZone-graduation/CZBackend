@@ -85,7 +85,8 @@ const applicationSchema = new mongoose.Schema({
         'SCHEDULED_INTERVIEW', //perform by recruiter
         'OFFER_SENT', //perform by recruiter
         'ACCEPTED', //perform by candidate
-        'REJECTED' //perform by recruiter
+        'REJECTED', //perform by recruiter
+        'OFFER_DECLINED' //perform by candidate
       ],
       message: '{VALUE} is not a valid application status'
     },
@@ -97,6 +98,10 @@ const applicationSchema = new mongoose.Schema({
     default: Date.now
   },
   isReapplied: {
+    type: Boolean,
+    default: false
+  },
+  isDeclineByCandidate: {
     type: Boolean,
     default: false
   },
