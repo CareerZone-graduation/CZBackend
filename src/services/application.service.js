@@ -247,7 +247,9 @@ export const getApplicationById = async (applicationId, recruiterId) => {
     }
   }
 
-  return applicationDetails;
+  return {
+    ...applicationDetails,
+  };
 
 };
 
@@ -412,9 +414,12 @@ export const getAllApplications = async (recruiterId, options = {}) => {
   }
 
   // Lấy tất cả jobs của recruiter này
-  const recruiterJobs = await Job.find({
-    recruiterProfileId: recruiterProfile._id
-  }).select('_id');
+  const jobQuery = { recruiterProfileId: recruiterProfile._id };
+  if (options.jobStatus && options.jobStatus !== 'all') {
+    jobQuery.status = options.jobStatus;
+  }
+
+  const recruiterJobs = await Job.find(jobQuery).select('_id');
 
   const jobIds = recruiterJobs.map(job => job._id);
 
@@ -498,6 +503,8 @@ export const getAllApplications = async (recruiterId, options = {}) => {
         candidateEmail: 1,
         candidatePhone: 1,
         jobTitle: '$job.title',
+        jobStatus: '$job.status',
+        jobDeadline: '$job.deadline',
         jobSnapshot: 1,
         candidateAvatar: '$candidateProfile.avatar',
         candidateTitle: '$candidateProfile.title',
@@ -579,9 +586,10 @@ export const getApplicationsStatistics = async (recruiterId, filters = {}) => {
   // Lấy tất cả jobs của recruiter
   const recruiterJobs = await Job.find({
     recruiterProfileId: recruiterProfile._id
-  }).select('_id title');
+  }).select('_id title status');
 
   const jobIds = recruiterJobs.map(job => job._id);
+  const activeJobIds = recruiterJobs.filter(job => job.status === 'ACTIVE').map(job => job._id);
 
   // Build base filter
   const baseFilter = { jobId: { $in: jobIds } };
@@ -615,10 +623,17 @@ export const getApplicationsStatistics = async (recruiterId, filters = {}) => {
   });
 
   // Get pending reviews
-  const pendingReviews = await Application.countDocuments({
+  const pendingReviewsQuery = {
     ...baseFilter,
     status: 'PENDING'
-  });
+  };
+
+  // If no specific job filter is applied, only count pending reviews for ACTIVE jobs
+  if (!filters.jobIds || filters.jobIds.length === 0) {
+    pendingReviewsQuery.jobId = { $in: activeJobIds };
+  }
+
+  const pendingReviews = await Application.countDocuments(pendingReviewsQuery);
 
   // Get scheduled interviews
   const scheduledInterviews = await Application.countDocuments({

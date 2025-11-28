@@ -630,7 +630,7 @@ export const respondToOffer = async (userId, applicationId, status) => {
     }
 
     // 4. Update status
-    if (status === 'ACCEPTED') {
+    if (status === 'ACCEPTED' || status === 'OFFER_DECLINED') {
         application.status = status;
         application.lastStatusUpdateAt = new Date();
     }

@@ -42,7 +42,7 @@ export const scheduleInterview = async (recruiterId, candidateId, jobId, applica
   // Verify application exists and belongs to the candidate
   const application = await Application.findById(applicationId)
     .populate('candidateProfileId', 'userId');
-  
+
   if (!application) {
     throw new NotFoundError('Application not found');
   }
@@ -60,7 +60,7 @@ export const scheduleInterview = async (recruiterId, candidateId, jobId, applica
 
   // Generate unique room ID
   const roomId = `interview-${uuidv4()}`;
-  
+
   // Create room name
   const roomName = `Phỏng vấn vị trí ${application.jobSnapshot?.title} - ${new Date(scheduledAt).toLocaleString('vi-VN')} - Ứng viên: ${application.candidateName}`;
 
@@ -83,10 +83,10 @@ export const scheduleInterview = async (recruiterId, candidateId, jobId, applica
   });
 
   // Update application activity history
-  if (application) {
-    logActivity(application, 'SCHEDULED_INTERVIEW', `Nhà tuyển dụng đã lên lịch phỏng vấn vào ${scheduledDate.toLocaleString('vi-VN')}`);
-    await application.save();
-  }
+  logActivity(application, 'SCHEDULED_INTERVIEW', `Nhà tuyển dụng đã lên lịch phỏng vấn vào ${scheduledDate.toLocaleString('vi-VN')}`);
+  application.status = 'SCHEDULED_INTERVIEW';
+  await application.save();
+
 
   // Send notification to candidate
   queueService.publishNotification(rabbitmq.ROUTING_KEYS.STATUS_UPDATE, {
@@ -149,7 +149,7 @@ export const getInterviewsByRecruiter = async (recruiterId, filters = {}) => {
   const skip = (page - 1) * limit;
 
   const query = { recruiterId };
-  
+
   // Apply status filter if provided
   if (status) {
     // Support multiple statuses
@@ -199,7 +199,7 @@ export const getInterviewsByCandidate = async (candidateId, filters = {}) => {
   const skip = (page - 1) * limit;
 
   const query = { candidateId };
-  
+
   // Apply status filter if provided
   if (status) {
     // Support multiple statuses
@@ -251,7 +251,7 @@ export const updateInterviewStatus = async (interviewId, newStatus, userId) => {
   }
 
   const interview = await InterviewRoom.findById(interviewId);
-  
+
   if (!interview) {
     throw new NotFoundError('Interview not found');
   }
@@ -274,7 +274,7 @@ export const updateInterviewStatus = async (interviewId, newStatus, userId) => {
   };
 
   const allowedStatuses = validTransitions[interview.status] || [];
-  
+
   if (!allowedStatuses.includes(newStatus)) {
     throw new BadRequestError(`Cannot transition from ${interview.status} to ${newStatus}`);
   }
@@ -282,7 +282,7 @@ export const updateInterviewStatus = async (interviewId, newStatus, userId) => {
   // Update status
   const oldStatus = interview.status;
   interview.status = newStatus;
-  
+
   // Add to change history
   interview.changeHistory.push({
     timestamp: new Date(),
@@ -459,7 +459,7 @@ export const endInterview = async (interviewId, userId, feedback = {}) => {
   // Update interview
   interview.status = 'COMPLETED';
   interview.endTime = new Date();
-  
+
   // Calculate duration
   const durationMs = interview.endTime - interview.startTime;
   const durationMinutes = Math.round(durationMs / (1000 * 60));
@@ -703,7 +703,7 @@ export const saveChatMessage = async (interviewId, senderId, message) => {
   }
 
   // Check if sender is a participant
-  const isParticipant = 
+  const isParticipant =
     interview.recruiterId.toString() === senderId.toString() ||
     interview.candidateId.toString() === senderId.toString();
 
@@ -849,7 +849,7 @@ export const getRecruiterInterviews = async (recruiterId, options = {}) => {
   const skip = (page - 1) * limit;
 
   const query = { recruiterId };
-  
+
   // Lọc theo status nếu có
   if (status) {
     query.status = status;
@@ -930,7 +930,7 @@ export const getCandidateInterviews = async (candidateId, options = {}) => {
   const skip = (page - 1) * limit;
 
   const query = { candidateId };
-  
+
   // Lọc theo status nếu có
   if (status) {
     query.status = status;
@@ -963,26 +963,26 @@ export const getCandidateInterviews = async (candidateId, options = {}) => {
     isReminderSent: interview.isReminderSent,
     createdAt: interview.createdAt,
     updatedAt: interview.updatedAt,
-    application: interview.applicationId 
-    ? {
-      id: interview.applicationId._id,
-      jobId: interview.applicationId.jobId,
-      candidateProfileId: interview.applicationId.candidateProfileId,
-      coverLetter: interview.applicationId.coverLetter,
-      status: interview.applicationId.status,
-      candidateRating: interview.applicationId.candidateRating,
-      isReapplied: interview.applicationId.isReapplied,
-      candidateName: interview.applicationId.candidateName,
-      candidateEmail: interview.applicationId.candidateEmail,
-      candidatePhone: interview.applicationId.candidatePhone,
-      submittedCV: interview.applicationId.submittedCV,
-      jobSnapshot: interview.applicationId.jobSnapshot,
-      appliedAt: interview.applicationId.appliedAt,
-      status: interview.applicationId.status,
-      lastStatusUpdateAt: interview.applicationId.lastStatusUpdateAt,
-      createdAt: interview.applicationId.createdAt,
-      updatedAt: interview.applicationId.updatedAt
-    } : null
+    application: interview.applicationId
+      ? {
+        id: interview.applicationId._id,
+        jobId: interview.applicationId.jobId,
+        candidateProfileId: interview.applicationId.candidateProfileId,
+        coverLetter: interview.applicationId.coverLetter,
+        status: interview.applicationId.status,
+        candidateRating: interview.applicationId.candidateRating,
+        isReapplied: interview.applicationId.isReapplied,
+        candidateName: interview.applicationId.candidateName,
+        candidateEmail: interview.applicationId.candidateEmail,
+        candidatePhone: interview.applicationId.candidatePhone,
+        submittedCV: interview.applicationId.submittedCV,
+        jobSnapshot: interview.applicationId.jobSnapshot,
+        appliedAt: interview.applicationId.appliedAt,
+        status: interview.applicationId.status,
+        lastStatusUpdateAt: interview.applicationId.lastStatusUpdateAt,
+        createdAt: interview.applicationId.createdAt,
+        updatedAt: interview.applicationId.updatedAt
+      } : null
   }));
 
   return {
@@ -1150,16 +1150,16 @@ export const sendInterviewReminders = async (minutesBefore = 60) => {
   const interviews = await InterviewRoom.find({
     status: { $in: ['SCHEDULED', 'RESCHEDULED'] },
     isReminderSent: false,
-    scheduledTime: { 
-      $gte: reminderTime.toISOString(), 
-      $lt: endTime.toISOString() 
+    scheduledTime: {
+      $gte: reminderTime.toISOString(),
+      $lt: endTime.toISOString()
     }
   });
 
   let sentCount = 0;
 
   for (const interview of interviews) {
-    try {    
+    try {
       // Gửi reminder cho candidate/recruiter qua RabbitMQ (ko cần chỉ định recipientId vì đã có trong model)
       queueService.publishNotification(rabbitmq.ROUTING_KEYS.INTERVIEW_REMINDER, {
         type: 'INTERVIEW_REMINDER',
@@ -1171,7 +1171,7 @@ export const sendInterviewReminders = async (minutesBefore = 60) => {
       // Đánh dấu đã gửi reminder
       interview.isReminderSent = true;
       await interview.save();
-      
+
       sentCount++;
     } catch (error) {
       logger.error(`Failed to send reminder for interview ${interview._id}:`, error);

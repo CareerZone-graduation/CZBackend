@@ -293,8 +293,8 @@ export const getDashboardStats = async (userId, query) => {
       createdAt: { $gte: previousStartDate, $lte: previousEndDate }
     }),
     Application.countDocuments({
-      jobId: { $in: await Job.find({ recruiterProfileId }).distinct('_id') },
-      status: { $in: ['PENDING', 'SUITABLE'] }
+      jobId: { $in: await Job.find({ recruiterProfileId, status: 'ACTIVE' }).distinct('_id') },
+      status: { $in: ['PENDING'] }
     }),
     InterviewRoom.countDocuments({
       recruiterId,
@@ -321,7 +321,7 @@ export const getDashboardStats = async (userId, query) => {
         _id: null,
         total: { $sum: 1 },
         underReview: {
-          $sum: { $cond: [{ $in: ['$status', ['PENDING', 'SUITABLE']] }, 1, 0] }
+          $sum: { $cond: [{ $in: ['$status', ['PENDING']] }, 1, 0] }
         },
         interview: {
           $sum: { $cond: [{ $in: ['$status', ['SCHEDULED_INTERVIEW']] }, 1, 0] }
