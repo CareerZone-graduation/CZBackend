@@ -93,14 +93,15 @@ export const getSupportRequestsQuerySchema = z.object({
 export const getAdminSupportRequestsQuerySchema = z.object({
   page: z.coerce.number().int().min(1, 'Trang phải lớn hơn 0').default(1),
   limit: z.coerce.number().int().min(1, 'Limit phải lớn hơn 0').max(100, 'Limit không được vượt quá 100').default(10),
-  status: z.enum(statusEnum).optional(),
+  status: z.string().optional(), // Allow comma-separated values like "pending,in-progress"
   category: z.enum(categoryEnum).optional(),
   priority: z.enum(priorityEnum).optional(),
   userType: z.enum(['candidate', 'recruiter']).optional(),
   keyword: z.string().trim().max(200, 'Từ khóa không được vượt quá 200 ký tự').optional(),
   fromDate: z.coerce.date().optional(),
   toDate: z.coerce.date().optional(),
-  sortBy: z.string().default('-priority')
+  isGuest: z.enum(['true', 'false']).optional(),
+  sortBy: z.string().default('-createdAt')
 }).refine(data => {
   // If both dates are provided, fromDate must be before or equal to toDate
   if (data.fromDate && data.toDate) {

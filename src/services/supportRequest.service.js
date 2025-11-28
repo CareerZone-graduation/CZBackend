@@ -441,7 +441,16 @@ export const getAllSupportRequests = async (filters = {}, sort = {}, pagination 
     const query = {};
 
     if (filters.status) {
-      query.status = filters.status;
+      // Handle comma-separated status values
+      const statusArray = typeof filters.status === 'string' 
+        ? filters.status.split(',').map(s => s.trim())
+        : filters.status;
+      
+      if (Array.isArray(statusArray) && statusArray.length > 0) {
+        query.status = statusArray.length === 1 ? statusArray[0] : { $in: statusArray };
+      } else {
+        query.status = filters.status;
+      }
     }
 
     if (filters.category) {
@@ -471,19 +480,34 @@ export const getAllSupportRequests = async (filters = {}, sort = {}, pagination 
       ];
     }
 
+    // Filter by user type (candidate/recruiter)
+    if (filters.userType) {
+      query['requester.userType'] = filters.userType;
+    }
+
+    // Handle isGuest filter - check requester.userId field
+    // If logged in: requester.userId has value (ObjectId), if guest: requester.userId is null
+    if (filters.isGuest === 'true' || filters.isGuest === true) {
+      query['requester.userId'] = null; // Guest: userId is null
+    } else if (filters.isGuest === 'false' || filters.isGuest === false) {
+      query['requester.userId'] = { $ne: null }; // Logged in: userId has value
+    }
+
     console.log('📝 Query:', JSON.stringify(query, null, 2));
+    console.log('📝 isGuest filter:', filters.isGuest);
 
     // Build sort
     const sortOptions = {};
-    // Default sort: priority (urgent first) then createdAt (newest first)
-    if (sort.priority) {
-      sortOptions.priority = sort.priority === 'desc' ? -1 : 1;
-    } else {
-      // Default: urgent first
-      sortOptions.priority = -1;
-    }
     
-    if (sort.createdAt) {
+    // Parse sortBy string (e.g., "-createdAt" or "createdAt")
+    if (sort.sortBy) {
+      const sortBy = sort.sortBy;
+      const isDesc = sortBy.startsWith('-');
+      const field = isDesc ? sortBy.substring(1) : sortBy;
+      sortOptions[field] = isDesc ? -1 : 1;
+    } else if (sort.priority) {
+      sortOptions.priority = sort.priority === 'desc' ? -1 : 1;
+    } else if (sort.createdAt) {
       sortOptions.createdAt = sort.createdAt === 'desc' ? -1 : 1;
     } else {
       // Default: newest first
@@ -492,13 +516,13 @@ export const getAllSupportRequests = async (filters = {}, sort = {}, pagination 
 
     console.log('🔀 Sort options:', sortOptions);
 
-    // Execute query with pagination
+    // Execute query
     const [requests, totalItems] = await Promise.all([
       SupportRequest.find(query)
         .sort(sortOptions)
         .skip(skip)
         .limit(limit)
-        .select('-messages -adminResponses') // Exclude detailed messages for list view
+        .select('-messages -adminResponses')
         .lean(),
       SupportRequest.countDocuments(query)
     ]);
@@ -601,19 +625,19 @@ export const respondToRequest = async (requestId, adminId, response, statusUpdat
 
     await supportRequest.save();
 
-    // Send notification/email to user
+    // Send notification and email to user
     if (supportRequest.requester.userId) {
       // For registered users: send in-app notification
       await sendNotificationToUser(supportRequest.requester.userId.toString(), supportRequest);
-    } else {
-      // For public contact forms (no userId): send email
-      try {
-        await sendSupportResponseEmail(supportRequest, adminResponse);
-        logger.info(`Support response email sent to ${supportRequest.requester.email}`);
-      } catch (emailError) {
-        logger.error('Error sending support response email:', emailError);
-        // Don't throw error - email failure shouldn't block the response
-      }
+    }
+    
+    // Always send email notification to requester (both registered and public users)
+    try {
+      await sendSupportResponseEmail(supportRequest, adminResponse);
+      logger.info(`Support response email sent to ${supportRequest.requester.email}`);
+    } catch (emailError) {
+      logger.error('Error sending support response email:', emailError);
+      // Don't throw error - email failure shouldn't block the response
     }
 
     logger.info(`Admin ${adminId} responded to support request ${requestId}`);

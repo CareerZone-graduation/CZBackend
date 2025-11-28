@@ -46,7 +46,7 @@ export const createZaloPayOrder = async (userId, coins) => {
         app_time: orderTime.toString(),
         amount: amountVND,
         item,
-        description: `[CareerZone] Nạp ${coins} xu (trị giá ${amountVND} VND)`,
+        description: `[CareerZone] Nạp ${coins} xu (trị giá ${amountVND} VNĐ)`,
         embed_data,
         bank_code: '',
     };

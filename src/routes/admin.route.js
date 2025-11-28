@@ -136,7 +136,7 @@ export default router;
 // =================================================================
 
 import {
-  getSupportRequestsQuerySchema,
+  getAdminSupportRequestsQuerySchema,
   respondToRequestSchema,
   updateStatusSchema,
   updatePrioritySchema,
@@ -165,7 +165,7 @@ router
 router
   .route('/support-requests')
   .get(
-    validationMiddleware.validateQuery(getSupportRequestsQuerySchema),
+    validationMiddleware.validateQuery(getAdminSupportRequestsQuerySchema),
     adminController.getAllSupportRequests
   );
 

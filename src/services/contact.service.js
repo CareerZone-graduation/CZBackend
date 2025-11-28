@@ -1,4 +1,6 @@
 import SupportRequest from '../models/SupportRequest.js';
+import { sendSupportRequestConfirmationEmail } from './email.service.js';
+import logger from '../utils/logger.js';
 
 /**
  * Calculate priority based on time since creation
@@ -89,6 +91,15 @@ export const createContactRequestService = async (contactData) => {
 
   const authStatus = userId ? 'authenticated user' : 'public form';
   console.log(`✅ Created support request from ${detectedUserType} (${authStatus}) with priority: ${priority}`);
+
+  // Send confirmation email to user
+  try {
+    await sendSupportRequestConfirmationEmail(supportRequest);
+    logger.info(`Confirmation email sent to ${email}`);
+  } catch (emailError) {
+    logger.error('Error sending confirmation email:', emailError);
+    // Don't throw - email failure shouldn't block request creation
+  }
 
   return supportRequest;
 };

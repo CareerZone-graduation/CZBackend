@@ -116,11 +116,12 @@ export const sendSupportResponseEmail = async (supportRequest, adminResponse) =>
     };
 
     const categoryLabels = {
-        'technical': 'Kỹ thuật',
-        'account': 'Tài khoản',
-        'billing': 'Thanh toán',
-        'general': 'Chung',
-        'other': 'Khác'
+        'technical-issue': 'Vấn đề kỹ thuật',
+        'account-issue': 'Vấn đề tài khoản',
+        'payment-issue': 'Vấn đề thanh toán',
+        'job-posting-issue': 'Vấn đề đăng tin',
+        'application-issue': 'Vấn đề ứng tuyển',
+        'general-inquiry': 'Thắc mắc chung'
     };
 
     const priorityLabels = {
@@ -144,6 +145,34 @@ export const sendSupportResponseEmail = async (supportRequest, adminResponse) =>
             newStatus: adminResponse.statusChange ? statusLabels[adminResponse.statusChange.to] : null,
             priorityChanged: adminResponse.priorityChange && adminResponse.priorityChange.from !== adminResponse.priorityChange.to,
             newPriority: adminResponse.priorityChange ? priorityLabels[adminResponse.priorityChange.to] : null
+        }
+    });
+};
+
+
+/**
+ * Send confirmation email when user submits a support request
+ * @param {object} supportRequest - The created support request
+ */
+export const sendSupportRequestConfirmationEmail = async (supportRequest) => {
+    const categoryLabels = {
+        'technical-issue': 'Vấn đề kỹ thuật',
+        'account-issue': 'Vấn đề tài khoản',
+        'payment-issue': 'Vấn đề thanh toán',
+        'job-posting-issue': 'Vấn đề đăng tin',
+        'application-issue': 'Vấn đề ứng tuyển',
+        'general-inquiry': 'Thắc mắc chung'
+    };
+
+    await sendEmail({
+        to: supportRequest.requester.email,
+        subject: `Cảm ơn bạn đã liên hệ - CareerZone [#${supportRequest._id.toString().slice(-8)}]`,
+        template: 'supportRequestConfirmation',
+        data: {
+            requesterName: supportRequest.requester.name,
+            requestId: supportRequest._id.toString().slice(-8),
+            subject: supportRequest.subject,
+            category: categoryLabels[supportRequest.category] || supportRequest.category
         }
     });
 };

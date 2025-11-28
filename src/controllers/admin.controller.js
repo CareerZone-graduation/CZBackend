@@ -166,25 +166,34 @@ import logger from '../utils/logger.js';
  * @access Private (Admin only)
  */
 export const getAllSupportRequests = asyncHandler(async (req, res) => {
+  // Use req.query directly if validatedQuery is not available
+  const query = req.validatedQuery || req.query;
+  
   const filters = {
-    status: req.validatedQuery?.status,
-    category: req.validatedQuery?.category,
-    priority: req.validatedQuery?.priority,
-    userType: req.validatedQuery?.userType,
-    keyword: req.validatedQuery?.keyword,
-    dateFrom: req.validatedQuery?.fromDate,
-    dateTo: req.validatedQuery?.toDate
+    status: query?.status,
+    category: query?.category,
+    priority: query?.priority,
+    userType: query?.userType,
+    keyword: query?.keyword,
+    dateFrom: query?.fromDate,
+    dateTo: query?.toDate,
+    isGuest: query?.isGuest
   };
+  
+  console.log('📥 Admin getAllSupportRequests - Raw query:', req.query);
+  console.log('📥 Admin getAllSupportRequests - Filters:', filters);
 
   const sort = {
-    priority: req.validatedQuery?.sortBy?.includes('priority') ? 'desc' : undefined,
-    createdAt: req.validatedQuery?.sortBy?.includes('createdAt') ? 'desc' : undefined
+    sortBy: query?.sortBy || '-createdAt'
   };
 
   const pagination = {
-    page: req.validatedQuery?.page,
-    limit: req.validatedQuery?.limit
+    page: parseInt(query?.page) || 1,
+    limit: parseInt(query?.limit) || 10
   };
+  
+  console.log('📥 Admin getAllSupportRequests - Sort:', sort);
+  console.log('📥 Admin getAllSupportRequests - Pagination:', pagination);
 
   const result = await supportRequestService.getAllSupportRequests(filters, sort, pagination);
 

@@ -1,0 +1,59 @@
+doctype html
+html
+  head
+    meta(charset="UTF-8")
+    meta(name="viewport" content="width=device-width, initial-scale=1.0")
+    title Cảm ơn bạn đã liên hệ - CareerZone
+    style.
+      body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }
+      .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
+      .header { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); padding: 30px; text-align: center; }
+      .header h1 { color: #ffffff; margin: 0; font-size: 24px; }
+      .content { padding: 30px; }
+      .thank-you { background-color: #ecfdf5; border-left: 4px solid #10b981; padding: 20px; margin-bottom: 20px; border-radius: 0 8px 8px 0; }
+      .thank-you h2 { color: #059669; margin: 0 0 10px 0; font-size: 18px; }
+      .info-box { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0; }
+      .info-row { display: flex; margin-bottom: 12px; }
+      .info-label { font-weight: 600; color: #64748b; min-width: 120px; }
+      .info-value { color: #1e293b; }
+      .footer { background-color: #f8fafc; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0; }
+      .footer p { color: #64748b; font-size: 12px; margin: 5px 0; }
+      .btn { display: inline-block; background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600; }
+  body
+    .container
+      .header
+        h1 🎉 Cảm ơn bạn đã liên hệ!
+      .content
+        .thank-you
+          h2 Xin chào #{requesterName}!
+          p Cảm ơn bạn đã gửi yêu cầu hỗ trợ đến CareerZone. Chúng tôi rất trân trọng sự đóng góp của bạn trong việc giúp website ngày càng hoàn thiện hơn.
+        
+        p Yêu cầu của bạn đã được tiếp nhận và đội ngũ hỗ trợ của chúng tôi sẽ xem xét và phản hồi trong thời gian sớm nhất.
+        
+        .info-box
+          h3(style="margin-top: 0; color: #1e293b;") Thông tin yêu cầu hỗ trợ
+          .info-row
+            span.info-label Mã yêu cầu:
+            span.info-value ##{requestId}
+          .info-row
+            span.info-label Tiêu đề:
+            span.info-value #{subject}
+          .info-row
+            span.info-label Danh mục:
+            span.info-value #{category}
+          .info-row
+            span.info-label Trạng thái:
+            span.info-value Đang chờ xử lý
+        
+        p(style="margin-top: 20px;")
+          strong Thời gian phản hồi dự kiến:
+          |  Trong vòng 48 giờ làm việc
+        
+        
+        p(style="margin-top: 30px;") Trân trọng,
+        p
+          strong Đội ngũ CareerZone
+      
+      .footer
+        p © #{new Date().getFullYear()} CareerZone. All rights reserved.
+        p Đây là email tự động, vui lòng không trả lời trực tiếp email này.
