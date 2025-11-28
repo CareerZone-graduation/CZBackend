@@ -59,6 +59,7 @@ export const getAllApplicationsQuery = z.object({
   status: z.string().optional(),
   search: z.string().optional(),
   sort: z.enum(['appliedAt', '-appliedAt', 'lastStatusUpdateAt', '-lastStatusUpdateAt']).optional(),
+  jobStatus: z.string().optional(),
   jobIds: z.string().optional().transform(val => val ? val.split(',') : []),
   fromDate: z.string().optional(),
   toDate: z.string().optional(),
