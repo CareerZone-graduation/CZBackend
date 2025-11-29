@@ -179,7 +179,14 @@ const supportRequestSchema = new mongoose.Schema({
       values: ['low', 'medium', 'high', 'urgent'],
       message: '{VALUE} is not a valid priority'
     },
-    default: 'medium'
+    default: 'low' // Default to low, will escalate as deadline approaches
+  },
+  autoCloseDeadline: {
+    type: Date,
+    default: function () {
+      // 48 hours from creation
+      return new Date(Date.now() + 48 * 60 * 60 * 1000);
+    }
   },
   attachments: {
     type: [attachmentSchema],

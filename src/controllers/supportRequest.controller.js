@@ -105,7 +105,8 @@ export const addFollowUpMessage = async (req, res) => {
   try {
     const userId = req.user._id.toString();
     const requestId = req.params.id;
-    const messageData = req.validatedBody;
+    // Use validatedBody if available, otherwise fallback to body (for multipart/form-data)
+    const messageData = req.validatedBody || req.body;
     const files = req.files || [];
 
     const supportRequest = await supportRequestService.addFollowUpMessage(

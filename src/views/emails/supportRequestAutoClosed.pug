@@ -1,0 +1,151 @@
+doctype html
+html
+  head
+    meta(charset="UTF-8")
+    meta(name="viewport" content="width=device-width, initial-scale=1.0")
+    title Yêu cầu hỗ trợ đã được đóng tự động
+    style.
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .container {
+        background-color: #ffffff;
+        border-radius: 8px;
+        padding: 30px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      }
+      .header {
+        text-align: center;
+        border-bottom: 2px solid #f0f0f0;
+        padding-bottom: 20px;
+        margin-bottom: 20px;
+      }
+      .logo {
+        font-size: 24px;
+        font-weight: bold;
+        color: #2563eb;
+      }
+      .warning-icon {
+        font-size: 48px;
+        margin-bottom: 10px;
+      }
+      h1 {
+        color: #f59e0b;
+        font-size: 20px;
+        margin: 10px 0;
+      }
+      .info-box {
+        background-color: #fef3c7;
+        border-left: 4px solid #f59e0b;
+        padding: 15px;
+        margin: 20px 0;
+        border-radius: 0 8px 8px 0;
+      }
+      .request-details {
+        background-color: #f8fafc;
+        border-radius: 8px;
+        padding: 20px;
+        margin: 20px 0;
+      }
+      .detail-row {
+        display: flex;
+        margin-bottom: 10px;
+        border-bottom: 1px solid #e2e8f0;
+        padding-bottom: 10px;
+      }
+      .detail-row:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+        padding-bottom: 0;
+      }
+      .detail-label {
+        font-weight: 600;
+        color: #64748b;
+        width: 120px;
+        flex-shrink: 0;
+      }
+      .detail-value {
+        color: #1e293b;
+      }
+      .message {
+        background-color: #fff7ed;
+        border-radius: 8px;
+        padding: 20px;
+        margin: 20px 0;
+      }
+      .contact-box {
+        background-color: #eff6ff;
+        border-radius: 8px;
+        padding: 20px;
+        margin: 20px 0;
+        text-align: center;
+      }
+      .phone {
+        font-size: 24px;
+        font-weight: bold;
+        color: #2563eb;
+        margin: 10px 0;
+      }
+      .footer {
+        text-align: center;
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 1px solid #e2e8f0;
+        color: #64748b;
+        font-size: 12px;
+      }
+  body
+    .container
+      .header
+        .logo CareerZone
+        .warning-icon ⚠️
+        h1 Yêu cầu hỗ trợ đã được đóng tự động
+
+      p Xin chào #{name},
+
+      .info-box
+        p Yêu cầu hỗ trợ của bạn đã được đóng tự động sau 48 giờ do chưa được xử lý kịp thời.
+
+      .request-details
+        h3 Thông tin yêu cầu
+        .detail-row
+          .detail-label Mã yêu cầu:
+          .detail-value ##{requestId}
+        .detail-row
+          .detail-label Tiêu đề:
+          .detail-value #{subject}
+        .detail-row
+          .detail-label Danh mục:
+          .detail-value #{category}
+        .detail-row
+          .detail-label Ngày tạo:
+          .detail-value #{createdAt}
+        .detail-row
+          .detail-label Ngày đóng:
+          .detail-value #{closedAt}
+
+      .message
+        p
+          strong Kính gửi Quý khách,
+        p Vì một số lý do nên chúng tôi chưa phản hồi kịp yêu cầu của bạn. Chúng tôi thành thật xin lỗi về sự bất tiện này.
+        p Đội ngũ hỗ trợ của chúng tôi sẽ xem xét và giải quyết vấn đề của bạn trong thời gian sớm nhất.
+
+      .contact-box
+        p Nếu bạn cần hỗ trợ gấp, vui lòng liên hệ:
+        .phone 📞 #{supportPhone}
+        p Hoặc gửi yêu cầu hỗ trợ mới tại website của chúng tôi.
+
+      p Trân trọng,
+      p
+        strong Đội ngũ hỗ trợ CareerZone
+
+      .footer
+        p Email này được gửi tự động từ hệ thống CareerZone.
+        p Vui lòng không trả lời email này.
+        p © 2025 CareerZone. All rights reserved.
