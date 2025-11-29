@@ -73,28 +73,30 @@ const sendAutoCloseEmail = async (request) => {
 };
 
 /**
- * Update priority for pending and in-progress support requests
- * Auto-close requests that exceed 48 hours without resolution
+ * Update priority for pending support requests
+ * Auto-close only PENDING requests that exceed 48 hours without admin response
+ * In-progress requests (admin already responded) will NOT be auto-closed
  */
 const updateSupportRequestPriorities = async () => {
   try {
     logger.info('Running support request priority update cron job...');
 
-    // Find all pending and in-progress requests
-    const requests = await SupportRequest.find({
-      status: { $in: ['pending', 'in-progress'] }
+    // Find only PENDING requests (not yet responded by admin)
+    // In-progress means admin has responded, so we don't auto-close those
+    const pendingRequests = await SupportRequest.find({
+      status: 'pending'
     });
 
     let updatedCount = 0;
     let closedCount = 0;
 
-    for (const request of requests) {
+    for (const request of pendingRequests) {
       const { priority: newPriority, shouldClose } = calculatePriorityByDeadline(
         request.createdAt
       );
 
       if (shouldClose) {
-        // Auto-close the request
+        // Auto-close ONLY pending requests (no admin response yet)
         request.status = 'closed';
         request.closedAt = new Date();
         request.priority = 'urgent';
@@ -105,10 +107,10 @@ const updateSupportRequestPriorities = async () => {
         await sendAutoCloseEmail(request);
 
         logger.info(
-          `Auto-closed support request ${request._id} (exceeded 48 hours deadline)`
+          `Auto-closed support request ${request._id} (exceeded 48 hours without admin response)`
         );
       } else if (request.priority !== newPriority) {
-        // Update priority
+        // Update priority for pending requests
         const oldPriority = request.priority;
         request.priority = newPriority;
         await request.save();
@@ -121,7 +123,7 @@ const updateSupportRequestPriorities = async () => {
     }
 
     logger.info(
-      `Cron job completed: Updated ${updatedCount} priorities, auto-closed ${closedCount} requests out of ${requests.length} total`
+      `Cron job completed: Updated ${updatedCount} priorities, auto-closed ${closedCount} pending requests out of ${pendingRequests.length} total`
     );
   } catch (error) {
     logger.error('Error updating support request priorities:', error);
