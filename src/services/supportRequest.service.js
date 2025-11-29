@@ -588,22 +588,32 @@ export const respondToRequest = async (requestId, adminId, response, statusUpdat
       createdAt: new Date()
     };
 
+    // Auto-change status to 'in-progress' on first admin response if still pending
+    const isFirstResponse = supportRequest.adminResponses.length === 0;
+    const shouldAutoInProgress = isFirstResponse && supportRequest.status === 'pending' && !statusUpdate;
+
+    // Determine final status update
+    let finalStatusUpdate = statusUpdate;
+    if (shouldAutoInProgress) {
+      finalStatusUpdate = 'in-progress';
+    }
+
     // Track status change
-    if (statusUpdate && statusUpdate !== supportRequest.status) {
+    if (finalStatusUpdate && finalStatusUpdate !== supportRequest.status) {
       adminResponse.statusChange = {
         from: supportRequest.status,
-        to: statusUpdate
+        to: finalStatusUpdate
       };
-      
+
       // Update status and timestamps
       const oldStatus = supportRequest.status;
-      supportRequest.status = statusUpdate;
-      
-      if (statusUpdate === 'resolved' && oldStatus !== 'resolved') {
+      supportRequest.status = finalStatusUpdate;
+
+      if (finalStatusUpdate === 'resolved' && oldStatus !== 'resolved') {
         supportRequest.resolvedAt = new Date();
       }
-      
-      if (statusUpdate === 'closed' && oldStatus !== 'closed') {
+
+      if (finalStatusUpdate === 'closed' && oldStatus !== 'closed') {
         supportRequest.closedAt = new Date();
       }
     }
