@@ -787,3 +787,55 @@ export const exportApplicationsToCSV = async (recruiterId, applicationIds) => {
 
   return csvData;
 };
+
+/**
+ * Lấy dữ liệu CV để render cho Application (dành cho CV template)
+ * Recruiter có thể xem CV template của ứng viên thông qua Application
+ * @param {string} applicationId - ID của đơn ứng tuyển
+ * @param {string} recruiterId - ID của nhà tuyển dụng (để xác thực quyền) - có thể null nếu dùng token đặc biệt
+ * @returns {Object} - Dữ liệu CV để render
+ */
+export const getApplicationCVData = async (applicationId, recruiterId = null) => {
+  // Kiểm tra ID hợp lệ
+  if (!mongoose.Types.ObjectId.isValid(applicationId)) {
+    throw new BadRequestError('ID đơn ứng tuyển không hợp lệ');
+  }
+
+  // Lấy thông tin đơn ứng tuyển
+  const application = await Application.findById(applicationId)
+    .populate('jobId', 'recruiterProfileId')
+    .lean();
+
+  if (!application) {
+    throw new NotFoundError('Không tìm thấy đơn ứng tuyển');
+  }
+
+  // Nếu có recruiterId, kiểm tra quyền sở hữu
+  if (recruiterId) {
+    const recruiterProfile = await RecruiterProfile.findOne({ userId: recruiterId });
+    if (!recruiterProfile) {
+      throw new UnauthorizedError('Bạn không phải là nhà tuyển dụng');
+    }
+
+    if (application.jobId.recruiterProfileId.toString() !== recruiterProfile._id.toString()) {
+      throw new UnauthorizedError('Bạn không có quyền xem CV này');
+    }
+  }
+
+  const submittedCV = application.submittedCV;
+
+  // Kiểm tra loại CV
+  if (submittedCV.source !== 'TEMPLATE') {
+    throw new BadRequestError('CV này không phải là CV template. Vui lòng tải xuống file PDF.');
+  }
+
+  // Trả về dữ liệu CV để render
+  return {
+    applicationId: application._id,
+    cvName: submittedCV.name,
+    templateId: submittedCV.templateId,
+    cvData: submittedCV.templateSnapshot,
+    jobSnapshot: application.jobSnapshot,
+    appliedAt: application.appliedAt,
+  };
+};

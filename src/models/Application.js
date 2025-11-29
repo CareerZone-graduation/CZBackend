@@ -37,7 +37,7 @@ const submittedCV = new mongoose.Schema({
   },
   path: {
     type: String,
-    required: [true, 'CV path is required'],
+    // Không bắt buộc nữa vì CV template không có path
     trim: true
   },
   cloudinaryId: {
@@ -49,9 +49,20 @@ const submittedCV = new mongoose.Schema({
     enum: ['UPLOADED', 'TEMPLATE'],
     required: [true, 'CV source is required']
   },
-  // Chỉ tồn tại khi source là 'TEMPLATE'
+  // ===== Các trường dành cho CV template (source = 'TEMPLATE') =====
+  // ID của CV template gốc để tham chiếu
+  cvTemplateId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'CV'
+  },
+  // Snapshot toàn bộ dữ liệu CV tại thời điểm ứng tuyển (để không bị thay đổi theo CV gốc)
   templateSnapshot: {
     type: mongoose.Schema.Types.Mixed
+  },
+  // Template ID (modern-blue, classic-white, etc.)
+  templateId: {
+    type: String,
+    trim: true
   }
 }, { _id: false });
 
