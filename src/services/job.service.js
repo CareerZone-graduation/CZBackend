@@ -6,6 +6,7 @@ import {
   RecruiterProfile,
   SavedJob,
   User,
+  CV,
 } from '../models/index.js';
 import * as kafkaService from './kafka.service.js';
 import * as queueService from './queue.service.js';
@@ -655,31 +656,67 @@ export const applyToJob = async (userId, jobId, applicationData) => {
       };
       sourceType = 'UPLOADED';
     } else if (cvTemplateId) {
-      // --- Trường hợp 2: Dùng CV tạo từ mẫu ---
-      // TODO: CHƯA XỬ LÝ
-      throw new BadRequestError('Chức năng nộp CV từ mẫu chưa được hỗ trợ.');
+      // --- Trường hợp 2: Dùng CV tạo từ mẫu (Template) ---
+      // Tìm CV template của user
+      const cvTemplate = await CV.findOne({ 
+        _id: cvTemplateId, 
+        userId: userId 
+      });
+      
+      if (!cvTemplate) {
+        throw new BadRequestError('CV mẫu không hợp lệ hoặc không tìm thấy.');
+      }
+
+      // Lưu snapshot dữ liệu CV tại thời điểm nộp đơn
+      // Để sau này candidate sửa CV gốc thì đơn ứng tuyển không bị thay đổi theo
+      sourceFileInfo = {
+        name: cvTemplate.title || 'CV Template',
+        cvTemplateId: cvTemplate._id,
+        templateId: cvTemplate.templateId, // modern-blue, classic-white, etc.
+        templateSnapshot: cvTemplate.cvData, // Toàn bộ JSON data của CV
+      };
+      sourceType = 'TEMPLATE';
     } else {
       // Trường hợp không cung cấp ID nào (dù đã được validate bởi Zod)
       throw new BadRequestError('Phải cung cấp một CV để ứng tuyển.');
     }
 
-    let copiedFile;
-    // 5. In a test environment, bypass the actual upload and use a mock response.
-    if (process.env.NODE_ENV === 'test') {
-      copiedFile = {
-        secure_url: 'http://mocked.com/cv.pdf',
-        public_id: 'mocked_public_id',
+    let submittedCVData;
+
+    if (sourceType === 'UPLOADED') {
+      // --- Xử lý CV đã tải lên: Tạo bản sao trên Cloudinary ---
+      let copiedFile;
+      if (process.env.NODE_ENV === 'test') {
+        copiedFile = {
+          secure_url: 'http://mocked.com/cv.pdf',
+          public_id: 'mocked_public_id',
+        };
+      } else {
+        logger.info(`Tạo bản sao CV cho đơn ứng tuyển: ${job.title}, ứng viên: ${userId}`);
+        const uniqueSuffix = `${jobId}-${Date.now()}`;
+        const publicId = `application-cv-${userId}-${uniqueSuffix}`;
+        copiedFile = await uploadService.copyFileFromUrlToCloudinary(
+          sourceFileInfo.path,
+          'application-cvs',
+          publicId
+        );
+      }
+
+      submittedCVData = {
+        name: sourceFileInfo.name,
+        path: copiedFile.secure_url,
+        cloudinaryId: copiedFile.public_id,
+        source: sourceType,
       };
     } else {
-      // In a non-test environment, perform the actual upload.
-      logger.info(`Tạo bản sao CV cho đơn ứng tuyển: ${job.title}, ứng viên: ${userId}`);
-      const uniqueSuffix = `${jobId}-${Date.now()}`;
-      const publicId = `application-cv-${userId}-${uniqueSuffix}`;
-      copiedFile = await uploadService.copyFileFromUrlToCloudinary(
-        sourceFileInfo.path,
-        'application-cvs',
-        publicId
-      );
+      // --- Xử lý CV Template: Lưu snapshot data thay vì tạo file ---
+      submittedCVData = {
+        name: sourceFileInfo.name,
+        source: sourceType,
+        cvTemplateId: sourceFileInfo.cvTemplateId,
+        templateId: sourceFileInfo.templateId,
+        templateSnapshot: sourceFileInfo.templateSnapshot,
+      };
     }
 
     // 6. Tạo bản ghi ứng tuyển (Application)
@@ -691,14 +728,7 @@ export const applyToJob = async (userId, jobId, applicationData) => {
       candidateName,
       candidateEmail,
       candidatePhone,
-      submittedCV: {
-        name: sourceFileInfo.name,
-        path: copiedFile.secure_url, // Đường dẫn đến bản sao
-        cloudinaryId: copiedFile.public_id,
-        source: sourceType,
-        // Nếu là CV template, lưu trữ dữ liệu để tham khảo
-        ...(sourceType === 'TEMPLATE' ? { templateSnapshot: sourceFileInfo.templateData } : {})
-      },
+      submittedCV: submittedCVData,
       jobSnapshot: {
         title: job.title,
         company: job.recruiterProfileId.company.name,

@@ -151,3 +151,20 @@ export const exportApplications = asyncHandler(async (req, res) => {
     data: csvData
   });
 });
+
+/**
+ * @desc      Get CV data for rendering in iframe (for CV template type)
+ * @route     GET /api/applications/:applicationId/render-cv
+ * @access    Private - Recruiter Only
+ */
+export const getApplicationCVData = asyncHandler(async (req, res) => {
+  const { applicationId } = req.params;
+
+  const cvData = await applicationService.getApplicationCVData(applicationId, req.user._id);
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy dữ liệu CV thành công',
+    data: cvData
+  });
+});
