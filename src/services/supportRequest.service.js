@@ -665,7 +665,7 @@ export const updateRequestStatus = async (requestId, adminId, newStatus) => {
 
     // Validate status transition
     const validTransitions = {
-      'pending': ['in-progress', 'closed'],
+      'pending': ['in-progress', 'closed','resolved'],
       'in-progress': ['resolved', 'closed'],
       'resolved': ['closed', 'in-progress'],
       'closed': [] // Closed requests should use reopen function
