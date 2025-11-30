@@ -126,7 +126,8 @@ export const getMyApplications = asyncHandler(async (req, res) => {
         success: true,
         message: 'Lấy danh sách đơn ứng tuyển thành công.',
         meta: result.meta,
-        data: result.data
+        data: result.data,
+        stats: result.stats
     });
 });
 

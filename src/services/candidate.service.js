@@ -300,8 +300,8 @@ export const getMyApplications = async (userId, options = {}) => {
         }
     }
 
-    // Thực hiện truy vấn với pagination
-    const [applications, totalCount] = await Promise.all([
+    // Thực hiện truy vấn với pagination và thống kê
+    const [applications, totalCount, statusCounts] = await Promise.all([
         Application.find(filter)
             .populate({
                 path: 'jobId',
@@ -315,8 +315,28 @@ export const getMyApplications = async (userId, options = {}) => {
             .skip(skip)
             .limit(limit)
             .lean(),
-        Application.countDocuments(filter)
+        Application.countDocuments(filter),
+        Application.aggregate([
+            { $match: { candidateProfileId: candidateProfile._id } },
+            { $group: { _id: '$status', count: { $sum: 1 } } }
+        ])
     ]);
+
+    const stats = {
+        PENDING: 0,
+        SUITABLE: 0,
+        SCHEDULED_INTERVIEW: 0,
+        OFFER_SENT: 0,
+        ACCEPTED: 0,
+        REJECTED: 0,
+        OFFER_DECLINED: 0
+    };
+
+    statusCounts.forEach(item => {
+        if (stats.hasOwnProperty(item._id)) {
+            stats[item._id] = item.count;
+        }
+    });
 
     const meta = {
         currentPage: page,
@@ -332,7 +352,7 @@ export const getMyApplications = async (userId, options = {}) => {
         currentPageCount: applications.length
     });
 
-    return { data: applications, meta };
+    return { data: applications, meta, stats };
 };
 
 /**
