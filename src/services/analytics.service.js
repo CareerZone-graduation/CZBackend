@@ -11,26 +11,39 @@ import { NotFoundError } from "../utils/AppError.js";
 import { ALL_PAYMENT_METHODS, TRANSACTION_STATUS_LABELS } from "../constants/index.js";
 import mongoose from "mongoose";
 
-// Helper function to calculate date ranges
+// Helper function to calculate date ranges - sử dụng múi giờ Việt Nam (UTC+7)
 const getDateRange = (period) => {
-  const endDate = new Date();
-  let startDate = new Date();
-
-  switch (period) {
-    case "7d":
-      startDate.setDate(endDate.getDate() - 7);
-      break;
-    case "90d":
-      startDate.setDate(endDate.getDate() - 90);
-      break;
-    case "1y":
-      startDate.setFullYear(endDate.getFullYear() - 1);
-      break;
-    case "30d":
-    default:
-      startDate.setDate(endDate.getDate() - 30);
-      break;
-  }
+  const vnOffset = 7 * 60 * 60 * 1000; // UTC+7
+  const now = new Date();
+  
+  // Lấy thời gian hiện tại theo UTC+7
+  const vnNow = new Date(now.getTime() + vnOffset);
+  
+  // Tạo endDate là cuối ngày hôm nay theo UTC+7, chuyển về UTC
+  const endDate = new Date(Date.UTC(
+    vnNow.getUTCFullYear(),
+    vnNow.getUTCMonth(),
+    vnNow.getUTCDate(),
+    23, 59, 59, 999
+  ) - vnOffset);
+  
+  // Tạo startDate theo period
+  let startDate;
+  const daysBack = period === "7d" ? 7 : period === "90d" ? 90 : period === "1y" ? 365 : 30;
+  
+  // Tính ngày bắt đầu (đầu ngày theo UTC+7)
+  const startVnDate = new Date(vnNow);
+  startVnDate.setUTCDate(startVnDate.getUTCDate() - daysBack);
+  
+  startDate = new Date(Date.UTC(
+    startVnDate.getUTCFullYear(),
+    startVnDate.getUTCMonth(),
+    startVnDate.getUTCDate(),
+    0, 0, 0, 0
+  ) - vnOffset);
+  
+  console.log('📅 getDateRange:', { period, startDate: startDate.toISOString(), endDate: endDate.toISOString() });
+  
   return { startDate, endDate };
 };
 
@@ -196,7 +209,7 @@ export const getUserGrowth = async (queryParams) => {
     });
   }
 
-  // --- THAY ĐỔI: Sử dụng $dateTrunc để chuẩn hóa ngày ---
+  // --- THAY ĐỔI: Sử dụng $dateTrunc để chuẩn hóa ngày - múi giờ Việt Nam ---
   const dateGroupingExpression = {
     $dateToString: {
       format: '%Y-%m-%d', // Luôn trả về định dạng YYYY-MM-DD
@@ -204,8 +217,10 @@ export const getUserGrowth = async (queryParams) => {
         $dateTrunc: {
           date: '$createdAt',
           unit: granularity === 'weekly' ? 'week' : (granularity === 'monthly' ? 'month' : 'day'),
+          timezone: 'Asia/Ho_Chi_Minh',
         },
       },
+      timezone: 'Asia/Ho_Chi_Minh',
     },
   };
 
@@ -379,7 +394,7 @@ export const getRevenueTrends = async (queryParams) => {
   }
 
   // --- THAY ĐỔI LỚN BẮT ĐẦU TỪ ĐÂY ---
-  // Thay vì chỉ dùng format string, ta dùng $dateTrunc để chuẩn hóa ngày
+  // Thay vì chỉ dùng format string, ta dùng $dateTrunc để chuẩn hóa ngày - múi giờ Việt Nam
   const dateGroupingExpression = {
     $dateToString: {
       format: '%Y-%m-%d', // Luôn trả về định dạng YYYY-MM-DD
@@ -387,11 +402,13 @@ export const getRevenueTrends = async (queryParams) => {
         $dateTrunc: {
           date: '$createdAt',
           unit: granularity === 'weekly' ? 'week' : (granularity === 'monthly' ? 'month' : 'day'),
+          timezone: 'Asia/Ho_Chi_Minh',
           // 'week' sẽ lấy ngày đầu tuần (thường là Chủ Nhật hoặc Thứ Hai tùy cấu hình)
           // 'month' sẽ lấy ngày 01 của tháng
           // 'day' sẽ giữ nguyên ngày
         },
       },
+      timezone: 'Asia/Ho_Chi_Minh',
     },
   };
   // --- KẾT THÚC THAY ĐỔI ---
@@ -784,7 +801,7 @@ export const getTransactionAnalytics = async (queryParams) => {
   const { period, granularity } = queryParams;
   const { startDate, endDate } = getDateRange(period);
   console.log("Calculating transaction analytics from", startDate, "to", endDate, "with granularity", granularity);
-  // Xác định định dạng ngày tháng cho việc nhóm dữ liệu
+  // Xác định định dạng ngày tháng cho việc nhóm dữ liệu - sử dụng múi giờ Việt Nam (UTC+7)
   const dateGroupingExpression = {
     $dateToString: {
       format: '%Y-%m-%d', // Luôn trả về định dạng YYYY-MM-DD
@@ -792,8 +809,10 @@ export const getTransactionAnalytics = async (queryParams) => {
         $dateTrunc: {
           date: '$createdAt',
           unit: granularity === 'weekly' ? 'week' : (granularity === 'monthly' ? 'month' : 'day'),
+          timezone: 'Asia/Ho_Chi_Minh', // Múi giờ Việt Nam
         },
       },
+      timezone: 'Asia/Ho_Chi_Minh', // Múi giờ Việt Nam
     },
   };
 
@@ -1132,12 +1151,36 @@ while (currentDate <= endDate) {
  * Thống kê giao dịch trong ngày hiện tại - Real-time data
  */
 export const getTransactionTodayStats = async () => {
-  // Lấy thời gian đầu ngày và cuối ngày hôm nay
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
+  // Lấy thời gian đầu ngày và cuối ngày hôm nay theo múi giờ Việt Nam (UTC+7)
+  const now = new Date();
   
-  const todayEnd = new Date();
-  todayEnd.setHours(23, 59, 59, 999);
+  // Tính offset UTC+7 (7 giờ = 7 * 60 * 60 * 1000 ms)
+  const vnOffset = 7 * 60 * 60 * 1000;
+  
+  // Lấy thời gian hiện tại theo UTC+7
+  const vnNow = new Date(now.getTime() + vnOffset);
+  
+  // Tạo ngày bắt đầu (00:00:00) theo UTC+7, sau đó chuyển về UTC để query MongoDB
+  const todayStart = new Date(Date.UTC(
+    vnNow.getUTCFullYear(),
+    vnNow.getUTCMonth(),
+    vnNow.getUTCDate(),
+    0, 0, 0, 0
+  ) - vnOffset);
+  
+  // Tạo ngày kết thúc (23:59:59.999) theo UTC+7, sau đó chuyển về UTC
+  const todayEnd = new Date(Date.UTC(
+    vnNow.getUTCFullYear(),
+    vnNow.getUTCMonth(),
+    vnNow.getUTCDate(),
+    23, 59, 59, 999
+  ) - vnOffset);
+  
+  console.log('📅 Today stats date range (VN timezone):', {
+    vnNow: vnNow.toISOString(),
+    todayStart: todayStart.toISOString(),
+    todayEnd: todayEnd.toISOString()
+  });
 
   const stats = await CoinRecharge.aggregate([
     { $match: { createdAt: { $gte: todayStart, $lte: todayEnd } } },
@@ -1217,6 +1260,9 @@ export const getTransactionTodayStats = async () => {
     }
   ]);
 
+  // Format ngày theo múi giờ Việt Nam
+  const vnDateStr = `${vnNow.getUTCFullYear()}-${String(vnNow.getUTCMonth() + 1).padStart(2, '0')}-${String(vnNow.getUTCDate()).padStart(2, '0')}`;
+
   // Nếu không có giao dịch nào hôm nay, trả về dữ liệu mặc định
   if (stats.length === 0) {
     return {
@@ -1228,13 +1274,13 @@ export const getTransactionTodayStats = async () => {
       totalCoinsRecharged: 0,
       averageTransactionValue: 0,
       successRate: 0,
-      date: todayStart.toISOString().split('T')[0] // Format: YYYY-MM-DD
+      date: vnDateStr // Format: YYYY-MM-DD theo múi giờ VN
     };
   }
 
   return {
     ...stats[0],
-    date: todayStart.toISOString().split('T')[0] // Format: YYYY-MM-DD
+    date: vnDateStr // Format: YYYY-MM-DD theo múi giờ VN
   };
 };
 

@@ -19,7 +19,7 @@ const coinRechargeSchema = new mongoose.Schema({
   paymentMethod: {
     type: String,
     enum: {
-      values: ['VNPAY', 'MOMO', 'BANK_CARD', 'PAYPAL', 'ZALOPAY'], // Added ZALOPAY
+      values: ['VNPAY', 'MOMO', 'ZALOPAY'],
       message: '{VALUE} is not a valid payment method'
     },
     required: [true, 'Payment method is required']

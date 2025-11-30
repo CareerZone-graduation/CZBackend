@@ -6,8 +6,6 @@
 export const PAYMENT_METHODS = {
   VNPAY: 'VNPAY',
   MOMO: 'MOMO', 
-  BANK_CARD: 'BANK_CARD',
-  PAYPAL: 'PAYPAL',
   ZALOPAY: 'ZALOPAY'
 };
 
@@ -18,8 +16,6 @@ export const ALL_PAYMENT_METHODS = Object.values(PAYMENT_METHODS);
 export const PAYMENT_METHOD_LABELS = {
   [PAYMENT_METHODS.VNPAY]: 'VNPay',
   [PAYMENT_METHODS.MOMO]: 'MoMo',
-  [PAYMENT_METHODS.BANK_CARD]: 'Thẻ ngân hàng', 
-  [PAYMENT_METHODS.PAYPAL]: 'PayPal',
   [PAYMENT_METHODS.ZALOPAY]: 'ZaloPay'
 };
 
