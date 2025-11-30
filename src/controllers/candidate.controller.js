@@ -144,6 +144,23 @@ export const getApplicationById = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Get CV data for rendering in iframe (for CV template type)
+ * GET /api/candidate/my-applications/:applicationId/render-cv
+ */
+export const getApplicationCVData = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    const { applicationId } = req.params;
+
+    const cvData = await candidateService.getApplicationCVData(userId, applicationId);
+
+    res.status(200).json({
+        success: true,
+        message: 'Lấy dữ liệu CV thành công.',
+        data: cvData
+    });
+});
+
+/**
  * Get profile completeness
  * GET /api/candidate/profile/completeness
  */

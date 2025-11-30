@@ -104,6 +104,14 @@ router.get(
     candidateController.getApplicationById
 );
 
+// Route để lấy dữ liệu CV template của đơn ứng tuyển (cho candidate xem CV của chính mình)
+// Hỗ trợ token từ query param (cho iframe) hoặc header Authorization
+router.get(
+    '/my-applications/:applicationId/render-cv',
+    validationMiddleware.validateParams(applicationSchema.applicationIdParam),
+    candidateController.getApplicationCVData
+);
+
 // Onboarding Routes - Simplified (no session needed)
 router.get('/onboarding/status', candidateOnboardingController.getOnboardingStatus);
 router.get('/onboarding/recommendations', candidateOnboardingController.getRecommendations);

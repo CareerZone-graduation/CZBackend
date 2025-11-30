@@ -68,7 +68,7 @@ await multi.exec();
 
 ## New Scripts
 
-### 1. Rebuild Redis từ MongoDB
+### 1. Rebuild Redis từ MongoDB (Basic)
 ```bash
 npm run rebuild:redis
 ```
@@ -84,7 +84,39 @@ npm run rebuild:redis
 3. Rebuild Redis sets
 4. Verify consistency
 
-### 2. Test Change Stream
+### 2. Rebuild Redis Toàn Diện (Deploy Redis Mới)
+```bash
+# Chạy full rebuild
+npm run rebuild:redis:all
+
+# Dry run - kiểm tra trước khi chạy thực
+npm run rebuild:redis:dryrun
+```
+
+**Khi nào dùng:**
+- 🆕 **Deploy Redis mới** (chưa có data)
+- Redis instance bị mất hoàn toàn
+- Migration sang Redis server mới
+- Cần sync toàn bộ dữ liệu từ đầu
+
+**Options:**
+- `--dry-run`: Chỉ kiểm tra, không ghi vào Redis
+- `--verbose`: Hiển thị chi tiết từng bước
+- `--skip-verify`: Bỏ qua bước verify
+
+**Chức năng:**
+1. Kiểm tra connections (MongoDB + Redis)
+2. Clear TẤT CẢ keys liên quan:
+   - `job_alert:keyword:*`
+   - `job_alert:sent:*`
+   - `job_matches:*`
+   - `subscription:*`
+3. Fetch data từ MongoDB
+4. Rebuild Redis sets với batching
+5. Verify consistency
+6. Hiển thị sample data và summary
+
+### 3. Test Change Stream
 ```bash
 npm run test:changestream
 ```
