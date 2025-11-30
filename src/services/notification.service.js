@@ -644,6 +644,8 @@ export const handleNewApplication = async (payload) => {
             title: `Có ứng viên mới cho vị trí "${jobTitle}"`,
             isRead: false,
             readAt: null, // Reset thời gian đọc
+            // gán lại createdAt
+            createdAt: now,
             'metadata.jobId': new mongoose.Types.ObjectId(jobId),
             'metadata.jobTitle': jobTitle,
             // Dùng $setUnion để thêm ID mới và đảm bảo không trùng lặp

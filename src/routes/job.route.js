@@ -131,6 +131,15 @@ router.post(
 );
 
 router.post(
+  '/:id/reapply',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.candidateOnly,
+  validationMiddleware.validateParams(commonSchema.idParamSchema),
+  validationMiddleware.validateBody(jobSchema.applyToJobSchema),
+  jobController.reapplyToJob
+);
+
+router.post(
   '/:id/save',
   passport.authenticate('jwt', { session: false }),
   authMiddleware.candidateOnly,

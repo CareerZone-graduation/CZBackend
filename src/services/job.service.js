@@ -391,6 +391,8 @@ export const getJobById = async (jobId, userId = null) => {
   // Kiểm tra xem user có phải là candidate và job có được lưu/apply không
   let isSaved = false;
   let isApplied = false;
+  let applicationId = null;
+  let applicationStatus = null;
   if (userId) {
     // TODO: Gửi sự kiện xem việc làm KAFKA
 
@@ -405,18 +407,24 @@ export const getJobById = async (jobId, userId = null) => {
         });
         isSaved = !!savedJob;
 
-        // Kiểm tra đã apply job chưa
+        // Kiểm tra đã apply job chưa - lấy đơn MỚI NHẤT (sort appliedAt DESC)
         const application = await Application.findOne({
           candidateProfileId: candidateProfile._id,
           jobId
-        });
+        }).sort({ appliedAt: -1 });
+        
         isApplied = !!application;
+        if (application) {
+          applicationId = application._id;
+          applicationStatus = application.status;
+        }
       }
     } catch (error) {
       // Nếu có lỗi khi kiểm tra, isSaved và isApplied vẫn là false
       logger.warn('Error checking saved/applied job status', { userId, jobId, error: error.message });
     }
   }
+
 
   // tường minh
   return {
@@ -449,8 +457,9 @@ export const getJobById = async (jobId, userId = null) => {
       _id: job.recruiterProfileId.company._id
     },
     isSaved,
-    isApplied
-
+    isApplied,
+    applicationId,
+    applicationStatus,
   };
 };
 
@@ -3629,4 +3638,184 @@ export const getJobsByIds = async (ids) => {
     company: job.recruiterProfileId?.company || null,
     recruiterProfileId: undefined
   }));
+};
+
+/**
+ * Ứng tuyển lại vào một tin tuyển dụng
+ * @param {string} userId - ID của User (Candidate)
+ * @param {string} jobId - ID của Job
+ * @param {object} applicationData - Dữ liệu ứng tuyển (cvId hoặc cvTemplateId, coverLetter)
+ * @returns {Promise<Document>} Đơn ứng tuyển mới đã được tạo
+ */
+export const reapplyToJob = async (userId, jobId, applicationData) => {
+  const { cvId, cvTemplateId, coverLetter, candidateName, candidateEmail, candidatePhone } = applicationData;
+
+  // 1. Tìm hồ sơ ứng viên
+  const candidateProfile = await CandidateProfile.findOne({ userId });
+  if (!candidateProfile) {
+    throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
+  }
+
+  // 2. Tìm tin tuyển dụng và kiểm tra còn ACTIVE không
+  const job = await Job.findById(jobId).populate('recruiterProfileId', 'company userId');
+  if (!job) {
+    throw new NotFoundError('Tin tuyển dụng không tồn tại.');
+  }
+  if (job.status !== 'ACTIVE') {
+    throw new BadRequestError('Tin tuyển dụng đã hết hạn hoặc không còn hoạt động. Không thể ứng tuyển lại.');
+  }
+
+  // 3. Tìm đơn ứng tuyển cũ MỚI NHẤT (sort appliedAt DESC)
+  const previousApplication = await Application.findOne({
+    jobId,
+    candidateProfileId: candidateProfile._id,
+  }).sort({ appliedAt: -1 });
+
+  if (!previousApplication) {
+    throw new BadRequestError('Bạn chưa từng ứng tuyển vào vị trí này. Vui lòng sử dụng chức năng ứng tuyển thông thường.');
+  }
+
+  let sourceFileInfo;
+  let sourceType;
+
+  // 4. Lấy thông tin CV tùy theo loại được cung cấp
+  try {
+    if (cvId) {
+      // --- Trường hợp 1: Dùng CV đã tải lên ---
+      const selectedCV = candidateProfile.cvs?.find(cv => cv._id.toString() === cvId);
+      if (!selectedCV) {
+        throw new BadRequestError('CV tải lên không hợp lệ hoặc không tìm thấy.');
+      }
+      sourceFileInfo = {
+        name: selectedCV.name,
+        path: selectedCV.path,
+        cloudinaryId: selectedCV.cloudinaryId || null,
+      };
+      sourceType = 'UPLOADED';
+    } else if (cvTemplateId) {
+      // --- Trường hợp 2: Dùng CV tạo từ mẫu (Template) ---
+      const cvTemplate = await CV.findOne({ 
+        _id: cvTemplateId, 
+        userId: userId 
+      });
+      
+      if (!cvTemplate) {
+        throw new BadRequestError('CV mẫu không hợp lệ hoặc không tìm thấy.');
+      }
+
+      sourceFileInfo = {
+        name: cvTemplate.title || 'CV Template',
+        cvTemplateId: cvTemplate._id,
+        templateId: cvTemplate.templateId,
+        templateSnapshot: cvTemplate.cvData,
+      };
+      sourceType = 'TEMPLATE';
+    } else {
+      throw new BadRequestError('Phải cung cấp một CV để ứng tuyển lại.');
+    }
+
+    let submittedCVData;
+
+    if (sourceType === 'UPLOADED') {
+      // --- Xử lý CV đã tải lên: Tạo bản sao trên Cloudinary ---
+      let copiedFile;
+      if (process.env.NODE_ENV === 'test') {
+        copiedFile = {
+          secure_url: 'http://mocked.com/cv.pdf',
+          public_id: 'mocked_public_id',
+        };
+      } else {
+        logger.info(`Tạo bản sao CV cho đơn ứng tuyển lại: ${job.title}, ứng viên: ${userId}`);
+        const uniqueSuffix = `${jobId}-${Date.now()}`;
+        const publicId = `application-cv-${userId}-${uniqueSuffix}`;
+        copiedFile = await uploadService.copyFileFromUrlToCloudinary(
+          sourceFileInfo.path,
+          'application-cvs',
+          publicId
+        );
+      }
+
+      submittedCVData = {
+        name: sourceFileInfo.name,
+        path: copiedFile.secure_url,
+        cloudinaryId: copiedFile.public_id,
+        source: sourceType,
+      };
+    } else {
+      // --- Xử lý CV Template: Lưu snapshot data ---
+      submittedCVData = {
+        name: sourceFileInfo.name,
+        source: sourceType,
+        cvTemplateId: sourceFileInfo.cvTemplateId,
+        templateId: sourceFileInfo.templateId,
+        templateSnapshot: sourceFileInfo.templateSnapshot,
+      };
+    }
+
+    // 5. Tạo bản ghi ứng tuyển MỚI (re-apply)
+    // Đơn mới có isReapplied = true để:
+    // - Semantic đúng: đây là đơn ứng tuyển lại
+    // - Bypass unique index (index chỉ enforce khi isReapplied !== true)
+    const newApplication = await Application.create({
+      jobId,
+      candidateProfileId: candidateProfile._id,
+      coverLetter,
+      candidateName,
+      candidateEmail,
+      candidatePhone,
+      submittedCV: submittedCVData,
+      jobSnapshot: {
+        title: job.title,
+        company: job.recruiterProfileId.company.name,
+        logo: job.recruiterProfileId.company.logo,
+      },
+      // Đánh dấu đây là đơn ứng tuyển lại
+      isReapplied: true,
+      // Lưu reference đến đơn ứng tuyển trước đó
+      previousApplicationId: previousApplication._id,
+    });
+
+    logActivity(newApplication, 'APPLICATION_SUBMITTED', 'Ứng viên đã nộp đơn ứng tuyển lại');
+    await newApplication.save();
+
+    // --- GỬI SỰ KIỆN THÔNG BÁO ---
+    try {
+      const recruiterUserId = job.recruiterProfileId.userId;
+
+      // 1. Gửi sự kiện để thông báo cho ỨNG VIÊN
+      queueService.publishNotification(ROUTING_KEYS.STATUS_UPDATE, {
+        type: 'APPLICATION_RESUBMITTED',
+        recipientId: userId.toString(),
+        data: {
+          applicationId: newApplication._id.toString(),
+        }
+      });
+
+      // 2. Gửi sự kiện để thông báo cho NHÀ TUYỂN DỤNG (đây là đơn ứng tuyển lại)
+      queueService.publishNotification(ROUTING_KEYS.NEW_APPLICATION, {
+        recipientId: recruiterUserId.toString(),
+        data: {
+          applicationId: newApplication._id.toString(),
+          isReapply: true, // Đánh dấu để worker biết đây là re-apply
+          candidateName: candidateName,
+          jobTitle: job.title,
+        }
+      });
+
+    } catch (error) {
+      logger.error('Failed to queue notifications after re-application', { error, applicationId: newApplication._id });
+    }
+
+    return newApplication;
+
+  } catch (error) {
+    logger.error(`Lỗi khi nộp đơn ứng tuyển lại: ${error.message}`, {
+      userId, jobId, cvId, cvTemplateId, error
+    });
+
+    if (error instanceof BadRequestError || error instanceof NotFoundError) {
+      throw error;
+    }
+    throw new BadRequestError('Có lỗi xảy ra khi nộp đơn ứng tuyển lại.');
+  }
 };

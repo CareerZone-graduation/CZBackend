@@ -95,6 +95,19 @@ export const applyToJob = asyncHandler(async (req, res) => {
   });
 });
 
+export const reapplyToJob = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  const { id: jobId } = req.params;
+  const applicationData = req.body;
+
+  await jobService.reapplyToJob(userId, jobId, applicationData);
+
+  res.status(201).json({
+    success: true,
+    message: 'Nộp đơn ứng tuyển lại thành công.'
+  });
+});
+
 export const saveJob = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const { id: jobId } = req.params;
