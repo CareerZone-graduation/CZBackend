@@ -18,19 +18,5 @@ router.route('/:id')
     .put(validationMiddleware.validateParams(commonSchema.idParamSchema), validationMiddleware.validateBody(jobAlertSchema.updateJobAlertSchema), jobAlertController.updateJobAlert)
     .delete(validationMiddleware.validateParams(commonSchema.idParamSchema), jobAlertController.deleteJobAlert);
 
-// Notification history routes
-router.route('/history')
-    .get(
-        validationMiddleware.validateQuery(jobAlertSchema.getNotificationHistorySchema), 
-        jobAlertController.getAllNotificationHistory
-    );
-
-router.route('/:id/history')
-    .get(
-        validationMiddleware.validateParams(commonSchema.idParamSchema),
-        validationMiddleware.validateQuery(jobAlertSchema.getNotificationHistorySchema), 
-        jobAlertController.getNotificationHistory
-    );
-
 
 export default router;

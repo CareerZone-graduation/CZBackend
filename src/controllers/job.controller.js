@@ -95,6 +95,19 @@ export const applyToJob = asyncHandler(async (req, res) => {
   });
 });
 
+export const reapplyToJob = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  const { id: jobId } = req.params;
+  const applicationData = req.body;
+
+  await jobService.reapplyToJob(userId, jobId, applicationData);
+
+  res.status(201).json({
+    success: true,
+    message: 'Nộp đơn ứng tuyển lại thành công.'
+  });
+});
+
 export const saveJob = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const { id: jobId } = req.params;
@@ -186,5 +199,19 @@ export const getJobClusters = asyncHandler(async (req, res) => {
     success: true,
     message: 'Lấy cụm công việc trên bản đồ thành công.',
     data: clusters,
+  });
+});
+
+/**
+ * Get multiple jobs by their IDs
+ * Used for job alert notifications to display jobs from metadata.jobIds
+ */
+export const getJobsByIds = asyncHandler(async (req, res) => {
+  const { ids } = req.body;
+  const jobs = await jobService.getJobsByIds(ids);
+  res.status(200).json({
+    success: true,
+    message: 'Lấy danh sách công việc thành công.',
+    data: jobs,
   });
 });

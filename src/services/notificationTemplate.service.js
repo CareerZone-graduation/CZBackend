@@ -3,7 +3,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
-import NotificationHistory from '../models/NotificationHistory.js';
 import { BadRequestError } from '../utils/AppError.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

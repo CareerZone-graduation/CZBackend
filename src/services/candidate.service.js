@@ -300,8 +300,8 @@ export const getMyApplications = async (userId, options = {}) => {
         }
     }
 
-    // Thực hiện truy vấn với pagination
-    const [applications, totalCount] = await Promise.all([
+    // Thực hiện truy vấn với pagination và thống kê
+    const [applications, totalCount, statusCounts] = await Promise.all([
         Application.find(filter)
             .populate({
                 path: 'jobId',
@@ -315,8 +315,28 @@ export const getMyApplications = async (userId, options = {}) => {
             .skip(skip)
             .limit(limit)
             .lean(),
-        Application.countDocuments(filter)
+        Application.countDocuments(filter),
+        Application.aggregate([
+            { $match: { candidateProfileId: candidateProfile._id } },
+            { $group: { _id: '$status', count: { $sum: 1 } } }
+        ])
     ]);
+
+    const stats = {
+        PENDING: 0,
+        SUITABLE: 0,
+        SCHEDULED_INTERVIEW: 0,
+        OFFER_SENT: 0,
+        ACCEPTED: 0,
+        REJECTED: 0,
+        OFFER_DECLINED: 0
+    };
+
+    statusCounts.forEach(item => {
+        if (stats.hasOwnProperty(item._id)) {
+            stats[item._id] = item.count;
+        }
+    });
 
     const meta = {
         currentPage: page,
@@ -332,7 +352,7 @@ export const getMyApplications = async (userId, options = {}) => {
         currentPageCount: applications.length
     });
 
-    return { data: applications, meta };
+    return { data: applications, meta, stats };
 };
 
 /**
@@ -356,19 +376,84 @@ export const getApplicationById = async (userId, applicationId) => {
         candidateProfileId: candidateProfile._id
     })
         .select('jobId status appliedAt lastStatusUpdateAt coverLetter submittedCV jobSnapshot candidateName candidateEmail candidatePhone candidateRating notes activityHistory isReapplied previousApplicationId')
+        .populate({
+            path: 'jobId',
+            select: 'recruiterProfileId',
+            populate: {
+                path: 'recruiterProfileId',
+                select: 'userId'
+            }
+        })
         .lean();
 
     if (!application) {
         throw new NotFoundError('Không tìm thấy đơn ứng tuyển này.');
     }
 
+    // Thêm recruiterId vào response để frontend có thể sử dụng cho tính năng nhắn tin
+    const recruiterId = application.jobId?.recruiterProfileId?.userId;
+
     logger.info('Successfully retrieved application details for candidate', {
         userId,
         candidateProfileId: candidateProfile._id,
-        applicationId
+        applicationId,
+        recruiterId
     });
 
-    return application;
+    return {
+        ...application,
+        recruiterId,
+        jobId: application.jobId?._id || application.jobId // Giữ lại jobId là string/ObjectId thay vì object
+    };
+};
+
+/**
+ * Get CV data from an application (for rendering CV template in iframe)
+ * Only for CV template type, not uploaded CV
+ * @param {string} userId - ID của user (candidate)
+ * @param {string} applicationId - ID của application
+ * @returns {Object} CV data for rendering
+ */
+export const getApplicationCVData = async (userId, applicationId) => {
+    logger.info('Getting application CV data for candidate', { userId, applicationId });
+
+    // Lấy candidate profile để có candidateProfileId
+    const candidateProfile = await CandidateProfile.findOne({ userId }).lean();
+    if (!candidateProfile) {
+        throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
+    }
+
+    // Tìm application và kiểm tra quyền sở hữu
+    const application = await Application.findOne({
+        _id: applicationId,
+        candidateProfileId: candidateProfile._id
+    }).lean();
+
+    if (!application) {
+        throw new NotFoundError('Không tìm thấy đơn ứng tuyển này.');
+    }
+
+    // Kiểm tra xem CV có phải là template không
+    if (application.submittedCV?.source !== 'TEMPLATE') {
+        throw new BadRequestError('CV này không phải là CV template. Vui lòng tải xuống file CV.');
+    }
+
+    // Kiểm tra có templateSnapshot không
+    if (!application.submittedCV?.templateSnapshot) {
+        throw new NotFoundError('Không tìm thấy dữ liệu CV template.');
+    }
+
+    logger.info('Successfully retrieved CV data for candidate', {
+        userId,
+        applicationId,
+        templateId: application.submittedCV.templateId
+    });
+
+    return {
+        cvName: application.submittedCV.name,
+        templateId: application.submittedCV.templateId,
+        cvData: application.submittedCV.templateSnapshot
+    };
 };
 
 /**
