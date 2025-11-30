@@ -131,6 +131,15 @@ router.post(
 );
 
 router.post(
+  '/:id/reapply',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.candidateOnly,
+  validationMiddleware.validateParams(commonSchema.idParamSchema),
+  validationMiddleware.validateBody(jobSchema.applyToJobSchema),
+  jobController.reapplyToJob
+);
+
+router.post(
   '/:id/save',
   passport.authenticate('jwt', { session: false }),
   authMiddleware.candidateOnly,
@@ -153,6 +162,15 @@ router.get(
   authMiddleware.candidateOnly,
   validationMiddleware.validateQuery(jobSchema.getSavedJobsQuerySchema),
   jobController.getSavedJobs
+);
+
+// Get jobs by IDs (for job alert notifications)
+router.post(
+  '/by-ids',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.candidateOnly,
+  validationMiddleware.validateBody(jobSchema.getJobsByIdsSchema),
+  jobController.getJobsByIds
 );
 
 export default router;

@@ -3,7 +3,6 @@ import cron from 'node-cron';
 import logger from '../utils/logger.js';
 import PendingNotification from '../models/PendingNotification.js';
 import JobAlertSubscription from '../models/JobAlertSubscription.js';
-import NotificationHistory from '../models/NotificationHistory.js';
 import Job from '../models/Job.js';
 import User from '../models/User.js';
 import { publishNotification } from '../services/queue.service.js';
@@ -93,25 +92,19 @@ const processPeriodicNotifications = async (frequency, notificationType) => {
                     continue;
                 }
 
-                // Create notification history record
-                const notificationHistory = await NotificationHistory.create({
-                    userId: userId,
-                    subscriptionId: subscriptionId,
-                    notificationType: notificationType,
-                    jobIds: jobs.map(job => job._id),
-                    deliveryMethod: subscription.notificationMethod,
-                    status: 'SENT'
-                });
-
-
-                // Publish to notification queue
+                // Publish to notification queue with all necessary data
                 await publishNotification(
                     frequency === 'daily' ? ROUTING_KEYS.JOB_ALERT_DAILY : ROUTING_KEYS.JOB_ALERT_WEEKLY,
                     {
                         type: 'JOB_ALERT',
                         recipientId: userId.toString(),
                         data: {
-                            notificationHistoryId: notificationHistory._id.toString()
+                            userId: userId.toString(),
+                            subscriptionId: subscriptionId.toString(),
+                            jobIds: jobs.map(job => job._id.toString()),
+                            notificationType: notificationType,
+                            deliveryMethod: subscription.notificationMethod,
+                            keyword: subscription.keyword
                         }
                     }
                 );
@@ -160,8 +153,8 @@ const processPeriodicNotifications = async (frequency, notificationType) => {
 
 // Daily notification cron job - 8:00 AM
 // tạm thời chạy mỗi 10s để test
-// cron.schedule('*/10 * * * * *', async () => {
-cron.schedule('0 8 * * *', async () => {
+cron.schedule('*/10 * * * * *', async () => {
+// cron.schedule('0 8 * * *', async () => {
     try {
         await processPeriodicNotifications('daily', 'DAILY');
     } catch (error) {

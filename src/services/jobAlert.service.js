@@ -1,5 +1,4 @@
 import JobAlertSubscription from '../models/JobAlertSubscription.js';
-import NotificationHistory from '../models/NotificationHistory.js';
 import { BadRequestError, NotFoundError } from '../utils/AppError.js';
 import redisClient from '../config/redis.js';
 import logger from '../utils/logger.js';
@@ -164,66 +163,4 @@ export const deleteJobAlert = async (candidateId, subscriptionId) => {
 
 export const getMyJobAlerts = async (candidateId) => {
     return JobAlertSubscription.find({ candidateId }).lean();
-};
-
-
-export const getNotificationHistory = async (candidateId, options = {}) => {
-    const {
-        page = 1,
-        limit = 20,
-        subscriptionId,
-        notificationType,
-        status,
-        startDate,
-        endDate
-    } = options;
-
-    const skip = (page - 1) * limit;
-    
-    // Build query
-    const query = { userId: candidateId };
-    
-    if (subscriptionId) {
-        query.subscriptionId = subscriptionId;
-    }
-    
-    if (notificationType) {
-        query.notificationType = notificationType;
-    }
-    
-    if (status) {
-        query.status = status;
-    }
-    
-    if (startDate || endDate) {
-        query.sentAt = {};
-        if (startDate) query.sentAt.$gte = new Date(startDate);
-        if (endDate) query.sentAt.$lte = new Date(endDate);
-    }
-
-    // Execute queries
-    const [notifications, total] = await Promise.all([
-        NotificationHistory.find(query)
-            .populate('subscriptionId', 'keyword frequency')
-            .populate('jobIds', 'title company location')
-            .sort({ sentAt: -1 })
-            .skip(skip)
-            .limit(limit)
-            .lean(),
-        NotificationHistory.countDocuments(query)
-    ]);
-
-    const totalPages = Math.ceil(total / limit);
-
-    return {
-        meta: {
-            currentPage: page,
-            totalPages,
-            totalItems: total,
-            itemsPerPage: limit,
-            hasNextPage: page < totalPages,
-            hasPrevPage: page > 1
-        },
-        data: notifications
-    };
 };

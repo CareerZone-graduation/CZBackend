@@ -41,6 +41,7 @@ export const logActivity = (application, action, detail) => {
  * @returns {Object} Object chứa mảng data và object meta
  */
 export const getApplicationsByJob = async (jobId, recruiterId, options = {}) => {
+
   // Kiểm tra xem công việc có tồn tại không và nhà tuyển dụng có quyền không
   const job = await Job.findById(jobId);
   if (!job) {
@@ -65,16 +66,17 @@ export const getApplicationsByJob = async (jobId, recruiterId, options = {}) => 
 
   // Xây dựng query filter
   const filter = { jobId: new mongoose.Types.ObjectId(jobId) };
-  console.log(filter);
 
   if (options.status) {
     filter.status = options.status;
   }
 
-  if (options.isReapplied !== undefined) {
-    filter.isReapplied = options.isReapplied;
+  // Xử lý filter isReapplied - convert string to boolean
+  if (options.isReapplied !== undefined && options.isReapplied !== 'all') {
+    // Convert string "true"/"false" to boolean
+    filter.isReapplied = options.isReapplied === true || options.isReapplied === 'true';
   }
-
+  
   //   Xây dựng sort options
   let sortOptions = {};
   if (options.sort) {
@@ -109,6 +111,7 @@ export const getApplicationsByJob = async (jobId, recruiterId, options = {}) => 
         lastStatusUpdateAt: 1,
         candidateRating: 1,
         isReapplied: 1,
+        previousApplicationId: 1,
         notes: 1,
         coverLetter: 1,
         submittedCV: 1,

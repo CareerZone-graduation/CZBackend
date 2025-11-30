@@ -1,5 +1,5 @@
 import admin from '../config/firebase.js';
-import { Notification, Application, User, Job, InterviewRoom, CandidateProfile, NotificationHistory, JobAlertSubscription, RecruiterProfile } from '../models/index.js';
+import { Notification, Application, User, Job, InterviewRoom, CandidateProfile, JobAlertSubscription, RecruiterProfile } from '../models/index.js';
 import { NotFoundError, BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
@@ -644,6 +644,8 @@ export const handleNewApplication = async (payload) => {
             title: `Có ứng viên mới cho vị trí "${jobTitle}"`,
             isRead: false,
             readAt: null, // Reset thời gian đọc
+            // gán lại createdAt
+            createdAt: now,
             'metadata.jobId': new mongoose.Types.ObjectId(jobId),
             'metadata.jobTitle': jobTitle,
             // Dùng $setUnion để thêm ID mới và đảm bảo không trùng lặp
@@ -1009,22 +1011,15 @@ export const handleInterviewCancel = async (payload) => {
  * @param {object} payload - Toàn bộ payload từ RabbitMQ
  */
 export const processJobAlertNotification = async (payload) => {
-  const { notificationHistoryId } = payload.data;
+  logger.info('Processing job alert notification', { payload });
+  const { userId, subscriptionId, jobIds, notificationType, deliveryMethod, keyword } = payload.data;
 
-  if (!notificationHistoryId) {
-    logger.error('Job alert task is missing notificationHistoryId', { payload });
+  if (!userId || !subscriptionId || !jobIds || jobIds.length === 0) {
+    logger.error('Job alert task is missing required data', { payload });
     return;
   }
 
   try {
-    const history = await NotificationHistory.findById(notificationHistoryId).lean();
-    if (!history) {
-      logger.error(`NotificationHistory with ID ${notificationHistoryId} not found.`);
-      return;
-    }
-
-    const { userId, subscriptionId, jobIds, notificationType, deliveryMethod } = history;
-
     // Fetch all data in parallel
     const [user, subscription, jobs] = await Promise.all([
       User.findById(userId).select('fullName email').lean(),
@@ -1037,7 +1032,6 @@ export const processJobAlertNotification = async (payload) => {
 
     if (!user || !subscription || jobs.length === 0) {
       logger.warn('Missing data for processing job alert notification.', {
-        notificationHistoryId,
         userId,
         subscriptionId,
         hasJobs: jobs.length > 0
@@ -1054,13 +1048,13 @@ export const processJobAlertNotification = async (payload) => {
 
     // 1. Handle EMAIL notifications
     if (deliveryMethod === 'EMAIL' || deliveryMethod === 'BOTH') {
-      const subject = NotificationTemplateService.generateSubject(jobs, subscription.keyword, frequency);
+      const subject = NotificationTemplateService.generateSubject(jobs, keyword, frequency);
 
       const templateData = {
         user,
         jobs,
         subscription,
-        notificationId: notificationHistoryId
+        notificationId: subscriptionId // Use subscriptionId for tracking
       };
 
       const html = await NotificationTemplateService.generateEmailTemplate(templateType, templateData);
@@ -1076,8 +1070,8 @@ export const processJobAlertNotification = async (payload) => {
 
     // 2. Handle IN-APP notifications
     if (deliveryMethod === 'APPLICATION' || deliveryMethod === 'BOTH') {
-      const title = NotificationTemplateService.generateSubject(jobs, subscription.keyword, frequency);
-      const message = `Có ${jobs.length} việc làm mới phù hợp với tìm kiếm của bạn cho từ khóa "${subscription.keyword}".`;
+      const title = NotificationTemplateService.generateSubject(jobs, keyword, frequency);
+      const message = `Có ${jobs.length} việc làm mới phù hợp với tìm kiếm của bạn cho từ khóa "${keyword}".`;
 
       await Notification.create({
         userId,
@@ -1091,7 +1085,7 @@ export const processJobAlertNotification = async (payload) => {
         metadata: {
           subscriptionId: subscriptionId.toString(),
           jobIds: jobIds.map(j => j.toString()),
-          notificationHistoryId: notificationHistoryId.toString(),
+          keyword: keyword,
         },
       });
 
@@ -1107,9 +1101,9 @@ export const processJobAlertNotification = async (payload) => {
       logger.info(`In-app job alert and push notification created for user ${userId} for subscription ${subscriptionId}`);
     }
 
-    logger.info(`Job alert notification processed successfully for history ID ${notificationHistoryId}`);
+    logger.info(`Job alert notification processed successfully for user ${userId}, subscription ${subscriptionId}`);
   } catch (error) {
-    logger.error(`Error processing job alert notification for history ID ${notificationHistoryId}:`, error);
+    logger.error(`Error processing job alert notification for user ${userId}, subscription ${subscriptionId}:`, error);
     throw error;
   }
 };

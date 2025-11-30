@@ -126,7 +126,8 @@ export const getMyApplications = asyncHandler(async (req, res) => {
         success: true,
         message: 'Lấy danh sách đơn ứng tuyển thành công.',
         meta: result.meta,
-        data: result.data
+        data: result.data,
+        stats: result.stats
     });
 });
 
@@ -140,6 +141,23 @@ export const getApplicationById = asyncHandler(async (req, res) => {
         success: true,
         message: 'Lấy chi tiết đơn ứng tuyển thành công.',
         data: application
+    });
+});
+
+/**
+ * Get CV data for rendering in iframe (for CV template type)
+ * GET /api/candidate/my-applications/:applicationId/render-cv
+ */
+export const getApplicationCVData = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    const { applicationId } = req.params;
+
+    const cvData = await candidateService.getApplicationCVData(userId, applicationId);
+
+    res.status(200).json({
+        success: true,
+        message: 'Lấy dữ liệu CV thành công.',
+        data: cvData
     });
 });
 

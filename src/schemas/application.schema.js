@@ -17,7 +17,7 @@ export const getApplicationsQuery = z.object({
   status: z.string().optional(),
   sort: z.enum(['appliedAt', '-appliedAt', 'lastStatusUpdateAt', '-lastStatusUpdateAt']).optional(),
   search: z.string().optional(),
-  isReapplied: z.enum(['true', 'false']).optional().transform(val => val === 'true'),
+  isReapplied: z.enum(['true', 'false']).optional(),
 }).optional();
 
 // Validation schema cho cập nhật trạng thái đơn ứng tuyển
