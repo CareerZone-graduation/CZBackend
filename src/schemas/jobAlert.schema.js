@@ -68,55 +68,7 @@ const updateJobAlertSchema = createJobAlertSchema.partial().extend({
 });
 
 
-// Schema for notification history creation
-const createNotificationHistorySchema = z.object({
-  userId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid user ID format'),
-  subscriptionId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid subscription ID format'),
-  notificationType: z.enum(['DAILY', 'WEEKLY'], {
-    errorMap: () => ({ message: 'Notification type must be  DAILY, or WEEKLY' })
-  }),
-  jobIds: z.array(
-    z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid job ID format')
-  ).min(1, 'At least one job ID is required'),
-  deliveryMethod: z.enum(['EMAIL', 'APPLICATION', 'BOTH'], {
-    errorMap: () => ({ message: 'Delivery method must be EMAIL, APPLICATION, or BOTH' })
-  }),
-  status: z.enum(['SENT', 'DELIVERED', 'FAILED', 'BOUNCED'], {
-    errorMap: () => ({ message: 'Status must be SENT, DELIVERED, FAILED, or BOUNCED' })
-  }).default('SENT')
-});
-
-// Schema for updating notification history
-const updateNotificationHistorySchema = z.object({
-  status: z.enum(['SENT', 'DELIVERED', 'FAILED', 'BOUNCED'], {
-    errorMap: () => ({ message: 'Status must be SENT, DELIVERED, FAILED, or BOUNCED' })
-  }).optional(),
-  deliveredAt: z.date().optional(),
-});
-
-
-// Schema for querying notification history
-const getNotificationHistorySchema = z.object({
-  page: z.string()
-    .transform((val) => parseInt(val, 10))
-    .refine((val) => val > 0, 'Page must be greater than 0')
-    .default('1'),
-  limit: z.string()
-    .transform((val) => parseInt(val, 10))
-    .refine((val) => val > 0 && val <= 50, 'Limit must be between 1 and 50')
-    .default('10'),
-  notificationType: z.enum(['DAILY', 'WEEKLY']).optional(),
-  status: z.enum(['SENT', 'DELIVERED', 'FAILED', 'BOUNCED']).optional(),
-  startDate: z.string().datetime().optional(),
-  endDate: z.string().datetime().optional(),
-});
-
-
-
 export { 
   createJobAlertSchema, 
   updateJobAlertSchema,
-  createNotificationHistorySchema,
-  updateNotificationHistorySchema,
-  getNotificationHistorySchema,
 };

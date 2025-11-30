@@ -41,30 +41,3 @@ export const deleteJobAlert = asyncHandler(async (req, res) => {
         message: 'Xóa đăng ký thành công.',
     });
 });
-
-
-export const getNotificationHistory = asyncHandler(async (req, res) => {
-    const userId = req.user._id;
-    const { id } = req.params;
-    const result = await jobAlertService.getNotificationHistory(userId, {
-        subscriptionId: id,
-        ...req.validatedQuery || req.query
-    });
-    res.status(200).json({
-        success: true,
-        message: 'Lấy lịch sử thông báo thành công.',
-        meta: result.meta,
-        data: result.data,
-    });
-});
-
-export const getAllNotificationHistory = asyncHandler(async (req, res) => {
-    const userId = req.user._id;
-    const result = await jobAlertService.getNotificationHistory(userId, req.validatedQuery || req.query);
-    res.status(200).json({
-        success: true,
-        message: 'Lấy lịch sử thông báo thành công.',
-        meta: result.meta,
-        data: result.data,
-    });
-});

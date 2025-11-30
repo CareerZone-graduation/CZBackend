@@ -188,3 +188,17 @@ export const getJobClusters = asyncHandler(async (req, res) => {
     data: clusters,
   });
 });
+
+/**
+ * Get multiple jobs by their IDs
+ * Used for job alert notifications to display jobs from metadata.jobIds
+ */
+export const getJobsByIds = asyncHandler(async (req, res) => {
+  const { ids } = req.body;
+  const jobs = await jobService.getJobsByIds(ids);
+  res.status(200).json({
+    success: true,
+    message: 'Lấy danh sách công việc thành công.',
+    data: jobs,
+  });
+});

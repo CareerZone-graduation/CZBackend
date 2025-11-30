@@ -3609,3 +3609,24 @@ export const getMapClusters = async (bounds, zoom, filters = {}) => {
     throw error;
   }
 };
+
+
+/**
+ * Get multiple jobs by their IDs
+ * Used for job alert notifications to display jobs from metadata.jobIds
+ * @param {string[]} ids - Array of job IDs
+ * @returns {Promise<object[]>} Array of jobs with company info
+ */
+export const getJobsByIds = async (ids) => {
+  const jobs = await Job.find({ _id: { $in: ids } })
+    .populate('recruiterProfileId', 'company')
+    .select('title description location minSalary maxSalary type workType experience skills createdAt deadline recruiterProfileId status')
+    .lean();
+
+  // Map recruiterProfile company to job for cleaner response
+  return jobs.map(job => ({
+    ...job,
+    company: job.recruiterProfileId?.company || null,
+    recruiterProfileId: undefined
+  }));
+};

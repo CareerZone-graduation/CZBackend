@@ -337,3 +337,10 @@ export const candidateSuggestionsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1, 'Limit phải lớn hơn 0').max(50, 'Limit không được vượt quá 50').default(10),
   minScore: z.coerce.number().min(0, 'minScore phải từ 0 đến 1').max(1, 'minScore phải từ 0 đến 1').default(0.5),
 });
+
+// Schema for getting jobs by IDs (for job alert notifications)
+export const getJobsByIdsSchema = z.object({
+  ids: z.array(
+    z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID không hợp lệ')
+  ).min(1, 'Cần ít nhất 1 ID').max(50, 'Tối đa 50 IDs'),
+});

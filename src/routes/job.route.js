@@ -155,4 +155,13 @@ router.get(
   jobController.getSavedJobs
 );
 
+// Get jobs by IDs (for job alert notifications)
+router.post(
+  '/by-ids',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.candidateOnly,
+  validationMiddleware.validateBody(jobSchema.getJobsByIdsSchema),
+  jobController.getJobsByIds
+);
+
 export default router;
