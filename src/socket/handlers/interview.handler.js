@@ -337,6 +337,31 @@ export const registerInterviewHandlers = (io, socket, interviewRoomParticipants)
         }
     });
 
+    // Handle media state changes (audio/video toggle)
+    socket.on('interview:media-state', (data) => {
+        try {
+            const { roomId, isAudioEnabled, isVideoEnabled } = data;
+
+            if (!roomId) {
+                logger.warn(`Interview media state failed: Room ID is required`);
+                return;
+            }
+
+            logger.info(`Media state from user ${socket.userId} in room ${roomId}: Audio=${isAudioEnabled}, Video=${isVideoEnabled}`);
+
+            // Broadcast media state to other participants
+            socket.to(`interview:${roomId}`).emit('interview:media-state', {
+                userId: socket.userId,
+                isAudioEnabled,
+                isVideoEnabled,
+                timestamp: new Date()
+            });
+
+        } catch (error) {
+            logger.error(`Error handling media state from ${socket.userId}:`, error);
+        }
+    });
+
     // ============================================================
     // Interview Control Events
     // ============================================================
@@ -441,6 +466,7 @@ export const registerInterviewHandlers = (io, socket, interviewRoomParticipants)
             socket.to(`interview:${roomId}`).emit('interview:chat-message', {
                 _id: result.message._id,
                 senderId: socket.userId,
+                senderName: socket.user?.fullName || socket.user?.name || 'User',
                 message: result.message.message,
                 timestamp: result.message.timestamp
             });
@@ -450,6 +476,23 @@ export const registerInterviewHandlers = (io, socket, interviewRoomParticipants)
         } catch (error) {
             logger.error(`Error sending chat message from ${socket.userId}:`, error);
             if (callback) callback({ success: false, error: error.message });
+        }
+    });
+
+    // Handle emoji reactions
+    socket.on('interview:emoji', (data) => {
+        try {
+            const { roomId, emoji } = data;
+            if (!roomId || !emoji) return;
+
+            // Broadcast emoji to other participants
+            socket.to(`interview:${roomId}`).emit('interview:emoji', {
+                userId: socket.userId,
+                emoji,
+                timestamp: new Date()
+            });
+        } catch (error) {
+            logger.error(`Error sending emoji from ${socket.userId}:`, error);
         }
     });
 
