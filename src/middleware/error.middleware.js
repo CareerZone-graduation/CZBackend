@@ -65,6 +65,7 @@ const sendErrorProd = (err, res) => {
     err.errors.length > 0
   ) {
     return res.status(err.statusCode).json({
+      success: false,
       status: err.status,
       message: err.errors[0].message, // Lấy thông điệp của lỗi đầu tiên
       errors: err.errors, // Vẫn gửi đầy đủ mảng lỗi cho client xử lý form
