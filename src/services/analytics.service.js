@@ -7,42 +7,91 @@ import {
   InterviewRoom,
   CoinRecharge,
 } from "../models/index.js";
-import { NotFoundError } from "../utils/AppError.js";
 import { ALL_PAYMENT_METHODS, TRANSACTION_STATUS_LABELS } from "../constants/index.js";
-import mongoose from "mongoose";
+
+// ============================================================================
+// VIETNAM TIMEZONE UTILITIES - Sử dụng nhất quán trong toàn bộ file
+// ============================================================================
+const VN_TIMEZONE = 'Asia/Ho_Chi_Minh';
+const VN_OFFSET_MS = 7 * 60 * 60 * 1000; // UTC+7 in milliseconds
+
+/**
+ * Lấy ngày/tháng/năm hiện tại theo múi giờ Việt Nam
+ * @returns {{ year: number, month: number, day: number, hour: number, minute: number }}
+ */
+const getVNDateParts = (date = new Date()) => {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: VN_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+  const parts = formatter.formatToParts(date);
+  return {
+    year: parseInt(parts.find(p => p.type === 'year').value),
+    month: parseInt(parts.find(p => p.type === 'month').value), // 1-12
+    day: parseInt(parts.find(p => p.type === 'day').value),
+    hour: parseInt(parts.find(p => p.type === 'hour').value),
+    minute: parseInt(parts.find(p => p.type === 'minute').value)
+  };
+};
+
+/**
+ * Chuyển đổi ngày VN (YYYY-MM-DD) sang UTC Date để query MongoDB
+ * @param {number} year 
+ * @param {number} month - 1-12
+ * @param {number} day 
+ * @param {boolean} isEndOfDay - true = 23:59:59, false = 00:00:00
+ * @returns {Date} UTC Date object
+ */
+const vnDateToUTC = (year, month, day, isEndOfDay = false) => {
+  if (isEndOfDay) {
+    return new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999) - VN_OFFSET_MS);
+  }
+  return new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0) - VN_OFFSET_MS);
+};
+
+/**
+ * Format UTC Date sang chuỗi YYYY-MM-DD theo múi giờ VN
+ * @param {Date} utcDate 
+ * @returns {string} YYYY-MM-DD
+ */
+const formatDateVN = (utcDate) => {
+  const vnDate = new Date(utcDate.getTime() + VN_OFFSET_MS);
+  const year = vnDate.getUTCFullYear();
+  const month = String(vnDate.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(vnDate.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 // Helper function to calculate date ranges - sử dụng múi giờ Việt Nam (UTC+7)
 const getDateRange = (period) => {
-  const vnOffset = 7 * 60 * 60 * 1000; // UTC+7
-  const now = new Date();
+  const vn = getVNDateParts();
   
-  // Lấy thời gian hiện tại theo UTC+7
-  const vnNow = new Date(now.getTime() + vnOffset);
+  // endDate = cuối ngày hôm nay theo VN
+  const endDate = vnDateToUTC(vn.year, vn.month, vn.day, true);
   
-  // Tạo endDate là cuối ngày hôm nay theo UTC+7, chuyển về UTC
-  const endDate = new Date(Date.UTC(
-    vnNow.getUTCFullYear(),
-    vnNow.getUTCMonth(),
-    vnNow.getUTCDate(),
-    23, 59, 59, 999
-  ) - vnOffset);
-  
-  // Tạo startDate theo period
-  let startDate;
+  // Tính số ngày lùi lại
   const daysBack = period === "7d" ? 7 : period === "90d" ? 90 : period === "1y" ? 365 : 30;
   
-  // Tính ngày bắt đầu (đầu ngày theo UTC+7)
-  const startVnDate = new Date(vnNow);
-  startVnDate.setUTCDate(startVnDate.getUTCDate() - daysBack);
+  // Tính ngày bắt đầu
+  const startDateObj = new Date(vn.year, vn.month - 1, vn.day - daysBack);
+  const startDate = vnDateToUTC(
+    startDateObj.getFullYear(),
+    startDateObj.getMonth() + 1,
+    startDateObj.getDate(),
+    false
+  );
   
-  startDate = new Date(Date.UTC(
-    startVnDate.getUTCFullYear(),
-    startVnDate.getUTCMonth(),
-    startVnDate.getUTCDate(),
-    0, 0, 0, 0
-  ) - vnOffset);
-  
-  console.log('📅 getDateRange:', { period, startDate: startDate.toISOString(), endDate: endDate.toISOString() });
+  console.log('📅 getDateRange:', { 
+    period, 
+    vnToday: `${vn.year}-${vn.month}-${vn.day}`,
+    startDate: startDate.toISOString(), 
+    endDate: endDate.toISOString() 
+  });
   
   return { startDate, endDate };
 };
@@ -52,13 +101,18 @@ const getDateRange = (period) => {
  * Lấy các chỉ số KPI chính cho dashboard
  */
 export const getDashboardStats = async () => {
-  // --- Định nghĩa khoảng thời gian ---
-  // Lấy ngày hiện tại
-  const now = new Date();
-  // `currentPeriodStart`: Ngày bắt đầu của tháng hiện tại (ví dụ: 01/09/2025)
-  const currentPeriodStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  // `previousPeriodStart`: Ngày bắt đầu của tháng trước (ví dụ: 01/08/2025)
-  const previousPeriodStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  // --- Sử dụng VN timezone utilities ---
+  const vn = getVNDateParts();
+  
+  // Tính ngày đầu tháng hiện tại theo VN
+  const currentPeriodStart = vnDateToUTC(vn.year, vn.month, 1, false);
+  
+  // Tính ngày đầu tháng trước theo VN
+  const prevMonth = vn.month === 1 ? 12 : vn.month - 1;
+  const prevYear = vn.month === 1 ? vn.year - 1 : vn.year;
+  const previousPeriodStart = vnDateToUTC(prevYear, prevMonth, 1, false);
+  
+
 
   // --- Hàm hỗ trợ tính toán tăng trưởng ---
   // Công thức: ((Số liệu hiện tại - Số liệu quá khứ) / Số liệu quá khứ) * 100
@@ -133,22 +187,24 @@ export const getDashboardStats = async () => {
   ]);
 
   // --- Xử lý kết quả và tính toán ---
-  const monthlyRevenue = monthlyRevenueResult[0]?.total || 0;
-  const previousMonthlyRevenue = previousMonthlyRevenueResult[0]?.total || 0;
+  const currentMonthRevenue = monthlyRevenueResult[0]?.total || 0;
+  const previousMonthRevenue = previousMonthlyRevenueResult[0]?.total || 0;
 
   // --- Trả về cấu trúc dữ liệu hoàn chỉnh ---
   return {
     totalUsers,
     activeCompanies,
     jobListings: totalJobs,
-    monthlyRevenue,
+    currentMonth: vn.month, // Tháng hiện tại theo VN timezone (1-12)
+    currentMonthRevenue, // Doanh thu tháng hiện tại
+    previousMonthRevenue, // Doanh thu tháng trước (để tính growth)
     totalApplications,
     totalInterviews,
     growth: {
       users: calculateGrowth(currentMonthUsers, previousMonthUsers),
       companies: calculateGrowth(currentMonthCompanies, previousMonthCompanies),
       jobs: calculateGrowth(currentMonthJobs, previousMonthJobs),
-      revenue: calculateGrowth(monthlyRevenue, previousMonthlyRevenue),
+      revenue: calculateGrowth(currentMonthRevenue, previousMonthRevenue),
       applications: calculateGrowth(currentMonthApplications, previousMonthApplications),
       interviews: calculateGrowth(currentMonthInterviews, previousMonthInterviews),
     },
@@ -178,21 +234,15 @@ export const getUserGrowth = async (queryParams) => {
   let startDate, endDate;
   
   if (customStartDate && customEndDate) {
-    // Chuyển đổi string thành Date object
-    startDate = new Date(customStartDate);
-    endDate = new Date(customEndDate);
+    // Frontend gửi ngày dạng YYYY-MM-DD, parse và chuyển sang UTC
+    const [startYear, startMonth, startDay] = customStartDate.split('-').map(Number);
+    const [endYear, endMonth, endDay] = customEndDate.split('-').map(Number);
     
-    // Kiểm tra Date có hợp lệ không
-    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-      console.error('❌ Invalid date format:', { customStartDate, customEndDate });
-      throw new Error('Invalid date format');
-    }
+    startDate = vnDateToUTC(startYear, startMonth, startDay, false);
+    endDate = vnDateToUTC(endYear, endMonth, endDay, true);
     
-    // Set time để đảm bảo lấy đủ dữ liệu
-    startDate.setHours(0, 0, 0, 0);
-    endDate.setHours(23, 59, 59, 999);
-    
-    console.log('✅ Using custom dates:', { 
+    console.log('✅ Using custom dates (VN timezone):', { 
+      input: { customStartDate, customEndDate },
       startDate: startDate.toISOString(), 
       endDate: endDate.toISOString() 
     });
@@ -303,22 +353,21 @@ export const getUserGrowth = async (queryParams) => {
   // --- Logic hợp nhất dữ liệu để lấp đầy các ngày/tuần/tháng còn thiếu ---
   let completeData = [];
   let allDates = [];
-  const formatDateString = (date) => date.toISOString().split('T')[0];
 
   let currentDate = new Date(startDate);
   while (currentDate <= endDate) {
     let key;
     if (granularity === 'daily') {
-        key = formatDateString(currentDate);
+        key = formatDateVN(currentDate);
     } else if (granularity === 'weekly') {
         // Lấy ngày đầu tuần (Chủ Nhật)
-        const dayOfWeek = currentDate.getDay();
-        const firstDayOfWeek = new Date(currentDate);
-        firstDayOfWeek.setDate(currentDate.getDate() - dayOfWeek); // Tuần bắt đầu từ Chủ Nhật
-        key = formatDateString(firstDayOfWeek);
+        const vnCurrent = new Date(currentDate.getTime() + VN_OFFSET_MS);
+        const dayOfWeek = vnCurrent.getUTCDay();
+        const firstDayOfWeek = new Date(currentDate.getTime() - dayOfWeek * 24 * 60 * 60 * 1000);
+        key = formatDateVN(firstDayOfWeek);
     } else { // monthly
-        // QUAN TRỌNG: Lấy ngày 01 của tháng (giống như $dateTrunc)
-        key = formatDateString(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1));
+        const vnCurrent = new Date(currentDate.getTime() + VN_OFFSET_MS);
+        key = `${vnCurrent.getUTCFullYear()}-${String(vnCurrent.getUTCMonth() + 1).padStart(2, '0')}-01`;
     }
     
     if (!allDates.includes(key)) {
@@ -362,21 +411,15 @@ export const getRevenueTrends = async (queryParams) => {
   let startDate, endDate;
   
   if (customStartDate && customEndDate) {
-    // Chuyển đổi string thành Date object
-    startDate = new Date(customStartDate);
-    endDate = new Date(customEndDate);
+    // Frontend gửi ngày dạng YYYY-MM-DD, parse và chuyển sang UTC
+    const [startYear, startMonth, startDay] = customStartDate.split('-').map(Number);
+    const [endYear, endMonth, endDay] = customEndDate.split('-').map(Number);
     
-    // Kiểm tra Date có hợp lệ không
-    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-      console.error('❌ Invalid date format:', { customStartDate, customEndDate });
-      throw new Error('Invalid date format');
-    }
+    startDate = vnDateToUTC(startYear, startMonth, startDay, false);
+    endDate = vnDateToUTC(endYear, endMonth, endDay, true);
     
-    // Set time để đảm bảo lấy đủ dữ liệu
-    startDate.setHours(0, 0, 0, 0);
-    endDate.setHours(23, 59, 59, 999);
-    
-    console.log('✅ getRevenueTrends using custom dates:', { 
+    console.log('✅ getRevenueTrends using custom dates (VN timezone):', { 
+      input: { customStartDate, customEndDate },
       startDate: startDate.toISOString(), 
       endDate: endDate.toISOString() 
     });
@@ -454,25 +497,23 @@ export const getRevenueTrends = async (queryParams) => {
   ]);
 
   // --- Logic hợp nhất dữ liệu để lấp đầy các ngày/tuần/tháng còn thiếu ---
-  // Logic này vẫn cần thiết để đảm bảo biểu đồ không bị "đứt gãy"
   let mergedData = [];
   let allDates = [];
-  const formatDateString = (date) => date.toISOString().split('T')[0];
 
   let currentDate = new Date(startDate);
   while (currentDate <= endDate) {
     let key;
     if (granularity === 'daily') {
-        key = formatDateString(currentDate);
+        key = formatDateVN(currentDate);
     } else if (granularity === 'weekly') {
-        // Lấy ngày đầu tuần (Chủ Nhật)
-        const dayOfWeek = currentDate.getDay();
-        const firstDayOfWeek = new Date(currentDate);
-        firstDayOfWeek.setDate(currentDate.getDate() - dayOfWeek); // Tuần bắt đầu từ Chủ Nhật
-        key = formatDateString(firstDayOfWeek);
+        // Lấy ngày đầu tuần (Chủ Nhật) theo VN timezone
+        const vnCurrent = new Date(currentDate.getTime() + VN_OFFSET_MS);
+        const dayOfWeek = vnCurrent.getUTCDay();
+        const firstDayOfWeek = new Date(currentDate.getTime() - dayOfWeek * 24 * 60 * 60 * 1000);
+        key = formatDateVN(firstDayOfWeek);
     } else { // monthly
-        // QUAN TRỌNG: Lấy ngày 01 của tháng (giống như $dateTrunc)
-        key = formatDateString(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1));
+        const vnCurrent = new Date(currentDate.getTime() + VN_OFFSET_MS);
+        key = `${vnCurrent.getUTCFullYear()}-${String(vnCurrent.getUTCMonth() + 1).padStart(2, '0')}-01`;
     }
     
     if (!allDates.includes(key)) {
@@ -798,9 +839,46 @@ export const getCompanyStats = async () => {
  * Phân tích chi tiết về giao dịch - dành riêng cho trang quản lý giao dịch
  */
 export const getTransactionAnalytics = async (queryParams) => {
-  const { period, granularity } = queryParams;
-  const { startDate, endDate } = getDateRange(period);
-  console.log("Calculating transaction analytics from", startDate, "to", endDate, "with granularity", granularity);
+  const { period, granularity, customStartDate, customEndDate } = queryParams;
+  
+  // Sử dụng custom dates từ frontend nếu có, nếu không thì dùng period
+  let startDate, endDate;
+  
+  if (customStartDate && customEndDate) {
+    // Frontend gửi ngày dạng ISO string hoặc YYYY-MM-DD, parse và chuyển sang UTC
+    const startParsed = new Date(customStartDate);
+    const endParsed = new Date(customEndDate);
+    
+    // Nếu là ISO string đầy đủ, dùng trực tiếp
+    if (customStartDate.includes('T')) {
+      startDate = startParsed;
+      endDate = endParsed;
+    } else {
+      // Nếu là YYYY-MM-DD, chuyển sang UTC theo VN timezone
+      const [startYear, startMonth, startDay] = customStartDate.split('-').map(Number);
+      const [endYear, endMonth, endDay] = customEndDate.split('-').map(Number);
+      
+      startDate = vnDateToUTC(startYear, startMonth, startDay, false);
+      endDate = vnDateToUTC(endYear, endMonth, endDay, true);
+    }
+    
+    console.log('✅ getTransactionAnalytics using custom dates:', { 
+      input: { customStartDate, customEndDate },
+      startDate: startDate.toISOString(), 
+      endDate: endDate.toISOString() 
+    });
+  } else {
+    // Sử dụng period mặc định
+    const dateRange = getDateRange(period || '30d');
+    startDate = dateRange.startDate;
+    endDate = dateRange.endDate;
+    
+    console.log('✅ getTransactionAnalytics using period dates:', { 
+      period: period || '30d',
+      startDate: startDate.toISOString(), 
+      endDate: endDate.toISOString() 
+    });
+  }
   // Xác định định dạng ngày tháng cho việc nhóm dữ liệu - sử dụng múi giờ Việt Nam (UTC+7)
   const dateGroupingExpression = {
     $dateToString: {
@@ -1047,28 +1125,24 @@ export const getTransactionAnalytics = async (queryParams) => {
 
 let revenueOverTime = [];
 let allDates = [];
-const formatDateString = (date) => {
-  const year = date.getFullYear();
-  const month = (date.getMonth() + 1).toString().padStart(2, '0'); // getMonth() là 0-indexed, nên cần +1
-  const day = date.getDate().toString().padStart(2, '0');
 
-  return `${year}-${month}-${day}`;
-};
+// Sử dụng formatDateVN đã định nghĩa ở đầu file để đồng bộ với MongoDB timezone
 let currentDate = new Date(startDate);
 
 while (currentDate <= endDate) {
   let key;
   if (granularity === 'daily') {
-      key = formatDateString(currentDate);
+      key = formatDateVN(currentDate);
   } else if (granularity === 'weekly') {
-      const dayOfWeek = currentDate.getDay();
-      const firstDayOfWeek = new Date(currentDate);
-      firstDayOfWeek.setDate(currentDate.getDate() - dayOfWeek);
-      key = formatDateString(firstDayOfWeek);
+      // Lấy ngày đầu tuần (Chủ Nhật) theo VN timezone
+      const vnCurrent = new Date(currentDate.getTime() + VN_OFFSET_MS);
+      const dayOfWeek = vnCurrent.getUTCDay();
+      const firstDayOfWeek = new Date(currentDate.getTime() - dayOfWeek * 24 * 60 * 60 * 1000);
+      key = formatDateVN(firstDayOfWeek);
   } else { // monthly
-      // ĐẢM BẢO DÙNG DÒNG NÀY ĐỂ TẠO NGÀY ĐẦU THÁNG
-      key = formatDateString(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1));
-      console.log("Monthly key generated:", key); // Debug log
+      // Lấy ngày đầu tháng theo VN timezone
+      const vnCurrent = new Date(currentDate.getTime() + VN_OFFSET_MS);
+      key = `${vnCurrent.getUTCFullYear()}-${String(vnCurrent.getUTCMonth() + 1).padStart(2, '0')}-01`;
   }
 
   if (!allDates.includes(key)) {
@@ -1084,6 +1158,8 @@ while (currentDate <= endDate) {
       currentDate.setMonth(currentDate.getMonth() + 1);
   }
 }
+
+console.log('📅 Generated allDates for revenueOverTime:', allDates);
   // Hợp nhất dữ liệu để lấp đầy các ngày còn thiếu
   revenueOverTime = allDates.map(dateStr => {
     const foundData = transactionData.find(t => t.date === dateStr);
