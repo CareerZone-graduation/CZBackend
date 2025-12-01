@@ -27,10 +27,10 @@ const getRecruiterProfile = async (recruiterUserId) => {
 export const createCompany = async (companyData, recruiterUserId, file) => {
   const recruiterProfile = await RecruiterProfile.findOne({ userId: recruiterUserId });
   if (recruiterProfile) {
-  if (recruiterProfile.company && recruiterProfile.company.name) {
-    throw new BadRequestError('Bạn đã đăng ký thông tin công ty rồi.');
+    if (recruiterProfile.company && recruiterProfile.company.name) {
+      throw new BadRequestError('Bạn đã đăng ký thông tin công ty rồi.');
+    }
   }
-}
 
   const existingCompany = await RecruiterProfile.findOne({ 'company.name': companyData.name });
   if (existingCompany) {
@@ -40,10 +40,10 @@ export const createCompany = async (companyData, recruiterUserId, file) => {
   const dataToCreate = { ...companyData };
 
   // Xử lý coordinates: nếu location có province, district, commune nhưng thiếu coordinates
-  if (dataToCreate.location && 
-      (!dataToCreate.location.coordinates || 
-       !dataToCreate.location.coordinates.coordinates || 
-       dataToCreate.location.coordinates.coordinates.length !== 2)) {
+  if (dataToCreate.location &&
+    (!dataToCreate.location.coordinates ||
+      !dataToCreate.location.coordinates.coordinates ||
+      dataToCreate.location.coordinates.coordinates.length !== 2)) {
     // Nếu coordinates không đầy đủ, tạo tọa độ mặc định
     dataToCreate.location.coordinates = {
       type: 'Point',
@@ -53,7 +53,7 @@ export const createCompany = async (companyData, recruiterUserId, file) => {
 
   if (file) {
     const folder = `CareerZone/business_registrations`;
-    const uploadResult = await uploadService.uploadToCloudinary(file.buffer, folder);
+    const uploadResult = await uploadService.uploadFile(file, folder);
     dataToCreate.businessRegistrationUrl = uploadResult.secure_url;
   }
 
@@ -81,10 +81,10 @@ export const updateMyCompany = async (recruiterUserId, companyData, file) => {
   const dataToUpdate = { ...companyData };
 
   // Xử lý coordinates nếu có cập nhật location
-  if (dataToUpdate.location && 
-      (!dataToUpdate.location.coordinates || 
-       !dataToUpdate.location.coordinates.coordinates || 
-       dataToUpdate.location.coordinates.coordinates.length !== 2)) {
+  if (dataToUpdate.location &&
+    (!dataToUpdate.location.coordinates ||
+      !dataToUpdate.location.coordinates.coordinates ||
+      dataToUpdate.location.coordinates.coordinates.length !== 2)) {
     // Nếu coordinates không đầy đủ, tạo tọa độ mặc định
     dataToUpdate.location.coordinates = {
       type: 'Point',
@@ -94,10 +94,10 @@ export const updateMyCompany = async (recruiterUserId, companyData, file) => {
 
   if (file) {
     const folder = `CareerZone/business_registrations/${recruiterProfile.company._id}`;
-    const uploadResult = await uploadService.uploadToCloudinary(file.buffer, folder);
+    const uploadResult = await uploadService.uploadFile(file, folder);
     dataToUpdate.businessRegistrationUrl = uploadResult.secure_url;
   }
-  
+
   Object.assign(recruiterProfile.company, dataToUpdate);
   await recruiterProfile.save();
 
@@ -114,10 +114,10 @@ export const getMyCompany = async (recruiterUserId) => {
   if (!recruiterProfile.company || !recruiterProfile.company.name) {
     throw new NotFoundError('Nhà tuyển dụng này chưa cập nhật thông tin công ty.');
   }
-  
+
   const companyObject = recruiterProfile.company.toObject();
   companyObject.representativeName = recruiterProfile.fullname;
-  
+
   return companyObject;
 };
 
@@ -128,7 +128,7 @@ export const getMyCompany = async (recruiterUserId) => {
  */
 export const getMyCompanyAddress = async (recruiterUserId) => {
   const recruiterProfile = await getRecruiterProfile(recruiterUserId);
-  
+
   if (!recruiterProfile.company || !recruiterProfile.company.name) {
     throw new NotFoundError('Nhà tuyển dụng này chưa cập nhật thông tin công ty.');
   }
@@ -156,7 +156,7 @@ export const updateMyCompanyLogo = async (recruiterUserId, file) => {
   }
 
   const folder = `CareerZone/companies/${recruiterProfile.company._id}`;
-  const uploadResult = await uploadService.uploadToCloudinary(file.buffer, folder);
+  const uploadResult = await uploadService.uploadFile(file, folder);
 
   recruiterProfile.company.logo = uploadResult.secure_url;
   await recruiterProfile.save();
@@ -211,16 +211,16 @@ export const getAllCompanies = async (options = {}) => {
 export const getCompanyById = async (companyId) => {
   // Thử tìm theo RecruiterProfile _id trước (dùng cho analytics)
   let recruiterProfile = await RecruiterProfile.findById(companyId);
-  
+
   // Nếu không tìm thấy, thử tìm theo company._id (subdocument id)
   if (!recruiterProfile) {
     recruiterProfile = await RecruiterProfile.findOne({ 'company._id': companyId });
   }
-  
+
   if (!recruiterProfile || !recruiterProfile.company) {
     throw new NotFoundError('Không tìm thấy công ty.');
   }
-  
+
   // Trả về company data với _id của RecruiterProfile để navigate đúng
   return {
     ...recruiterProfile.company.toObject(),

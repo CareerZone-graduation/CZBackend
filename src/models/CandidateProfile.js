@@ -244,7 +244,6 @@ const candidateProfileSchema = new mongoose.Schema({
   cvs: [{
     name: { type: String, required: true },
     path: { type: String, required: true },
-    cloudinaryId: { type: String },
     isDefault: { type: Boolean, default: false },
     uploadedAt: { type: Date, default: Date.now }
   }],

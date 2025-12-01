@@ -57,7 +57,6 @@ describe('Application Routes API', () => {
       cvs: [{
         name: 'My Uploaded CV',
         path: 'http://example.com/cv.pdf',
-        cloudinaryId: 'dummy_id',
       }],
     });
     uploadedCvId = candidateProfile.cvs[0]._id;

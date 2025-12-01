@@ -18,7 +18,7 @@ const config = {
   // JWT Configuration
   JWT_SECRET: process.env.JWT_SECRET || 'your-super-secret-jwt-key',
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-key',
-  JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN|| '30d', // 30 days in milliseconds
+  JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN || '30d', // 30 days in milliseconds
   JWT_ACCESS_EXPIRES_IN: process.env.JWT_ACCESS_EXPIRES_IN || '15m', // 15 minutes in milliseconds
 
   // Google OAuth2
@@ -40,16 +40,22 @@ const config = {
   // KAFKA_SSL_ENABLED: process.env.KAFKA_SSL_ENABLED || 'false', // 'true' or 'false'
   // RabbitMQ Configuration
   RABBITMQ_URL: process.env.RABBITMQ_URL,
-  RABBITMQ_HOST: process.env.RABBITMQ_HOST ,
-  RABBITMQ_PORT: parseInt(process.env.RABBITMQ_PORT ) || 5672,
-  RABBITMQ_USERNAME: process.env.RABBITMQ_USERNAME ,
-  RABBITMQ_PASSWORD: process.env.RABBITMQ_PASSWORD ,
+  RABBITMQ_HOST: process.env.RABBITMQ_HOST,
+  RABBITMQ_PORT: parseInt(process.env.RABBITMQ_PORT) || 5672,
+  RABBITMQ_USERNAME: process.env.RABBITMQ_USERNAME,
+  RABBITMQ_PASSWORD: process.env.RABBITMQ_PASSWORD,
   RABBITMQ_VIRTUAL_HOST: process.env.RABBITMQ_VIRTUAL_HOST || '/',
 
   // Cloudinary Configuration
   CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME,
   CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY,
   CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET,
+
+  // AWS S3 Configuration
+  AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
+  AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
+  AWS_REGION: process.env.AWS_REGION,
+  AWS_BUCKET_NAME: process.env.AWS_BUCKET_NAME,
 
   // Email Configuration
   EMAIL_HOST: process.env.EMAIL_HOST,
@@ -69,9 +75,9 @@ const config = {
 
   // ZaloPay Configuration
   zalopay: {
-    app_id: process.env.ZALOPAY_APP_ID ,
-    key1: process.env.ZALOPAY_KEY1 ,
-    key2: process.env.ZALOPAY_KEY2 ,
+    app_id: process.env.ZALOPAY_APP_ID,
+    key1: process.env.ZALOPAY_KEY1,
+    key2: process.env.ZALOPAY_KEY2,
     create_order_url: process.env.ZALOPAY_CREATE_ORDER_URL || 'https://sb-openapi.zalopay.vn/v2/create',
     redirect_url: process.env.ZALOPAY_REDIRECT_URL || `${process.env.CLIENT_URL}/payment/zalopay-redirect`,
   },
@@ -93,14 +99,14 @@ const config = {
     returnUrl: process.env.VNPAY_RETURN_URL || 'http://localhost:5000/api/payments/vnpay-redirect',
     ipnUrl: process.env.VNPAY_IPN_URL || 'http://localhost:5000/api/payments/vnpay-ipn',
   },
-  
+
   // File Upload Configuration
   MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE) || 10 * 1024 * 1024, // 10MB
   ALLOWED_FILE_TYPES: process.env.ALLOWED_FILE_TYPES?.split(',') || ['image/jpeg', 'image/png', 'application/pdf'],
 
   // Security
   BCRYPT_SALT_ROUNDS: parseInt(process.env.BCRYPT_SALT_ROUNDS) || 12,
-  
+
   // Rate Limiting
   RATE_LIMIT_WINDOW_MS: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
   RATE_LIMIT_MAX: parseInt(process.env.RATE_LIMIT_MAX) || 100,

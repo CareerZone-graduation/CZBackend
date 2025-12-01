@@ -170,7 +170,7 @@ export const uploadAvatar = asyncHandler(async (req, res) => {
 
   // Upload lên Cloudinary
   const { uploadToCloudinary } = await import('../services/upload.service.js');
-  const result = await uploadToCloudinary(req.file.buffer, 'avatars');
+  const result = await uploadToCloudinary(req.file, 'avatars');
 
   // Cập nhật avatar URL
   profile.avatar = result.secure_url;

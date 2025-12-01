@@ -412,7 +412,7 @@ export const getJobById = async (jobId, userId = null) => {
           candidateProfileId: candidateProfile._id,
           jobId
         }).sort({ appliedAt: -1 });
-        
+
         isApplied = !!application;
         if (application) {
           applicationId = application._id;
@@ -661,17 +661,17 @@ export const applyToJob = async (userId, jobId, applicationData) => {
       sourceFileInfo = {
         name: selectedCV.name,
         path: selectedCV.path,
-        cloudinaryId: selectedCV.cloudinaryId || null,
+
       };
       sourceType = 'UPLOADED';
     } else if (cvTemplateId) {
       // --- Trường hợp 2: Dùng CV tạo từ mẫu (Template) ---
       // Tìm CV template của user
-      const cvTemplate = await CV.findOne({ 
-        _id: cvTemplateId, 
-        userId: userId 
+      const cvTemplate = await CV.findOne({
+        _id: cvTemplateId,
+        userId: userId
       });
-      
+
       if (!cvTemplate) {
         throw new BadRequestError('CV mẫu không hợp lệ hoặc không tìm thấy.');
       }
@@ -714,7 +714,7 @@ export const applyToJob = async (userId, jobId, applicationData) => {
       submittedCVData = {
         name: sourceFileInfo.name,
         path: copiedFile.secure_url,
-        cloudinaryId: copiedFile.public_id,
+
         source: sourceType,
       };
     } else {
@@ -3689,16 +3689,15 @@ export const reapplyToJob = async (userId, jobId, applicationData) => {
       sourceFileInfo = {
         name: selectedCV.name,
         path: selectedCV.path,
-        cloudinaryId: selectedCV.cloudinaryId || null,
       };
       sourceType = 'UPLOADED';
     } else if (cvTemplateId) {
       // --- Trường hợp 2: Dùng CV tạo từ mẫu (Template) ---
-      const cvTemplate = await CV.findOne({ 
-        _id: cvTemplateId, 
-        userId: userId 
+      const cvTemplate = await CV.findOne({
+        _id: cvTemplateId,
+        userId: userId
       });
-      
+
       if (!cvTemplate) {
         throw new BadRequestError('CV mẫu không hợp lệ hoặc không tìm thấy.');
       }
@@ -3738,7 +3737,6 @@ export const reapplyToJob = async (userId, jobId, applicationData) => {
       submittedCVData = {
         name: sourceFileInfo.name,
         path: copiedFile.secure_url,
-        cloudinaryId: copiedFile.public_id,
         source: sourceType,
       };
     } else {
