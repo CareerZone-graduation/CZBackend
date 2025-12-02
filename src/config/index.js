@@ -10,7 +10,7 @@ dotenv.config();
 const config = {
   // Environment
   NODE_ENV: process.env.NODE_ENV || 'development',
-  PORT: parseInt(process.env.PORT) || 8080,
+  PORT: parseInt(process.env.PORT) || 5000,
 
   // Database
   DB_URI: process.env.DB_URI,
@@ -18,7 +18,7 @@ const config = {
   // JWT Configuration
   JWT_SECRET: process.env.JWT_SECRET || 'your-super-secret-jwt-key',
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-key',
-  JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN|| '30d', // 30 days in milliseconds
+  JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN || '30d', // 30 days in milliseconds
   JWT_ACCESS_EXPIRES_IN: process.env.JWT_ACCESS_EXPIRES_IN || '15m', // 15 minutes in milliseconds
 
   // Google OAuth2
@@ -40,10 +40,10 @@ const config = {
   // KAFKA_SSL_ENABLED: process.env.KAFKA_SSL_ENABLED || 'false', // 'true' or 'false'
   // RabbitMQ Configuration
   RABBITMQ_URL: process.env.RABBITMQ_URL,
-  RABBITMQ_HOST: process.env.RABBITMQ_HOST ,
-  RABBITMQ_PORT: parseInt(process.env.RABBITMQ_PORT ) || 5672,
-  RABBITMQ_USERNAME: process.env.RABBITMQ_USERNAME ,
-  RABBITMQ_PASSWORD: process.env.RABBITMQ_PASSWORD ,
+  RABBITMQ_HOST: process.env.RABBITMQ_HOST,
+  RABBITMQ_PORT: parseInt(process.env.RABBITMQ_PORT) || 5672,
+  RABBITMQ_USERNAME: process.env.RABBITMQ_USERNAME,
+  RABBITMQ_PASSWORD: process.env.RABBITMQ_PASSWORD,
   RABBITMQ_VIRTUAL_HOST: process.env.RABBITMQ_VIRTUAL_HOST || '/',
 
   // Cloudinary Configuration
@@ -69,9 +69,9 @@ const config = {
 
   // ZaloPay Configuration
   zalopay: {
-    app_id: process.env.ZALOPAY_APP_ID ,
-    key1: process.env.ZALOPAY_KEY1 ,
-    key2: process.env.ZALOPAY_KEY2 ,
+    app_id: process.env.ZALOPAY_APP_ID,
+    key1: process.env.ZALOPAY_KEY1,
+    key2: process.env.ZALOPAY_KEY2,
     create_order_url: process.env.ZALOPAY_CREATE_ORDER_URL || 'https://sb-openapi.zalopay.vn/v2/create',
     redirect_url: process.env.ZALOPAY_REDIRECT_URL || `${process.env.CLIENT_URL}/payment/zalopay-redirect`,
   },
@@ -93,14 +93,14 @@ const config = {
     returnUrl: process.env.VNPAY_RETURN_URL || 'http://localhost:5000/api/payments/vnpay-redirect',
     ipnUrl: process.env.VNPAY_IPN_URL || 'http://localhost:5000/api/payments/vnpay-ipn',
   },
-  
+
   // File Upload Configuration
   MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE) || 10 * 1024 * 1024, // 10MB
   ALLOWED_FILE_TYPES: process.env.ALLOWED_FILE_TYPES?.split(',') || ['image/jpeg', 'image/png', 'application/pdf'],
 
   // Security
   BCRYPT_SALT_ROUNDS: parseInt(process.env.BCRYPT_SALT_ROUNDS) || 12,
-  
+
   // Rate Limiting
   RATE_LIMIT_WINDOW_MS: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
   RATE_LIMIT_MAX: parseInt(process.env.RATE_LIMIT_MAX) || 100,

@@ -32,6 +32,7 @@ const io = new socketio.Server(server, {
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
     credentials: true,
   },
+  path: '/socket.io',
 });
 socket.initializeSocket(io);
 
@@ -46,7 +47,7 @@ const startServer = async () => {
     watchCandidateProfileChanges();
     logger.info('Change stream watchers initialized');
 
-    const PORT = config.PORT || 8080;
+    const PORT = config.PORT || 5000;
     server.listen(PORT, () => {
       logger.info(`Server is running on port ${PORT}`);
       logger.info(`Environment: ${config.NODE_ENV}`);

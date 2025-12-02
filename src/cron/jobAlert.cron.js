@@ -16,7 +16,7 @@ import NotificationTemplateService from '../services/notificationTemplate.servic
  */
 const processPeriodicNotifications = async (frequency, notificationType) => {
     logger.info(`Starting ${frequency} notification processing...`);
-    
+
     try {
         // Get active subscriptions for the specified frequency
         const subscriptions = await JobAlertSubscription.find({
@@ -126,7 +126,7 @@ const processPeriodicNotifications = async (frequency, notificationType) => {
                     subscriptionId: userNotification._id.subscriptionId,
                     timestamp: new Date().toISOString()
                 };
-                
+
                 errors.push(errorInfo);
                 logger.error(`Error processing ${frequency} notification for user ${userNotification._id.userId}:`, errorInfo);
             }
@@ -153,8 +153,8 @@ const processPeriodicNotifications = async (frequency, notificationType) => {
 
 // Daily notification cron job - 8:00 AM
 // tạm thời chạy mỗi 10s để test
-cron.schedule('*/10 * * * * *', async () => {
-// cron.schedule('0 8 * * *', async () => {
+// cron.schedule('*/10 * * * * *', async () => {
+cron.schedule('0 8 * * *', async () => {
     try {
         await processPeriodicNotifications('daily', 'DAILY');
     } catch (error) {
@@ -164,8 +164,8 @@ cron.schedule('*/10 * * * * *', async () => {
             timestamp: new Date().toISOString()
         });
     }
-}, { 
-    scheduled: true, 
+}, {
+    scheduled: true,
     timezone: "Asia/Ho_Chi_Minh",
     name: 'daily-notifications'
 });
@@ -181,8 +181,8 @@ cron.schedule('0 8 * * 1', async () => {
             timestamp: new Date().toISOString()
         });
     }
-}, { 
-    scheduled: true, 
+}, {
+    scheduled: true,
     timezone: "Asia/Ho_Chi_Minh",
     name: 'weekly-notifications'
 });
