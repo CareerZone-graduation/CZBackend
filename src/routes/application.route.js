@@ -8,47 +8,7 @@ import * as interviewSchema from '../schemas/interview.schema.js';
 
 const router = express.Router();
 
-// ==========================================================
-// === NEW: ALL CANDIDATES MANAGEMENT ROUTES (PUT FIRST) ===
-// ==========================================================
 
-// Route để lấy TẤT CẢ applications từ tất cả jobs của recruiter
-router.get(
-  '/recruiter/all',
-  passport.authenticate('jwt', { session: false }),
-  authMiddleware.recruiterOnly,
-  validationMiddleware.validateQuery(applicationSchema.getAllApplicationsQuery),
-  applicationController.getAllApplications
-);
-
-// Route để lấy thống kê tổng quan
-router.get(
-  '/recruiter/statistics',
-  passport.authenticate('jwt', { session: false }),
-  authMiddleware.recruiterOnly,
-  validationMiddleware.validateQuery(applicationSchema.getStatisticsQuery),
-  applicationController.getApplicationsStatistics
-);
-
-// Route để bulk update status
-router.patch(
-  '/recruiter/bulk/status',
-  passport.authenticate('jwt', { session: false }),
-  authMiddleware.recruiterOnly,
-  validationMiddleware.validateBody(applicationSchema.bulkUpdateStatusBody),
-  applicationController.bulkUpdateStatus
-);
-
-
-
-// Route để export applications to CSV
-router.post(
-  '/recruiter/export',
-  passport.authenticate('jwt', { session: false }),
-  authMiddleware.recruiterOnly,
-  validationMiddleware.validateBody(applicationSchema.exportApplicationsBody),
-  applicationController.exportApplications
-);
 
 // ==========================================================
 // === EXISTING ROUTES (JOB-SPECIFIC) ===

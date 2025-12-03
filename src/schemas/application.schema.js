@@ -48,39 +48,4 @@ export const getCandidateApplicationsQuery = z.object({
   search: z.string().optional(),
 }).optional();
 
-// ==========================================================
-// === NEW: VALIDATION SCHEMAS FOR ALL CANDIDATES MANAGEMENT
-// ==========================================================
 
-// Validation schema cho query parameters lấy TẤT CẢ ứng viên của recruiter
-export const getAllApplicationsQuery = z.object({
-  page: z.string().regex(/^\d+$/, 'Page phải là số').optional().transform(Number),
-  limit: z.string().regex(/^\d+$/, 'Limit phải là số').optional().transform(Number),
-  status: z.string().optional(),
-  search: z.string().optional(),
-  sort: z.enum(['appliedAt', '-appliedAt', 'lastStatusUpdateAt', '-lastStatusUpdateAt']).optional(),
-  jobStatus: z.string().optional(),
-  jobIds: z.string().optional().transform(val => val ? val.split(',') : []),
-  fromDate: z.string().optional(),
-  toDate: z.string().optional(),
-}).optional();
-
-// Validation schema cho statistics query
-export const getStatisticsQuery = z.object({
-  jobIds: z.string().optional().transform(val => val ? val.split(',') : []),
-  fromDate: z.string().optional(),
-  toDate: z.string().optional(),
-}).optional();
-
-// Validation schema cho bulk update status
-export const bulkUpdateStatusBody = z.object({
-  applicationIds: z.array(z.string().regex(/^[0-9a-fA-F]{24}$/, 'Application ID không hợp lệ')),
-  status: z.enum(['PENDING', 'SUITABLE', 'SCHEDULED_INTERVIEW', 'OFFER_SENT', 'ACCEPTED', 'OFFER_DECLINED', 'REJECTED'], {
-    errorMap: () => ({ message: 'Status không hợp lệ' })
-  })
-});
-
-// Validation schema cho export applications
-export const exportApplicationsBody = z.object({
-  applicationIds: z.array(z.string().regex(/^[0-9a-fA-F]{24}$/, 'Application ID không hợp lệ'))
-});
