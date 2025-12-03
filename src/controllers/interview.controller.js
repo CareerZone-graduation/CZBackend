@@ -62,7 +62,7 @@ export const listInterviews = asyncHandler(async (req, res) => {
   const filters = req.validatedQuery || req.query;
 
   let result;
-  
+
   if (userRole === 'recruiter') {
     result = await interviewService.getInterviewsByRecruiter(userId, filters);
   } else if (userRole === 'candidate') {
@@ -109,9 +109,9 @@ export const updateInterviewStatus = asyncHandler(async (req, res) => {
  */
 export const getMyInterviews = asyncHandler(async (req, res) => {
   const recruiterId = req.user._id;
-  const { page, limit, status } = req.validatedQuery || req.query;
+  const { page, limit, status, search, startDate, endDate } = req.validatedQuery || req.query;
 
-  const result = await interviewService.getRecruiterInterviews(recruiterId, { page, limit, status });
+  const result = await interviewService.getRecruiterInterviews(recruiterId, { page, limit, status, search, startDate, endDate });
 
   res.status(200).json({
     success: true,
@@ -375,7 +375,7 @@ export const getRecording = asyncHandler(async (req, res) => {
 
   // First check access
   const accessInfo = await interviewService.checkInterviewAccess(id, userId);
-  
+
   if (!accessInfo.hasAccess) {
     return res.status(403).json({
       success: false,

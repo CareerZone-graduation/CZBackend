@@ -13,12 +13,13 @@ export const getJobsForAdmin = async (queryParams) => {
 
   // Search by title or company name
   if (search) {
+    const searchRegex = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const searchFilter = [
-      { title: { $regex: search, $options: 'i' } }
+      { title: { $regex: searchRegex, $options: 'i' } }
     ];
 
     const matchingCompanies = await RecruiterProfile.find({
-      'company.name': { $regex: search, $options: 'i' }
+      'company.name': { $regex: searchRegex, $options: 'i' }
     }).select('_id');
 
     if (matchingCompanies.length > 0) {
@@ -32,18 +33,22 @@ export const getJobsForAdmin = async (queryParams) => {
 
   // Filter by a specific company
   if (company) {
-    const companyProfiles = await RecruiterProfile.find({
-      'company.name': { $regex: company, $options: 'i' }
-    }).select('_id');
-
-    if (companyProfiles.length > 0) {
-      filter.recruiterProfileId = { $in: companyProfiles.map(c => c._id) };
+    if (mongoose.Types.ObjectId.isValid(company)) {
+      filter.recruiterProfileId = company;
     } else {
-      // If no company is found, return an empty result
-      return {
-        meta: { currentPage: page, totalPages: 0, totalItems: 0, limit: limit },
-        data: []
-      };
+      const companyProfiles = await RecruiterProfile.find({
+        'company.name': { $regex: company, $options: 'i' }
+      }).select('_id');
+
+      if (companyProfiles.length > 0) {
+        filter.recruiterProfileId = { $in: companyProfiles.map(c => c._id) };
+      } else {
+        // If no company is found, return an empty result
+        return {
+          meta: { currentPage: page, totalPages: 0, totalItems: 0, limit: limit },
+          data: []
+        };
+      }
     }
   }
   // Filter by status
@@ -195,14 +200,15 @@ export const getUsersForAdmin = async (queryParams) => {
 
   // Tìm kiếm theo email hoặc fullname
   if (search) {
+    const searchRegex = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const userFilter = [
-      { email: { $regex: search, $options: 'i' } }
+      { email: { $regex: searchRegex, $options: 'i' } }
     ];
 
     // Tìm trong RecruiterProfile (fullname) nếu không phải chỉ candidate
     if (role !== 'candidate') {
       const matchingRecruiters = await RecruiterProfile.find({
-        fullname: { $regex: search, $options: 'i' }
+        fullname: { $regex: searchRegex, $options: 'i' }
       }).select('userId');
 
       if (matchingRecruiters.length > 0) {
@@ -215,7 +221,7 @@ export const getUsersForAdmin = async (queryParams) => {
     // Tìm trong CandidateProfile (fullname) nếu không phải chỉ recruiter
     if (role !== 'recruiter') {
       const matchingCandidates = await CandidateProfile.find({
-        fullname: { $regex: search, $options: 'i' }
+        fullname: { $regex: searchRegex, $options: 'i' }
       }).select('userId');
 
       if (matchingCandidates.length > 0) {
@@ -589,9 +595,10 @@ export const getCompaniesForAdmin = async (queryParams) => {
   const filter = {};
 
   if (search) {
+    const searchRegex = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const searchFilter = [
-      { 'company.name': { $regex: search, $options: 'i' } },
-      { fullname: { $regex: search, $options: 'i' } },
+      { 'company.name': { $regex: searchRegex, $options: 'i' } },
+      { fullname: { $regex: searchRegex, $options: 'i' } },
     ];
     filter.$or = searchFilter;
   }

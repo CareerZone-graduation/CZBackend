@@ -280,5 +280,8 @@ export const interviewQuerySchema = z.object({
     .optional()
     .default('10'),
   status: z.enum(['SCHEDULED', 'STARTED', 'COMPLETED', 'CANCELLED', 'RESCHEDULED'])
-    .optional()
+    .optional(),
+  search: z.string().optional(),
+  startDate: z.string().datetime().optional(),
+  endDate: z.string().datetime().optional()
 });

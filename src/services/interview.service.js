@@ -845,7 +845,7 @@ export const checkInterviewAccess = async (interviewId, userId) => {
  * @returns {Object} Danh sách cuộc phỏng vấn với meta
  */
 export const getRecruiterInterviews = async (recruiterId, options = {}) => {
-  const { page = 1, limit = 10, status } = options;
+  const { page = 1, limit = 10, status, search, startDate, endDate } = options;
   const skip = (page - 1) * limit;
 
   const query = { recruiterId };
@@ -853,6 +853,25 @@ export const getRecruiterInterviews = async (recruiterId, options = {}) => {
   // Lọc theo status nếu có
   if (status) {
     query.status = status;
+  }
+
+  // Lọc theo từ khóa tìm kiếm (search by roomName)
+  if (search) {
+    query.roomName = { $regex: search, $options: 'i' };
+  }
+
+  // Lọc theo khoảng ngày (startDate, endDate)
+  if (startDate || endDate) {
+    query.scheduledTime = {};
+    if (startDate) {
+      query.scheduledTime.$gte = new Date(startDate);
+    }
+    if (endDate) {
+      // Set end date to end of day
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      query.scheduledTime.$lte = end;
+    }
   }
 
   // Đếm tổng số bản ghi
@@ -991,7 +1010,6 @@ export const getCandidateInterviews = async (candidateId, options = {}) => {
       totalPages,
       totalItems: total,
       limit
-
     },
     data: formattedInterviews
   };
