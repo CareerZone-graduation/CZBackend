@@ -148,7 +148,7 @@ export const createJob = async (userId, jobData) => {
 export const getAllJobs = async (options) => {
   const { page = 1, limit = 10, sortBy, ...filters } = options;
 
-  const query = { status: 'ACTIVE', approved: true };
+  const query = { status: 'ACTIVE', moderationStatus: 'APPROVED' };
 
   // Simple text search on title and skills
   if (filters.q) {
@@ -219,10 +219,12 @@ export const getJobsByRecruiter = async (userId, options) => {
   // Filter by status
   if (status) {
     if (status === 'PENDING') {
-      // PENDING means not approved yet
-      query.approved = false;
+      // PENDING means moderationStatus is PENDING
+      query.moderationStatus = 'PENDING';
     } else {
+      // For ACTIVE, INACTIVE, EXPIRED, job must be APPROVED
       query.status = status;
+      query.moderationStatus = 'APPROVED';
     }
   }
 
@@ -290,6 +292,7 @@ export const getJobsByRecruiter = async (userId, options) => {
     skills: job.skills,
     status: job.status,
     approved: job.approved,
+    moderationStatus: job.moderationStatus, // Add moderationStatus
     recruiterProfileId: job.recruiterProfileId,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
@@ -412,7 +415,7 @@ export const getJobById = async (jobId, userId = null) => {
           candidateProfileId: candidateProfile._id,
           jobId
         }).sort({ appliedAt: -1 });
-        
+
         isApplied = !!application;
         if (application) {
           applicationId = application._id;
@@ -667,11 +670,11 @@ export const applyToJob = async (userId, jobId, applicationData) => {
     } else if (cvTemplateId) {
       // --- Trường hợp 2: Dùng CV tạo từ mẫu (Template) ---
       // Tìm CV template của user
-      const cvTemplate = await CV.findOne({ 
-        _id: cvTemplateId, 
-        userId: userId 
+      const cvTemplate = await CV.findOne({
+        _id: cvTemplateId,
+        userId: userId
       });
-      
+
       if (!cvTemplate) {
         throw new BadRequestError('CV mẫu không hợp lệ hoặc không tìm thấy.');
       }
@@ -3694,11 +3697,11 @@ export const reapplyToJob = async (userId, jobId, applicationData) => {
       sourceType = 'UPLOADED';
     } else if (cvTemplateId) {
       // --- Trường hợp 2: Dùng CV tạo từ mẫu (Template) ---
-      const cvTemplate = await CV.findOne({ 
-        _id: cvTemplateId, 
-        userId: userId 
+      const cvTemplate = await CV.findOne({
+        _id: cvTemplateId,
+        userId: userId
       });
-      
+
       if (!cvTemplate) {
         throw new BadRequestError('CV mẫu không hợp lệ hoặc không tìm thấy.');
       }

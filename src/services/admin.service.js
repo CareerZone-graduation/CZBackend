@@ -650,15 +650,71 @@ export const getCompaniesForAdmin = async (queryParams) => {
     RecruiterProfile.countDocuments(filter),
   ]);
 
+  // Get list of recruiter profile IDs
+  const recruiterProfileIds = recruiterProfiles.map(p => p._id);
+
+  // Aggregate active jobs count per recruiter
+  const activeJobCounts = await Job.aggregate([
+    {
+      $match: {
+        recruiterProfileId: { $in: recruiterProfileIds },
+        status: 'ACTIVE',
+        approved: true
+      }
+    },
+    {
+      $group: {
+        _id: '$recruiterProfileId',
+        count: { $sum: 1 }
+      }
+    }
+  ]);
+
+  const activeJobCountMap = activeJobCounts.reduce((acc, curr) => {
+    acc[curr._id.toString()] = curr.count;
+    return acc;
+  }, {});
+
+  // Aggregate total applications count per recruiter
+  const applicationCounts = await Application.aggregate([
+    {
+      $lookup: {
+        from: 'jobs',
+        localField: 'jobId',
+        foreignField: '_id',
+        as: 'job'
+      }
+    },
+    { $unwind: '$job' },
+    {
+      $match: {
+        'job.recruiterProfileId': { $in: recruiterProfileIds }
+      }
+    },
+    {
+      $group: {
+        _id: '$job.recruiterProfileId',
+        count: { $sum: 1 }
+      }
+    }
+  ]);
+
+  const applicationCountMap = applicationCounts.reduce((acc, curr) => {
+    acc[curr._id.toString()] = curr.count;
+    return acc;
+  }, {});
+
   // Tạo cấu trúc response cố định cho hồ sơ nhà tuyển dụng
   const formattedData = recruiterProfiles.map(profile => ({
     _id: profile._id,
+    activeJobs: activeJobCountMap[profile._id.toString()] || 0,
+    totalApplications: applicationCountMap[profile._id.toString()] || 0,
     recruiterInfo: {
       fullname: profile.fullname,
-      userId: profile.userId._id,
-      email: profile.userId.email,
-      active: profile.userId.active,
-      userCreatedAt: profile.userId.createdAt
+      userId: profile.userId?._id,
+      email: profile.userId?.email,
+      active: profile.userId?.active,
+      userCreatedAt: profile.userId?.createdAt
     },
     company: {
       name: profile.company?.name || null,
@@ -1005,13 +1061,15 @@ export const getCompanyJobs = async (companyId, queryParams) => {
   if (status && status !== 'all') {
     if (status === 'active') {
       filter.status = 'ACTIVE';
-      filter.approved = true;
+      filter.moderationStatus = 'APPROVED';
     } else if (status === 'expired') {
       filter.status = 'EXPIRED';
+      filter.moderationStatus = 'APPROVED';
     } else if (status === 'pending') {
-      filter.approved = false;
+      filter.moderationStatus = 'PENDING';
     } else if (status === 'inactive') {
       filter.status = 'INACTIVE';
+      filter.moderationStatus = 'APPROVED';
     }
   }
 
@@ -1043,7 +1101,7 @@ export const getCompanyJobs = async (companyId, queryParams) => {
 
   const [jobs, total] = await Promise.all([
     Job.find(filter)
-      .select('title status approved createdAt expiresAt location salary')
+      .select('title status approved moderationStatus createdAt expiresAt location salary')
       .sort(sortOptions)
       .skip(skip)
       .limit(limit)
