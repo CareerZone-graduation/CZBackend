@@ -148,7 +148,6 @@ export const getApplicationsByJob = async (jobId, recruiterId, options = {}) => 
 
   // Thực hiện truy vấn
   const applications = await Application.aggregate(pipeline);
-  logger.info(`Lấy danh sách ứng viên cho công việc ${jobId} thành công`, { applications });
   // Đếm tổng số lượng
   const totalApplications = await Application.countDocuments(filter);
 

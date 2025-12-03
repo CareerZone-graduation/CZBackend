@@ -90,7 +90,6 @@ async function testSupportRequests() {
 
     // Count existing support requests
     const count = await SupportRequest.countDocuments();
-    console.log(`📊 Found ${count} support requests in database`);
 
     if (count === 0) {
       console.log('📝 Creating sample support requests...');

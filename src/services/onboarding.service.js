@@ -249,17 +249,6 @@ export const updateProfileCompleteness = async (profileId, profile = null) => {
     if (hasChanged) {
       profileData.profileCompleteness = completeness;
       await profileData.save();
-
-      logger.info('Profile completeness updated', {
-        profileId,
-        percentage: completeness.percentage,
-        missingFieldsCount: completeness.missingFields.length
-      });
-    } else {
-      logger.debug('Profile completeness unchanged, skipping save', {
-        profileId,
-        percentage: completeness.percentage
-      });
     }
 
     return completeness;

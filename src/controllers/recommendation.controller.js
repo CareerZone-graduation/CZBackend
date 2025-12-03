@@ -76,14 +76,9 @@ export const generateRecommendations = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const options = req.body || {};
 
-  logger.info('Generating job recommendations for candidate', { userId, options });
 
   const result = await generateRecommendationsService(userId, options);
 
-  logger.info('Job recommendations generated successfully', {
-    userId,
-    totalRecommendations: result.total,
-  });
 
   res.json({
     success: true,
@@ -101,15 +96,8 @@ export const getRecommendations = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const options = req.validatedQuery || req.query;
 
-  logger.info('Fetching job recommendations for candidate', { userId, options });
 
   const result = await getRecommendationsService(userId, options);
-
-  logger.info('Job recommendations retrieved successfully', {
-    userId,
-    totalItems: result.pagination.totalItems,
-    page: result.pagination.currentPage,
-  });
 
    res.status(200).json({
     success: true,

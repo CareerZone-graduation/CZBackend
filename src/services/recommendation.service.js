@@ -563,7 +563,6 @@ export const generateRecommendations = async (userId, options = {}) => {
  * @returns {Promise<Object>} Paginated recommendations
  */
 export const getRecommendations = async (userId, options = {}) => {
-  logger.info('Getting job recommendations', { userId, options });
 
   // Get candidate profile
   const profile = await CandidateProfile.findOne({ userId }).lean();
@@ -606,13 +605,6 @@ export const getRecommendations = async (userId, options = {}) => {
   const totalValidCount = validRecommendations.length;
   const paginatedRecommendations = validRecommendations.slice(skip, skip + limit);
 
-  logger.info('Retrieved recommendations', {
-    userId,
-    totalInDb: allRecommendations.length,
-    totalValid: totalValidCount,
-    page,
-    returned: paginatedRecommendations.length
-  });
 
   return {
     jobs: paginatedRecommendations.map(rec => ({

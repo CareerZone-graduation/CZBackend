@@ -26,7 +26,7 @@ export const addToTalentPool = async (recruiterId, applicationId, data = {}) => 
   const application = await Application.findById(applicationId)
     .populate('jobId')
     .populate('candidateProfileId');
-  
+
   if (!application) {
     throw new NotFoundError('Không tìm thấy đơn ứng tuyển');
   }
@@ -51,7 +51,6 @@ export const addToTalentPool = async (recruiterId, applicationId, data = {}) => 
     recruiterProfileId: recruiterProfile._id,
     candidateProfileId: application.candidateProfileId._id,
     applicationId: application._id,
-    tags: data.tags || [],
     notes: data.notes || '',
     candidateSnapshot: {
       name: application.candidateName,
@@ -119,10 +118,7 @@ export const getTalentPool = async (recruiterId, options = {}) => {
   // Build filter
   const filter = { recruiterProfileId: recruiterProfile._id };
 
-  // Filter by tags
-  if (options.tags && options.tags.length > 0) {
-    filter.tags = { $in: options.tags };
-  }
+
 
   // Sort
   let sortOptions = { addedAt: -1 };
@@ -149,7 +145,7 @@ export const getTalentPool = async (recruiterId, options = {}) => {
     {
       $project: {
         _id: 1,
-        tags: 1,
+
         notes: 1,
         addedAt: 1,
         applicationId: 1,
@@ -173,8 +169,7 @@ export const getTalentPool = async (recruiterId, options = {}) => {
       $match: {
         $or: [
           { 'candidateSnapshot.name': searchRegex },
-          { 'candidateSnapshot.email': searchRegex },
-          { tags: searchRegex }
+          { 'candidateSnapshot.email': searchRegex }
         ]
       }
     });
@@ -193,11 +188,10 @@ export const getTalentPool = async (recruiterId, options = {}) => {
     const searchRegex = new RegExp(options.search, 'i');
     countFilter.$or = [
       { 'candidateSnapshot.name': searchRegex },
-      { 'candidateSnapshot.email': searchRegex },
-      { tags: searchRegex }
+      { 'candidateSnapshot.email': searchRegex }
     ];
   }
-  
+
   const total = await TalentPool.countDocuments(countFilter);
 
   return {
@@ -237,9 +231,7 @@ export const updateTalentPoolEntry = async (recruiterId, talentPoolId, data) => 
   }
 
   // Update
-  if (data.tags !== undefined) {
-    entry.tags = data.tags;
-  }
+
   if (data.notes !== undefined) {
     entry.notes = data.notes;
   }

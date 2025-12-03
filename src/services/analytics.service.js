@@ -606,7 +606,6 @@ export const getJobCategories = async () => {
     { $limit: 10 }, // Lấy top 10 categories
   ]);
   
-  console.log('📊 Job categories from MongoDB:', results);
   return results;
 };
 
@@ -689,7 +688,6 @@ export const getTopCompanies = async (limit = 6) => {
 
     // Bước 2: Nếu không có kết quả, lấy bất kỳ công ty nào có tin đăng
     if (companies.length === 0) {
-      console.log('⚠️ No APPROVED companies with active jobs. Trying all companies with jobs...');
       companies = await RecruiterProfile.aggregate([
         {
           $match: {
@@ -757,17 +755,9 @@ export const getTopCompanies = async (limit = 6) => {
         { $limit: limit }
       ]);
     }
-
-    console.log(`🏢 Found ${companies.length} companies:`, companies.map(c => ({
-      name: c.companyName,
-      activeJobs: c.activeJobCount,
-      totalJobs: c.totalJobCount,
-      status: c.approvalStatus
-    })));
     
     return companies;
   } catch (error) {
-    console.error('❌ Error in getTopCompanies:', error);
     throw error;
   }
 };
@@ -1733,11 +1723,9 @@ export const getKPIData = async () => {
  */
 export const getMostAppliedCompanies = async (limit = 12) => {
   try {
-    console.log('\n🔍 getMostAppliedCompanies called with limit:', limit);
     
     // Kiểm tra tổng số applications trong DB
     const totalApplications = await Application.countDocuments();
-    console.log(`📊 Total applications in DB: ${totalApplications}`);
     
     if (totalApplications === 0) {
       console.log('⚠️ No applications found, falling back to top companies by job count');
@@ -1754,7 +1742,6 @@ export const getMostAppliedCompanies = async (limit = 12) => {
       }
     ]);
     
-    console.log(`📊 Found applications for ${applicationsByJob.length} different jobs`);
     
     // Tạo map jobId -> applicationCount
     const jobAppCountMap = {};
@@ -1834,7 +1821,6 @@ export const getMostAppliedCompanies = async (limit = 12) => {
       }
     ]);
 
-    console.log(`✅ Found ${companies.length} companies (all statuses)`);
     
     // Tính applicationCount cho từng company từ jobAppCountMap
     const companiesWithAppCount = companies.map(company => {
@@ -1870,14 +1856,10 @@ export const getMostAppliedCompanies = async (limit = 12) => {
     });
     
     // KHÔNG LỌC BỎ công ty 0 CV - chỉ đẩy xuống cuối
-    console.log(`📊 Total companies: ${companiesWithAppCount.length}`);
     
     const companiesWithCV = companiesWithAppCount.filter(c => c.applicationCount > 0);
     const companiesWithoutCV = companiesWithAppCount.filter(c => c.applicationCount === 0);
-    
-    console.log(`📊 Companies with CV: ${companiesWithCV.length}`);
-    console.log(`📊 Companies without CV: ${companiesWithoutCV.length}`);
-    
+
     // Sort companies có CV theo applicationCount DESC
     companiesWithCV.sort((a, b) => {
       if (b.applicationCount !== a.applicationCount) {
@@ -1897,25 +1879,8 @@ export const getMostAppliedCompanies = async (limit = 12) => {
     // Take limit
     const topCompanies = allCompaniesSorted.slice(0, limit);
     
-    // Log top 10 for debugging
-    if (topCompanies.length > 0) {
-      console.log('\n📊 Top companies (sorted by CV, then by Jobs):');
-      topCompanies.slice(0, Math.min(10, topCompanies.length)).forEach((company, index) => {
-        const hasCV = company.applicationCount > 0 ? '✅' : '⚠️ 0 CV';
-        console.log(`  ${index + 1}. ${company.companyName}: ${hasCV}`);
-        console.log(`      - Applications: ${company.applicationCount} CVs`);
-        console.log(`      - Active Jobs: ${company.activeJobCount}`);
-        console.log(`      - Total Jobs: ${company.totalJobCount}`);
-        if (company.applicationCount > 0) {
-          console.log(`      - Avg: ${company.avgApplicationPerJob} CVs/job`);
-        }
-      });
-      console.log(''); // empty line
-    }
-
     return topCompanies;
   } catch (error) {
-    console.error('❌ Error fetching most applied companies:', error);
     throw error;
   }
 };

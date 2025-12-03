@@ -28,7 +28,6 @@ const updateExistingPriorities = async () => {
     // Find all support requests
     const requests = await SupportRequest.find({});
     
-    console.log(`📊 Found ${requests.length} support requests\n`);
     
     let updatedCount = 0;
     

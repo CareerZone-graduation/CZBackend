@@ -16,11 +16,7 @@ const talentPoolSchema = new mongoose.Schema({
     ref: 'Application',
     required: [true, 'Application reference is required']
   },
-  tags: [{
-    type: String,
-    trim: true,
-    maxlength: [50, 'Tag cannot exceed 50 characters']
-  }],
+
   notes: {
     type: String,
     trim: true,
@@ -49,6 +45,6 @@ talentPoolSchema.index({ recruiterProfileId: 1 });
 talentPoolSchema.index({ candidateProfileId: 1 });
 talentPoolSchema.index({ recruiterProfileId: 1, candidateProfileId: 1 }, { unique: true });
 talentPoolSchema.index({ addedAt: -1 });
-talentPoolSchema.index({ tags: 1 });
+
 
 export default mongoose.model('TalentPool', talentPoolSchema);

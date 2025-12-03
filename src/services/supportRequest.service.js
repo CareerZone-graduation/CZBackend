@@ -431,7 +431,6 @@ export const markAdminResponseAsRead = async (requestId, userId) => {
  */
 export const getAllSupportRequests = async (filters = {}, sort = {}, pagination = {}) => {
   try {
-    console.log('🔍 getAllSupportRequests called with:', { filters, sort, pagination });
     
     const page = parseInt(pagination.page, 10) || 1;
     const limit = Math.min(parseInt(pagination.limit, 10) || 20, 100);
@@ -527,7 +526,6 @@ export const getAllSupportRequests = async (filters = {}, sort = {}, pagination 
       SupportRequest.countDocuments(query)
     ]);
 
-    console.log(`✅ Found ${requests.length} requests out of ${totalItems} total`);
 
     const totalPages = Math.ceil(totalItems / limit);
 

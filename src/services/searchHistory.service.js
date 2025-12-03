@@ -95,7 +95,6 @@ export const getUserSearchHistory = async (userId, { limit = 10, page = 1 } = {}
     try {
       if (redisClient.isOpen) {
         const cached = await redisClient.get(cacheKey);
-        console.log(cached)
         if (cached) {
           cachedData = JSON.parse(cached);
           logger.debug(`Cache hit for user search history: ${userId}`);
