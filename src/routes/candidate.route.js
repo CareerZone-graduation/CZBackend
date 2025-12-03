@@ -78,6 +78,13 @@ router
         candidateController.updateAvatar
     );
 
+router
+    .route('/upload-image')
+    .post(
+        uploadMiddleware.uploadImage,
+        candidateController.uploadImage
+    );
+
 // CV Management Routes
 router.route('/cvs')
     .post(uploadMiddleware.uploadCv, candidateController.uploadCv)

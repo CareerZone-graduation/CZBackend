@@ -23,6 +23,7 @@ const upload = multer({
 
 export { upload };
 export const uploadAvatar = upload.single('avatar');
+export const uploadImage = upload.single('image');
 
 // File filter for CVs (PDF, DOC, DOCX)
 const cvFileFilter = (req, file, cb) => {

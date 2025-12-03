@@ -116,6 +116,25 @@ export const updateAvatar = asyncHandler(async (req, res) => {
     });
 });
 
+export const uploadImage = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    if (!req.file) {
+        throw new BadRequestError('Vui lòng tải lên một file ảnh.');
+    }
+
+    logger.info(`Uploading image for user: ${userId}`);
+    const result = await candidateService.uploadImage(userId, req.file);
+
+    res.status(201).json({
+        success: true,
+        message: 'Tải lên ảnh thành công.',
+        data: {
+            url: result.secure_url,
+            publicId: result.public_id
+        },
+    });
+});
+
 export const getMyApplications = asyncHandler(async (req, res) => {
     const userId = req.user._id;
     const options = req.validatedQuery || req.query;

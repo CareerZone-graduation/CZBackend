@@ -112,6 +112,19 @@ export const updateAvatar = async (userId, avatarUrl) => {
 };
 
 /**
+ * Upload an image for the candidate (e.g. for CV).
+ * @param {string} userId
+ * @param {object} file - The uploaded file object from multer.
+ * @returns {Promise<Object>}
+ */
+export const uploadImage = async (userId, file) => {
+    // Upload to Cloudinary
+    const result = await uploadService.uploadToCloudinary(file.buffer, 'cv-images');
+    return result;
+};
+
+
+/**
  * Upload a new CV for the candidate.
  * @param {string} userId
  * @param {object} file - The uploaded file object from multer.
