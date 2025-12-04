@@ -1,5 +1,6 @@
 import asyncHandler from 'express-async-handler';
 import * as jobService from '../services/job.service.js';
+import * as autocompleteService from '../services/autocomplete.service.js';
 
 export const createJob = asyncHandler(async (req, res) => {
   const userId = req.user._id;
@@ -170,8 +171,9 @@ export const hybridSearchJobs = asyncHandler(async (req, res) => {
 });
 export const autocompleteJobTitles = asyncHandler(async (req, res) => {
   const { query, limit } = req.validatedQuery || req.query;
-  console.log('Autocomplete query:', query, 'limit:', limit);
-  const suggestions = await jobService.autocompleteJobTitles(query, limit);
+  // const suggestions = await jobService.autocompleteJobTitles(query, limit);
+
+  const suggestions = await autocompleteService.autocompleteJobTitles(query, limit);
   
   res.status(200).json({
     success: true,

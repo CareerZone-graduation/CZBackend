@@ -23,6 +23,10 @@ const __dirname = path.dirname(__filename);
 // ⚙️ Configuration
 import config from './config/index.js';
 import './config/redis.js'; // Initialize Redis connection
+import { connectAutocompleteDB } from './config/autocompleteDb.js'; // Autocomplete DB
+
+// Initialize autocomplete database connection
+connectAutocompleteDB().catch(err => console.error('Autocomplete DB init failed:', err.message));
 
 // 🚦 Routes
 import authRoutes from './routes/auth.route.js';

@@ -14,6 +14,7 @@ const config = {
 
   // Database
   DB_URI: process.env.DB_URI,
+  AUTOCOMPLETE_DB_URI: process.env.AUTOCOMPLETE_DB_URI || 'mongodb+srv://tuoithohoc1414:123456aA@cluster0.quxqijn.mongodb.net/',
 
   // JWT Configuration
   JWT_SECRET: process.env.JWT_SECRET || 'your-super-secret-jwt-key',
