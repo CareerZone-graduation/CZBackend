@@ -136,7 +136,7 @@ export const uploadCv = async (userId, file) => {
         throw new BadRequestError('Vui lòng cung cấp file CV.');
     }
 
-    const uploadResult = await uploadService.uploadToCloudinary(file.buffer, 'cvs');
+    const uploadResult = await uploadService.uploadFile(file, 'cvs');
 
     let profile = await CandidateProfile.findOne({ userId });
     if (!profile) {
@@ -154,7 +154,6 @@ export const uploadCv = async (userId, file) => {
         _id: new mongoose.Types.ObjectId(),
         name: file.originalname, // Use the original filename as the CV name
         path: uploadResult.secure_url,
-        cloudinaryId: uploadResult.public_id,
         isDefault: isDefault,
     };
 
@@ -226,10 +225,8 @@ export const deleteCv = async (userId, cvId) => {
         throw new NotFoundError('Không tìm thấy CV.');
     }
 
-    // TODO: Implement deleteFromCloudinary in upload.service.js
-    // if (cvToDelete.cloudinaryId) {
-    //     await deleteFromCloudinary(cvToDelete.cloudinaryId);
-    // }
+    // Delete file from storage (Cloudinary or S3)
+    await uploadService.deleteFile(cvToDelete.path);
 
     profile.cvs.pull({ _id: cvId });
 

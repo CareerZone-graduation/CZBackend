@@ -15,7 +15,7 @@ export const createContactRequest = async (req, res) => {
       console.log(`📂 Processing ${req.files.length} attachments...`);
 
       const uploadPromises = req.files.map(async (file) => {
-        const result = await uploadToCloudinary(file.buffer, 'contact_attachments');
+        const result = await uploadToCloudinary(file, 'contact_attachments');
         return {
           url: result.secure_url,
           publicId: result.public_id,

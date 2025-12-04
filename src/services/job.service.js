@@ -664,7 +664,7 @@ export const applyToJob = async (userId, jobId, applicationData) => {
       sourceFileInfo = {
         name: selectedCV.name,
         path: selectedCV.path,
-        cloudinaryId: selectedCV.cloudinaryId || null,
+
       };
       sourceType = 'UPLOADED';
     } else if (cvTemplateId) {
@@ -717,7 +717,7 @@ export const applyToJob = async (userId, jobId, applicationData) => {
       submittedCVData = {
         name: sourceFileInfo.name,
         path: copiedFile.secure_url,
-        cloudinaryId: copiedFile.public_id,
+
         source: sourceType,
       };
     } else {
@@ -3692,7 +3692,6 @@ export const reapplyToJob = async (userId, jobId, applicationData) => {
       sourceFileInfo = {
         name: selectedCV.name,
         path: selectedCV.path,
-        cloudinaryId: selectedCV.cloudinaryId || null,
       };
       sourceType = 'UPLOADED';
     } else if (cvTemplateId) {
@@ -3741,7 +3740,6 @@ export const reapplyToJob = async (userId, jobId, applicationData) => {
       submittedCVData = {
         name: sourceFileInfo.name,
         path: copiedFile.secure_url,
-        cloudinaryId: copiedFile.public_id,
         source: sourceType,
       };
     } else {

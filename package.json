@@ -37,6 +37,8 @@
   "author": "Le Dinh Tri",
   "license": "MIT",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.940.0",
+    "@aws-sdk/lib-storage": "^3.940.0",
     "amqplib": "^0.10.8",
     "axios": "^1.10.0",
     "bcryptjs": "^2.4.3",
@@ -73,6 +75,7 @@
     "probe-image-size": "^7.2.3",
     "pug": "^3.0.3",
     "puppeteer": "^24.19.0",
+    "qs": "^6.14.0",
     "redis": "^4.6.11",
     "socket.io": "^4.7.4",
     "string-similarity": "^4.0.4",

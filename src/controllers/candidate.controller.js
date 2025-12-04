@@ -102,8 +102,8 @@ export const updateAvatar = asyncHandler(async (req, res) => {
     }
 
     logger.info(`Uploading avatar for user: ${userId}`);
-    const result = await uploadService.uploadToCloudinary(req.file.buffer, 'avatars');
-
+    const result = await uploadService.uploadFile(req.file, 'avatars');
+    console.log(result);
     await candidateService.updateAvatar(userId, result.secure_url);
 
     // Get updated profile with completeness to return to frontend

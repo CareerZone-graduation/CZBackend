@@ -52,6 +52,12 @@ const config = {
   CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY,
   CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET,
 
+  // AWS S3 Configuration
+  AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
+  AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
+  AWS_REGION: process.env.AWS_REGION,
+  AWS_BUCKET_NAME: process.env.AWS_BUCKET_NAME,
+
   // Email Configuration
   EMAIL_HOST: process.env.EMAIL_HOST,
   EMAIL_PORT: parseInt(process.env.EMAIL_PORT, 10),

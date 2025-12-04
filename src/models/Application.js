@@ -40,10 +40,7 @@ const submittedCV = new mongoose.Schema({
     // Không bắt buộc nữa vì CV template không có path
     trim: true
   },
-  cloudinaryId: {
-    type: String,
-    trim: true
-  },
+
   source: {
     type: String,
     enum: ['UPLOADED', 'TEMPLATE'],
