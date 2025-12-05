@@ -38,6 +38,8 @@ export const getApplicationById = asyncHandler(async (req, res) => {
   });
 });
 
+import * as uploadService from '../services/upload.service.js';
+
 /**
  * @desc      Update application status
  * @route     PATCH /api/applications/:applicationId/status
@@ -45,12 +47,21 @@ export const getApplicationById = asyncHandler(async (req, res) => {
  */
 export const updateApplicationStatus = asyncHandler(async (req, res) => {
   const { applicationId } = req.params;
-  const { status } = req.body;
+  const { status, offerLetter } = req.body;
+  let offerFile = null;
+
+  // Handle file upload if present
+  if (req.file) {
+    const uploadResult = await uploadService.uploadFile(req.file, 'offers');
+    offerFile = uploadResult.secure_url;
+  }
 
   const updatedApplication = await applicationService.updateApplicationStatus(
     applicationId,
     req.user._id,
-    status
+    status,
+    offerLetter,
+    offerFile
   );
 
   res.status(200).json({

@@ -260,9 +260,11 @@ export const getApplicationById = async (applicationId, recruiterId) => {
  * @param {string} applicationId ID đơn ứng tuyển
  * @param {string} recruiterId ID nhà tuyển dụng
  * @param {string} status Trạng thái mới
+ * @param {string} offerLetter Thư mời (nếu có)
+ * @param {string} offerFile Link file đính kèm (nếu có)
  * @returns {Object} Đơn ứng tuyển đã cập nhật
  */
-export const updateApplicationStatus = async (applicationId, recruiterId, status) => {
+export const updateApplicationStatus = async (applicationId, recruiterId, status, offerLetter = null, offerFile = null) => {
   // Kiểm tra ID hợp lệ
   if (!mongoose.Types.ObjectId.isValid(applicationId)) {
     throw new BadRequestError('ID đơn ứng tuyển không hợp lệ');
@@ -293,6 +295,12 @@ export const updateApplicationStatus = async (applicationId, recruiterId, status
   const oldStatus = application.status;
   application.status = status;
   application.lastStatusUpdateAt = new Date();
+
+  // Save offer details if status is OFFER_SENT
+  if (status === 'OFFER_SENT') {
+    if (offerLetter) application.offerLetter = offerLetter;
+    if (offerFile) application.offerFile = offerFile;
+  }
 
   // Ghi log activity, cũng hiển thị cho ứng viên
   if (status === 'SUITABLE') {

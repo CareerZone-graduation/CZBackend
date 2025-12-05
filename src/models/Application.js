@@ -139,6 +139,14 @@ const applicationSchema = new mongoose.Schema({
     trim: true,
     maxlength: [2000, 'Notes cannot exceed 2000 characters']
   },
+  offerLetter: {
+    type: String,
+    trim: true
+  },
+  offerFile: {
+    type: String, // URL to the file
+    trim: true
+  },
   jobSnapshot: {
     title: {
       type: String,

@@ -68,3 +68,4 @@ const uploadContactFile = multer({
 });
 
 export const uploadContactAttachments = uploadContactFile;
+export const uploadOfferFile = uploadContactFile.single('offerFile');

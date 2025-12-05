@@ -385,7 +385,7 @@ export const getApplicationById = async (userId, applicationId) => {
         _id: applicationId,
         candidateProfileId: candidateProfile._id
     })
-        .select('jobId status appliedAt lastStatusUpdateAt coverLetter submittedCV jobSnapshot candidateName candidateEmail candidatePhone candidateRating notes activityHistory isReapplied previousApplicationId')
+        .select('jobId status appliedAt lastStatusUpdateAt coverLetter submittedCV jobSnapshot candidateName candidateEmail candidatePhone candidateRating notes activityHistory isReapplied previousApplicationId offerLetter offerFile')
         .populate({
             path: 'jobId',
             select: 'recruiterProfileId',

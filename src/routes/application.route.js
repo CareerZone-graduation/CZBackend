@@ -57,7 +57,17 @@ router.patch(
   passport.authenticate('jwt', { session: false }),
   authMiddleware.recruiterOnly,
   validationMiddleware.validateParams(applicationSchema.applicationIdParam),
-  validationMiddleware.validateBody(applicationSchema.updateApplicationStatusBody),
+  validationMiddleware.validateParams(applicationSchema.applicationIdParam),
+  // validationMiddleware.validateBody(applicationSchema.updateApplicationStatusBody), // Tạm tắt validate body vì dùng FormData
+  (req, res, next) => {
+    // Middleware xử lý upload trước
+    import('../middleware/upload.middleware.js').then(({ uploadOfferFile }) => {
+      uploadOfferFile(req, res, (err) => {
+        if (err) return next(err);
+        next();
+      });
+    }).catch(next);
+  },
   applicationController.updateApplicationStatus
 );
 
