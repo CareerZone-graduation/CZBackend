@@ -2611,8 +2611,8 @@ const buildSearchFilter = (searchParams) => {
     compound: {
       must: [
         { equals: { path: 'status', value: 'ACTIVE' } },
-        // { equals: { path: 'moderationStatus', value: 'APPROVED' } },
-        { range: { path: 'deadline', gte: new Date() } }
+        { equals: { path: 'moderationStatus', value: 'APPROVED' } },
+        // { range: { path: 'deadline', gte: new Date() } }
       ],
       should: [],
     }
@@ -2642,31 +2642,21 @@ const buildSearchFilter = (searchParams) => {
     filter.compound.must.push({ equals: { path: 'location.district', value: searchParams.district } });
   }
 
-  // Salary range filters
-  if (searchParams.minSalary || searchParams.maxSalary) {
-    const salaryFilter = { compound: { should: [] } };
-    if (searchParams.minSalary && searchParams.maxSalary) {
-      // Job salary range overlaps with user's salary range
-      salaryFilter.compound.should.push({
-        compound: {
-          must: [
-            { range: { path: 'maxSalary', gte: searchParams.minSalary } },
-            { range: { path: 'minSalary', lte: searchParams.maxSalary } }
-          ]
-        }
-      });
-    } else if (searchParams.minSalary) {
-      salaryFilter.compound.should.push({
-        range: { path: 'maxSalary', gte: searchParams.minSalary }
-      });
-    } else if (searchParams.maxSalary) {
-      salaryFilter.compound.should.push({
-        range: { path: 'minSalary', lte: searchParams.maxSalary }
-      });
-    }
-
-    filter.compound.must.push(salaryFilter);
+  // Salary range filters (Strict Containment)
+  // Job's minSalary must be >= User's minSalary
+  if (searchParams.minSalary) {
+    filter.compound.must.push({
+      range: { path: 'minSalary', gte: searchParams.minSalary }
+    });
   }
+
+  // Job's maxSalary must be <= User's maxSalary
+  if (searchParams.maxSalary) {
+    filter.compound.must.push({
+      range: { path: 'maxSalary', lte: searchParams.maxSalary }
+    });
+  }
+
   const { userLocation } = searchParams || {};
   if (userLocation) {
     filter.compound.should.push({
@@ -2709,25 +2699,15 @@ const buildPreFilter = (searchParams) => {
     preFilter['location.district'] = searchParams.district;
   }
 
-  // Salary range filters
-  if (searchParams.minSalary || searchParams.maxSalary) {
-    if (searchParams.minSalary && searchParams.maxSalary) {
-      preFilter.$or = [
-        {
-          $and: [
-            { maxSalary: { $gte: searchParams.minSalary } },
-            { minSalary: { $lte: searchParams.maxSalary } }
-          ]
-        }
-      ];
-    }
-    else if (searchParams.minSalary) {
-      preFilter.maxSalary = { $gte: searchParams.minSalary };
-    }
-    else if (searchParams.maxSalary) {
-      preFilter.minSalary = { $lte: searchParams.maxSalary };
-    }
+  // Salary range filters (Strict Containment)
+  if (searchParams.minSalary) {
+    preFilter.minSalary = { $gte: searchParams.minSalary };
   }
+
+  if (searchParams.maxSalary) {
+    preFilter.maxSalary = { $lte: searchParams.maxSalary };
+  }
+
   return preFilter;
 
 };
@@ -3226,7 +3206,7 @@ const fallbackAutocomplete = async (query, limit = 10) => {
       {
         $match: {
           status: 'ACTIVE',
-          approved: true,
+          moderationStatus: 'APPROVED',
           title: {
             $regex: escapedQuery,
             $options: 'i'
@@ -3299,7 +3279,7 @@ export const findJobsInBounds = async (bounds) => {
 
   const jobs = await Job.find({
     status: 'ACTIVE',
-    approved: true,
+    moderationStatus: 'APPROVED',
     'location.coordinates': {
       $geoWithin: {
         $box: [
@@ -3359,7 +3339,7 @@ export const getClustersFromDb = async (bounds, zoom) => {
     {
       $match: {
         status: 'ACTIVE',
-        approved: true,
+        moderationStatus: 'APPROVED',
         'location.coordinates': {
           $geoWithin: {
             $box: [
@@ -3534,6 +3514,7 @@ export const getMapClusters = async (bounds, zoom, filters = {}) => {
   // 1. Xây dựng điều kiện match cơ bản
   const baseMatch = {
     status: 'ACTIVE',
+    moderationStatus: 'APPROVED',
     'location.coordinates.coordinates': {
       $geoWithin: {
         $box: [
@@ -3574,12 +3555,12 @@ export const getMapClusters = async (bounds, zoom, filters = {}) => {
       },
     },
 
-    // Giai đoạn 3: Lọc chỉ lấy clusters (point_count > 1)
-    {
-      $match: {
-        point_count: { $gt: 1 } // ✅ CHỈ LẤY CLUSTERS, bỏ qua singles
-      }
-    },
+    // Giai đoạn 3: Lọc chỉ lấy clusters (point_count > 1) - REMOVED to show all
+    // {
+    //   $match: {
+    //     point_count: { $gt: 1 }
+    //   }
+    // },
 
     // Giai đoạn 4: Định dạng lại đầu ra
     {

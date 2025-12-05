@@ -235,12 +235,11 @@ jobSchema.index({ 'location.district': 1 });
 jobSchema.index({ 'location.commune': 1 });
 jobSchema.index({ 'location.coordinates': '2dsphere' }); // Added geospatial index
 jobSchema.index({ status: 1 }); // Added index for status
-jobSchema.index({ approved: 1 }); // Added index for approved
 jobSchema.index({ deadline: 1 });
 jobSchema.index({ createdAt: -1 });
 
 // Compound indexes for common queries
-jobSchema.index({ status: 1, approved: 1, deadline: 1 }); // Updated compound index
+jobSchema.index({ status: 1, moderationStatus: 1, deadline: 1 }); // Updated compound index
 jobSchema.index({ category: 1, type: 1, workType: 1, status: 1 }); // Updated compound index
 jobSchema.index({ 'location.province': 1, 'location.district': 1, category: 1, status: 1 });
 
