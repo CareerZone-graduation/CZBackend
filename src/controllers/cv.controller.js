@@ -402,11 +402,24 @@ export const exportPdf = async (req, res) => {
     });
 
     // Navigate to the render page
-    const renderUrl = `${config.CANDIDATE_FE_URL}/render.html?cvId=${id}`;
+    // 1. LẤY TOKEN TỪ REQUEST HIỆN TẠI
+    const token = req.headers.authorization?.split(" ")[1] || process.env.INTERNAL_PDF_TOKEN;
+
+    // 2. TRUYỀN TOKEN VÀO URL (Đây là chìa khóa)
+    // Frontend sẽ đọc token này để gọi API
+    const renderUrl = `${config.CANDIDATE_FE_URL}/render.html?cvId=${id}&token=${token}`;
     // const renderUrl =
     //   "http://localhost:3000/render.html?cvId=68da98728ae1c8ab421b668d";
     console.log("Navigating to:", renderUrl);
     // ✅ Thêm header auth tại đây
+    // 3. SET LOCALSTORAGE TRƯỚC KHI PAGE LOAD (Mẹo nâng cao để Frontend không phải sửa nhiều)
+    // Chúng ta can thiệp vào trang web ngay khi nó vừa khởi tạo
+    await page.evaluateOnNewDocument((token) => {
+      localStorage.setItem('accessToken', token); // Hoặc key mà frontend bạn đang dùng
+      localStorage.setItem('token', token);       // Set cả 2 cho chắc
+    }, token);
+
+    // ✅ Thêm header auth tại đây (Backup)
     await page.setExtraHTTPHeaders({
       Authorization: `Bearer ${req.headers.authorization?.split(" ")[1] ||
         process.env.INTERNAL_PDF_TOKEN
@@ -429,7 +442,6 @@ export const exportPdf = async (req, res) => {
     await page.waitForSelector('body[data-cv-ready="true"]', {
       timeout: 90000,
     });
-    await page.waitForSelector('[data-cv-ready="true"]', { timeout: 10000 });
     console.log("[DEBUG] Frontend signal received!");
 
     // ================= CHỤP ẢNH MÀN HÌNH ĐỂ XEM =================
