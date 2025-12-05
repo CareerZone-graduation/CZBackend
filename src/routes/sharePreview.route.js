@@ -47,7 +47,7 @@ router.get('/jobs/:id', async (req, res) => {
             <h1>Công việc không tồn tại</h1>
             <script>
               setTimeout(() => {
-                window.location.href = '${process.env.FRONTEND_URL || 'http://localhost:5173'}';
+                window.location.href = '${process.env.CLIENT_URL || 'http://localhost:5173'}';
               }, 3000);
             </script>
           </body>
@@ -72,10 +72,10 @@ router.get('/jobs/:id', async (req, res) => {
       absoluteLogoUrl = companyLogo;
     } else if (companyLogo.startsWith('/')) {
       // Relative URL from root
-      absoluteLogoUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}${companyLogo}`;
+      absoluteLogoUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}${companyLogo}`;
     } else {
       // Relative path without leading slash
-      absoluteLogoUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/${companyLogo}`;
+      absoluteLogoUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/${companyLogo}`;
     }
     
     // *** KIỂM TRA KÍCH THƯỚC ẢNH ***
@@ -94,11 +94,11 @@ router.get('/jobs/:id', async (req, res) => {
       absoluteLogoUrl,
       ogImageUrl,
       isLogoLargeEnough,
-      frontendUrl: process.env.FRONTEND_URL
+      frontendUrl: process.env.CLIENT_URL
     });
 
     // Actual job URL on frontend
-    const actualJobUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/jobs/${id}`;
+    const actualJobUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/jobs/${id}`;
 
     // Clean and truncate description
     const description = (job.description || 'Tìm kiếm cơ hội nghề nghiệp tại CareerZone')
@@ -449,7 +449,7 @@ router.get('/jobs/:id', async (req, res) => {
           <p>Vui lòng thử lại sau.</p>
           <script>
             setTimeout(() => {
-              window.location.href = '${process.env.FRONTEND_URL || 'http://localhost:5173'}';
+              window.location.href = '${process.env.CLIENT_URL || 'http://localhost:5173'}';
             }, 3000);
           </script>
         </body>

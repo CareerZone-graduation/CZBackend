@@ -2,7 +2,7 @@
 import puppeteer from "puppeteer";
 import CV from "../models/CV.js";
 import { NotFoundError } from "../utils/AppError.js";
-import config  from "../config/index.js";
+import config from "../config/index.js";
 /**
  * @desc    Create a new CV
  * @route   POST /api/cvs
@@ -105,10 +105,10 @@ export const createCvFromProfile = async (req, res) => {
 
   // Import CandidateProfile model
   const { CandidateProfile } = await import('../models/index.js');
-  
+
   // Get candidate profile
   const profile = await CandidateProfile.findOne({ userId: req.user._id }).lean();
-  
+
   if (!profile) {
     return res.status(404).json({
       success: false,
@@ -415,7 +415,7 @@ export const exportPdf = async (req, res) => {
 
     await page.goto(renderUrl, {
       waitUntil: "networkidle0",
-      timeout: 30000,
+      timeout: 90000,
     });
     // console.log('Waiting for frontend signal (data-cv-ready="true")...');
     // await page.waitForSelector('body[data-cv-ready="true"]', {
@@ -427,7 +427,7 @@ export const exportPdf = async (req, res) => {
       '[DEBUG] Waiting for frontend signal (data-cv-ready="true")...'
     );
     await page.waitForSelector('body[data-cv-ready="true"]', {
-      timeout: 30000,
+      timeout: 90000,
     });
     await page.waitForSelector('[data-cv-ready="true"]', { timeout: 10000 });
     console.log("[DEBUG] Frontend signal received!");
@@ -437,13 +437,13 @@ export const exportPdf = async (req, res) => {
     // await page.screenshot({ path: screenshotPath, fullPage: true });
     // console.log(`[DEBUG] Screenshot saved to: ${screenshotPath}`);
     // ==============================================================
-// 2. Bắt Puppeteer dùng CSS media "screen"
+    // 2. Bắt Puppeteer dùng CSS media "screen"
     // Generate PDF with exact settings
     const pdfBuffer = await page.pdf({
       format: "A4",
       printBackground: true,
       width: '210mm',         // Giữ nguyên chiều rộng A4
-  height: '1123px',         // <-- CON SỐ NÀY PHẢI KHỚP VỚI A4_HEIGHT_PX
+      height: '1123px',         // <-- CON SỐ NÀY PHẢI KHỚP VỚI A4_HEIGHT_PX
       margin: {
         top: "0mm",
         right: "0mm",

@@ -118,7 +118,7 @@ const config = {
 
   RECRUITER_FE_URL: process.env.RECRUITER_FE_URL || 'http://localhost:4000',
   CANDIDATE_FE_URL: process.env.CANDIDATE_FE_URL || 'http://localhost:3000',
-  ADMIN_FE_URL: process.env.ADMIN_FE_URL || 'http://localhost:5000'
+  ADMIN_FE_URL: process.env.ADMIN_FE_URL || 'http://localhost:3200'
 };
 
 // Validate required environment variables

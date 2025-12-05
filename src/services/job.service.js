@@ -3504,12 +3504,26 @@ const getBucketCount = (zoom) => {
  * @returns {Promise<Array>} Danh sách CHỈ GỒM clusters (type: 'cluster', count > 1)
  */
 export const getMapClusters = async (bounds, zoom, filters = {}) => {
-  const bucketCount = getBucketCount(zoom);
+  // Determine grid size (in degrees) based on zoom level
+  // This controls the clustering radius
+  const getGridSize = (z) => {
+    const zoomLevel = parseInt(z);
+    if (zoomLevel <= 4) return 4.0;
+    if (zoomLevel <= 5) return 2.0;
+    if (zoomLevel <= 6) return 1.0;
+    if (zoomLevel <= 7) return 0.5;
+    if (zoomLevel <= 8) return 0.25;
+    if (zoomLevel <= 9) return 0.12;
+    if (zoomLevel <= 10) return 0.06;
+    if (zoomLevel <= 11) return 0.03;
+    return 0.015;
+  };
+
+  const gridSize = getGridSize(zoom);
 
   // ✅ DEBUG: Log input parameters
-  logger.info(`[MAP CLUSTERS] Zoom: ${zoom}, BucketCount: ${bucketCount}`);
+  logger.info(`[MAP CLUSTERS] Zoom: ${zoom}, GridSize: ${gridSize}`);
   logger.info(`[MAP CLUSTERS] Bounds:`, bounds);
-  logger.info(`[MAP CLUSTERS] Filters:`, filters);
 
   // 1. Xây dựng điều kiện match cơ bản
   const baseMatch = {
@@ -3533,44 +3547,57 @@ export const getMapClusters = async (bounds, zoom, filters = {}) => {
   if (filters.province) baseMatch['location.province'] = filters.province;
   if (filters.district) baseMatch['location.district'] = filters.district;
 
-  // 2. Xây dựng Aggregation Pipeline với $bucketAuto
+  // 2. Xây dựng Aggregation Pipeline với Grid Clustering (No $function)
   const pipeline = [
     // Giai đoạn 1: Lọc các công việc trong khung nhìn và theo bộ lọc
     { $match: baseMatch },
 
-    // Giai đoạn 2: Tự động phân cụm
+    // Giai đoạn 2: Calculate Grid Coordinates
     {
-      $bucketAuto: {
-        groupBy: '$location.coordinates.coordinates', // Phân nhóm dựa trên tọa độ
-        buckets: bucketCount, // Số lượng cụm tối đa mong muốn
-        output: {
-          // Đếm số lượng công việc trong mỗi cụm
-          point_count: { $sum: 1 },
-          // Lấy tọa độ của công việc đầu tiên làm đại diện cho cụm
-          coordinates: { $first: '$location.coordinates.coordinates' },
-          // Thu thập các ID của công việc trong cụm
-          jobIds: { $push: '$_id' }
-          // ✅ REMOVED: jobs field (không cần nữa vì chỉ trả clusters)
+      $project: {
+        _id: 1,
+        // Calculate grid bucket indices
+        gridX: {
+          $floor: {
+            $divide: [
+              { $arrayElemAt: ["$location.coordinates.coordinates", 0] },
+              gridSize
+            ]
+          }
         },
-      },
+        gridY: {
+          $floor: {
+            $divide: [
+              { $arrayElemAt: ["$location.coordinates.coordinates", 1] },
+              gridSize
+            ]
+          }
+        },
+        coords: "$location.coordinates.coordinates"
+      }
     },
 
-    // Giai đoạn 3: Lọc chỉ lấy clusters (point_count > 1) - REMOVED to show all
-    // {
-    //   $match: {
-    //     point_count: { $gt: 1 }
-    //   }
-    // },
+    // Giai đoạn 3: Group by Grid Coordinates
+    {
+      $group: {
+        _id: { x: "$gridX", y: "$gridY" },
+        count: { $sum: 1 },
+        // Calculate average center for the cluster
+        avgLng: { $avg: { $arrayElemAt: ["$coords", 0] } },
+        avgLat: { $avg: { $arrayElemAt: ["$coords", 1] } },
+        jobIds: { $push: "$_id" }
+      }
+    },
 
-    // Giai đoạn 4: Định dạng lại đầu ra
+    // Giai đoạn 4: Format Output
     {
       $project: {
         _id: 0,
-        coordinates: 1,
-        point_count: 1,
+        count: 1,
+        coordinates: ["$avgLng", "$avgLat"],
         jobIds: 1
-      },
-    },
+      }
+    }
   ];
 
   try {
@@ -3578,23 +3605,17 @@ export const getMapClusters = async (bounds, zoom, filters = {}) => {
 
     // ✅ DEBUG: Log raw aggregation results
     logger.info(`[MAP CLUSTERS] Raw results count: ${results.length}`);
-    if (results.length > 0) {
-      logger.info(`[MAP CLUSTERS] First result sample:`, JSON.stringify(results[0], null, 2));
-    }
 
-    // ✅ ĐỀ XUẤT 2: CHỈ TRẢ CLUSTERS - Không trả singles
-    // Frontend sẽ chỉ nhận clusters khi zoom < 12
-    // Aggregation pipeline đã lọc sẵn (point_count > 1) nên results chỉ chứa clusters
     const formattedResults = results.map(result => ({
       type: 'cluster',
       coordinates: result.coordinates,
-      count: result.point_count,
+      count: result.count,
       jobIds: result.jobIds.map(id => id.toString())
     }));
 
     // ✅ DEBUG: Log final formatted results
-    logger.info(`[MAP CLUSTERS] Final results: ${formattedResults.length} clusters ONLY (singles removed)`);
-    logger.info(`[MAP CLUSTERS] Total jobs in clusters: ${formattedResults.reduce((sum, c) => sum + c.count, 0)}`);
+    logger.info(`[MAP CLUSTERS] Final results: ${formattedResults.length} clusters/markers`);
+    logger.info(`[MAP CLUSTERS] Total jobs: ${formattedResults.reduce((sum, c) => sum + c.count, 0)}`);
 
     return formattedResults;
   } catch (error) {
