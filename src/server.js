@@ -26,11 +26,20 @@ dotenv.config();
 
 // Tạo HTTP server và Socket.IO
 const server = http.createServer(app);
+// const io = new socketio.Server(server, {
+//   cors: {
+//     origin: [config.CANDIDATE_FE_URL, config.RECRUITER_FE_URL, "http://localhost:3001", "http://localhost:3000", "http://localhost:3002", "http://localhost:3003", "http://localhost:3200"],
+//     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
+//     credentials: true,
+//   },
+//   path: '/socket.io',
+// });
+
 const io = new socketio.Server(server, {
   cors: {
-    origin: [config.CLIENT_URL, config.RECRUITER_FE_URL, "http://localhost:3001", "http://localhost:3000", "http://localhost:3002", "http://localhost:3003", "http://localhost:3200"],
+    origin: "*", // <--- Thay thế mảng cũ bằng dấu "*"
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
-    credentials: true,
+    credentials: false // <--- Quan trọng: Phải tắt cái này nếu dùng "*"
   },
   path: '/socket.io',
 });

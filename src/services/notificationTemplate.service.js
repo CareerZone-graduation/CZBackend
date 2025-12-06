@@ -173,7 +173,7 @@ class NotificationTemplateService {
    * @returns {string} Tracking URL
    */
   _generateJobTrackingUrl(jobId, notificationId) {
-    const baseUrl = config.CLIENT_URL;
+    const baseUrl = config.CANDIDATE_FE_URL;
     return `${baseUrl}/jobs/${jobId}?utm_source=email&utm_medium=notification&utm_campaign=job_alert&notification_id=${notificationId}`;
   }
 

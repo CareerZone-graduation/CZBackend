@@ -71,8 +71,6 @@ const config = {
 
   // Application URLs
   BACKEND_URL: process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`,
-  // Client Configuration
-  CLIENT_URL: process.env.CLIENT_URL || 'http://localhost:3000',
 
   // ZaloPay Configuration
   zalopay: {
@@ -80,7 +78,7 @@ const config = {
     key1: process.env.ZALOPAY_KEY1,
     key2: process.env.ZALOPAY_KEY2,
     create_order_url: process.env.ZALOPAY_CREATE_ORDER_URL || 'https://sb-openapi.zalopay.vn/v2/create',
-    redirect_url: process.env.ZALOPAY_REDIRECT_URL || `${process.env.CLIENT_URL}/payment/zalopay-redirect`,
+    redirect_url: process.env.ZALOPAY_REDIRECT_URL || `${process.env.CANDIDATE_FE_URL}/payment/zalopay-redirect`,
   },
   // Momo Configuration
   momo: {

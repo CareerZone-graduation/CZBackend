@@ -75,22 +75,23 @@ app.set('views', path.join(__dirname, 'views'));
 //     }),
 // );
 
-// // Giới hạn số request
-// app.use(
-//     '/api/',
-//     rateLimit({
-//         windowMs: 15 * 60 * 1000,
-//         max: 1000000,
-//         message: 'Too many requests from this IP, please try again later.',
-//         standardHeaders: true,
-//         legacyHeaders: false,
-//     }),
-// );
+// Giới hạn số request
+app.use(
+  '/api/',
+  rateLimit({
+    windowMs: 60 * 1000,
+    max: 200,
+    message: 'Too many requests from this IP, please try again later.',
+    standardHeaders: true,
+    legacyHeaders: false,
+  }),
+);
+
 
 // CORS
 // app.use(
 //     cors({
-//         origin: [config.CLIENT_URL,"http://localhost:3001","http://localhost:3000","http://localhost:3002", "http://localhost:3003","http://*.ngrok-free.app"],
+//         origin: [config.CANDIDATE_FE_URL,"http://localhost:3001","http://localhost:3000","http://localhost:3002", "http://localhost:3003","http://*.ngrok-free.app"],
 //         credentials: true,
 //         methods: ['GET', 'POST','PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
 //         allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
@@ -119,13 +120,17 @@ app.use(cookieParser());
 // === KHỞI TẠO PASSPORT ===
 app.use(passport.initialize());
 
+// welcome
+app.get('/', (_, res) => res.status(200).json(
+  { message: 'Welcome to CareerZone API"!' }
+))
 // Health check
 app.get('/health', (_, res) =>
-    res.status(200).json({
-        status: 'OK',
-        timestamp: new Date().toISOString(),
-        environment: config.NODE_ENV,
-    }),
+  res.status(200).json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    environment: config.NODE_ENV,
+  }),
 );
 
 // Routes

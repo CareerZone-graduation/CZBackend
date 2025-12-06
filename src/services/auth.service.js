@@ -205,7 +205,7 @@ export const forgotPassword = async (email) => {
     expiresIn: "10m", // Token chỉ có hiệu lực 10 phút
   });
 
-  const resetURL = `${config.CLIENT_URL}/reset-password?token=${resetToken}`;
+  const resetURL = `${config.CANDIDATE_FE_URL}/reset-password?token=${resetToken}`;
 
   const emailPayload = {
     to: user.email,
