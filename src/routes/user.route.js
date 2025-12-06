@@ -9,7 +9,7 @@ const router = express.Router();
 const jwtAuth = passport.authenticate('jwt', { session: false });
 
 router.route('/me')
-  .get(jwtAuth, userController.getMe);
+    .get(jwtAuth, userController.getMe);
 
 router.route('/change-password')
     .put(jwtAuth, userController.changePassword);
@@ -19,9 +19,15 @@ router.route('/me/coins')
 // router.route('/me/recharge-history')
 //     .get(jwtAuth, validate({ query: getRechargeHistorySchema }), userController.getRechargeHistory);
 router.route('/me/recharge-history')
-    .get(jwtAuth, validate(getRechargeHistorySchema,"query"), userController.getRechargeHistory);
+    .get(jwtAuth, validate(getRechargeHistorySchema, "query"), userController.getRechargeHistory);
 
 router.route('/register-device')
     .post(jwtAuth, userController.registerDevice);
+
+router.route('/unregister-device')
+    .post(jwtAuth, userController.unregisterDevice);
+
+router.route('/check-device')
+    .post(jwtAuth, userController.checkDevice);
 
 export default router;

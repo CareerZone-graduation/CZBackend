@@ -7,15 +7,15 @@ import * as userService from '../services/user.service.js';
  * @access Private
  */
 export const getMe = asyncHandler(async (req, res) => {
-  // The user object is attached to the request by the JWT middleware
-  const userId = req.user._id;
-  const userProfile = await userService.getUserProfile(userId);
+    // The user object is attached to the request by the JWT middleware
+    const userId = req.user._id;
+    const userProfile = await userService.getUserProfile(userId);
 
-  res.status(200).json({
-    success: true,
-    message: 'Lấy thông tin người dùng thành công.',
-    data: userProfile,
-  });
+    res.status(200).json({
+        success: true,
+        message: 'Lấy thông tin người dùng thành công.',
+        data: userProfile,
+    });
 });
 
 /**
@@ -24,15 +24,15 @@ export const getMe = asyncHandler(async (req, res) => {
 * @access Private
 */
 export const getCoinBalance = asyncHandler(async (req, res) => {
-  const userId = req.user._id;
-  const coinBalance = await userService.getCoinBalance(userId);
-  res.status(200).json({
-      success: true,
-      message: 'Lấy số dư xu thành công.',
-      data: {
-          coins: coinBalance,
-      },
-  });
+    const userId = req.user._id;
+    const coinBalance = await userService.getCoinBalance(userId);
+    res.status(200).json({
+        success: true,
+        message: 'Lấy số dư xu thành công.',
+        data: {
+            coins: coinBalance,
+        },
+    });
 });
 
 
@@ -63,6 +63,36 @@ export const registerDevice = asyncHandler(async (req, res) => {
     res.status(200).json({
         success: true,
         message: 'Device registered successfully.'
+    });
+});
+
+/**
+ * Unregister a device for FCM notifications.
+ * @route POST /api/users/unregister-device
+ * @access Private
+ */
+export const unregisterDevice = asyncHandler(async (req, res) => {
+    const { token } = req.body;
+    const userId = req.user._id;
+    await userService.unregisterDevice(userId, token);
+    res.status(200).json({
+        success: true,
+        message: 'Device unregistered successfully.'
+    });
+});
+
+/**
+ * Check if a device is registered for FCM notifications.
+ * @route POST /api/users/check-device
+ * @access Private
+ */
+export const checkDevice = asyncHandler(async (req, res) => {
+    const { token } = req.body;
+    const userId = req.user._id;
+    const isRegistered = await userService.checkDeviceStatus(userId, token);
+    res.status(200).json({
+        success: true,
+        data: { isRegistered }
     });
 });
 

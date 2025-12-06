@@ -11,7 +11,7 @@ export const getUserProfile = async (userId) => {
   const user = await User.findById(userId)
     .select('_id email role active coinBalance isEmailVerified createdAt updatedAt')
     .lean();
-  
+
   if (!user) {
     throw new NotFoundError('Không tìm thấy người dùng.');
   }
@@ -43,18 +43,18 @@ export const getUserProfile = async (userId) => {
  * @param {string} newPassword - The new password.
  */
 export const changePassword = async (userId, currentPassword, newPassword) => {
-    const user = await User.findById(userId).select('+password');
-    if (!user) {
-        throw new NotFoundError('Không tìm thấy người dùng.');
-    }
+  const user = await User.findById(userId).select('+password');
+  if (!user) {
+    throw new NotFoundError('Không tìm thấy người dùng.');
+  }
 
-    const isMatch = await user.comparePassword(currentPassword);
-    if (!isMatch) {
-        throw new BadRequestError('Mật khẩu hiện tại không chính xác.');
-    }
+  const isMatch = await user.comparePassword(currentPassword);
+  if (!isMatch) {
+    throw new BadRequestError('Mật khẩu hiện tại không chính xác.');
+  }
 
-    user.password = newPassword;
-    await user.save();
+  user.password = newPassword;
+  await user.save();
 };
 
 /**
@@ -77,28 +77,28 @@ export const getCoinBalance = async (userId) => {
  * @returns {Promise<Object>} The user's coin recharge history.
  */
 export const getRechargeHistory = async (userId, query) => {
-    const { page = 1, limit = 10 } = query;
-    const skip = (page - 1) * limit;
+  const { page = 1, limit = 10 } = query;
+  const skip = (page - 1) * limit;
 
-    const [data, total] = await Promise.all([
-        CoinRecharge.find({ userId })
-            .select('-__v -userId -metadata') // Loại bỏ các trường không cần thiết
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(Number(limit))
-            .lean(),
-        CoinRecharge.countDocuments({ userId }),
-    ]);
+  const [data, total] = await Promise.all([
+    CoinRecharge.find({ userId })
+      .select('-__v -userId -metadata') // Loại bỏ các trường không cần thiết
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit))
+      .lean(),
+    CoinRecharge.countDocuments({ userId }),
+  ]);
 
-    return {
-        meta: {
-            total,
-            page: Number(page),
-            limit: Number(limit),
-            totalPages: Math.ceil(total / limit),
-        },
-        data,
-    };
+  return {
+    meta: {
+      total,
+      page: Number(page),
+      limit: Number(limit),
+      totalPages: Math.ceil(total / limit),
+    },
+    data,
+  };
 };
 
 /**
@@ -107,12 +107,40 @@ export const getRechargeHistory = async (userId, query) => {
  * @param {string} token - The FCM token.
  */
 export const registerDevice = async (userId, token) => {
-    if (!token) {
-        throw new BadRequestError('Token is required.');
-    }
+  if (!token) {
+    throw new BadRequestError('Token is required.');
+  }
 
-    await User.updateOne(
-        { _id: userId },
-        { $addToSet: { fcmTokens: token } }
-    );
+  await User.updateOne(
+    { _id: userId },
+    { $addToSet: { fcmTokens: token } }
+  );
+};
+
+/**
+ * Unregister a device for FCM notifications.
+ * @param {string} userId - The ID of the user.
+ * @param {string} token - The FCM token.
+ */
+export const unregisterDevice = async (userId, token) => {
+  if (!token) {
+    throw new BadRequestError('Token is required.');
+  }
+
+  await User.updateOne(
+    { _id: userId },
+    { $pull: { fcmTokens: token } }
+  );
+};
+
+/**
+ * Check if a device is registered.
+ * @param {string} userId - The ID of the user.
+ * @param {string} token - The FCM token.
+ * @returns {Promise<boolean>}
+ */
+export const checkDeviceStatus = async (userId, token) => {
+  if (!token) return false;
+  const user = await User.findOne({ _id: userId, fcmTokens: token });
+  return !!user;
 };
