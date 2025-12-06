@@ -11,6 +11,15 @@ export const getJobs = asyncHandler(async (req, res) => {
   });
 });
 
+export const getJobStatistics = asyncHandler(async (req, res) => {
+  const data = await adminService.getJobStatistics();
+  res.json({
+    success: true,
+    message: 'Lấy thống kê công việc thành công.',
+    data
+  });
+});
+
 export const getJobDetail = asyncHandler(async (req, res) => {
   const data = await adminService.getJobDetail(req.params.id);
   res.json({
@@ -168,7 +177,7 @@ import logger from '../utils/logger.js';
 export const getAllSupportRequests = asyncHandler(async (req, res) => {
   // Use req.query directly if validatedQuery is not available
   const query = req.validatedQuery || req.query;
-  
+
   const filters = {
     status: query?.status,
     category: query?.category,
@@ -179,7 +188,7 @@ export const getAllSupportRequests = asyncHandler(async (req, res) => {
     dateTo: query?.toDate,
     isGuest: query?.isGuest
   };
-  
+
   console.log('📥 Admin getAllSupportRequests - Raw query:', req.query);
   console.log('📥 Admin getAllSupportRequests - Filters:', filters);
 
@@ -191,7 +200,7 @@ export const getAllSupportRequests = asyncHandler(async (req, res) => {
     page: parseInt(query?.page) || 1,
     limit: parseInt(query?.limit) || 10
   };
-  
+
   console.log('📥 Admin getAllSupportRequests - Sort:', sort);
   console.log('📥 Admin getAllSupportRequests - Pagination:', pagination);
 
@@ -211,7 +220,7 @@ export const getAllSupportRequests = asyncHandler(async (req, res) => {
  */
 export const getAdminSupportRequestById = asyncHandler(async (req, res) => {
   const requestId = req.params.id;
-  
+
   const { SupportRequest } = await import('../models/index.js');
   const supportRequest = await SupportRequest.findById(requestId).lean();
 

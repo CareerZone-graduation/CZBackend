@@ -234,7 +234,7 @@ export const applyToJobSchema = z.object({
 export const getMyJobsQuerySchema = z.object({
   page: z.coerce.number().min(1).optional().default(1),
   limit: z.coerce.number().min(1).max(100).optional().default(10),
-  status: z.enum(['ACTIVE', 'INACTIVE', 'EXPIRED', 'PENDING']).optional(),
+  status: z.string().optional(),
   sortBy: z.string().optional(),
   search: z.string().optional(), // Add this line
 });
@@ -258,7 +258,7 @@ export const hybridSearchJobSchema = z.object({
   // Weight parameters for RRF
   textWeight: z.coerce.number().min(0).max(1).default(0.4),
   vectorWeight: z.coerce.number().min(0).max(1).default(0.6),
-  
+
   // Location filter by distance (exact radius filtering)
   latitude: z.coerce.number().min(-90, 'Latitude phải trong khoảng -90 đến 90').max(90, 'Latitude phải trong khoảng -90 đến 90').optional(),
   longitude: z.coerce.number().min(-180, 'Longitude phải trong khoảng -180 đến 180').max(180, 'Longitude phải trong khoảng -180 đến 180').optional(),

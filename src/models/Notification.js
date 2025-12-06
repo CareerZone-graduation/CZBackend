@@ -35,6 +35,9 @@ const notificationSchema = new mongoose.Schema({
         "job_alert",
         "system",
         "job_applicants_rollup", // THÊM: Cho nhà tuyển dụng gộp nhóm.
+        "company_verification", // THÊM: Cho thông báo xác thực công ty.
+        "job_approval", // THÊM: Cho thông báo phê duyệt tin tuyển dụng.
+        "support_request", // THÊM: Cho thông báo yêu cầu hỗ trợ.
       ],
       message: "{VALUE} is not a valid notification type",
     },
@@ -58,7 +61,7 @@ const notificationSchema = new mongoose.Schema({
     ref: "User",
     required: [true, "User reference is required"],
   },
-}, { 
+}, {
   timestamps: true
 });
 
@@ -66,11 +69,11 @@ const notificationSchema = new mongoose.Schema({
 // --- INDEX MỚI QUAN TRỌNG ---
 // Đảm bảo mỗi nhà tuyển dụng chỉ có 1 thông báo gộp cho 1 job
 notificationSchema.index(
-  { userId: 1, type: 1, aggregationKey: 1 }, 
-  { 
-    unique: true, 
+  { userId: 1, type: 1, aggregationKey: 1 },
+  {
+    unique: true,
     // Chỉ áp dụng unique index cho các document có tồn tại aggregationKey
-    partialFilterExpression: { aggregationKey: { $exists: true } } 
+    partialFilterExpression: { aggregationKey: { $exists: true } }
   }
 );
 

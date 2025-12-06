@@ -2,6 +2,8 @@ import cron from 'node-cron';
 import SupportRequest from '../models/SupportRequest.js';
 import { sendEmail } from '../services/email.service.js';
 import logger from '../utils/logger.js';
+import * as queueService from '../services/queue.service.js';
+import { ROUTING_KEYS } from '../queues/rabbitmq.js';
 
 // Auto-close deadline: 48 hours from creation
 const AUTO_CLOSE_HOURS = 48;
@@ -105,6 +107,19 @@ const updateSupportRequestPriorities = async () => {
 
         // Send notification email
         await sendAutoCloseEmail(request);
+
+        // Send notification via RabbitMQ if user exists
+        if (request.requester && request.requester.userId) {
+          queueService.publishNotification(ROUTING_KEYS.SUPPORT_REQUEST, {
+            recipientId: request.requester.userId.toString(),
+            type: 'AUTO_CLOSED',
+            data: {
+              supportRequestId: request._id.toString(),
+              subject: request.subject,
+              url: `/support/${request._id}`
+            }
+          });
+        }
 
         logger.info(
           `Auto-closed support request ${request._id} (exceeded 48 hours without admin response)`

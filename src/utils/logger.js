@@ -74,7 +74,7 @@ const transports = [
     filename: path.join(logsDir, 'all.log'),
     format: fileFormat,
     maxsize: 5242880, // 5MB
-    maxFiles: 5,
+    maxFiles: 100,
   }),
   
   // File transport - Error logs
@@ -82,8 +82,8 @@ const transports = [
     filename: path.join(logsDir, 'error.log'),
     level: 'error',
     format: fileFormat,
-    maxsize: 5242880, // 5MB
-    maxFiles: 5,
+    maxsize: 5242880, //5MB
+    maxFiles: 100,
   }),
   
   // File transport - Combined logs (info và cao hơn)
@@ -91,8 +91,8 @@ const transports = [
     filename: path.join(logsDir, 'combined.log'),
     level: 'info',
     format: fileFormat,
-    maxsize: 5242880, // 5MB
-    maxFiles: 5,
+    maxsize: 52428800, //5MB
+    maxFiles: 100,
   }),
 ];
 

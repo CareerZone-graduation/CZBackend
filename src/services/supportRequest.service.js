@@ -5,6 +5,8 @@ import logger from '../utils/logger.js';
 import cloudinary from '../config/cloudinary.js';
 import { pushNotification } from './notification.service.js';
 import { sendSupportResponseEmail } from './email.service.js';
+import * as queueService from './queue.service.js';
+import { ROUTING_KEYS } from '../queues/rabbitmq.js';
 
 // =================================================================
 // Helper Services
@@ -31,9 +33,9 @@ export const uploadAttachments = async (files) => {
     }
 
     // Validate file type
-    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 
-                          'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                          'text/plain'];
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png',
+      'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/plain'];
     if (!allowedTypes.includes(file.mimetype)) {
       throw new BadRequestError(`File type ${file.mimetype} is not allowed`);
     }
@@ -112,7 +114,7 @@ export const sendNotificationToAdmin = async (supportRequestData) => {
   try {
     // Find all admin users
     const admins = await User.find({ role: 'admin', active: true }).select('_id').lean();
-    
+
     if (admins.length === 0) {
       logger.warn('No active admin users found to send notification');
       return;
@@ -128,7 +130,7 @@ export const sendNotificationToAdmin = async (supportRequestData) => {
         body: message,
         type: 'support_request',
         data: {
-          url: `/admin/support-requests/${supportRequestData._id}`,
+          url: `/admin/support/${supportRequestData._id}`,
           supportRequestId: supportRequestData._id.toString()
         }
       })
@@ -150,20 +152,17 @@ export const sendNotificationToAdmin = async (supportRequestData) => {
  */
 export const sendNotificationToUser = async (userId, supportRequestData) => {
   try {
-    const title = '💬 Phản hồi từ quản trị viên';
-    const message = `Bạn có phản hồi mới cho yêu cầu hỗ trợ: "${supportRequestData.subject}"`;
-
-    await pushNotification(userId, {
-      title,
-      body: message,
-      type: 'support_request',
+    queueService.publishNotification(ROUTING_KEYS.SUPPORT_REQUEST, {
+      recipientId: userId,
+      type: 'ADMIN_RESPONSE',
       data: {
-        url: `/support-requests/${supportRequestData._id}`,
-        supportRequestId: supportRequestData._id.toString()
+        supportRequestId: supportRequestData._id.toString(),
+        subject: supportRequestData.subject,
+        url: `/support/${supportRequestData._id}`
       }
     });
 
-    logger.info(`Sent support request response notification to user ${userId}`);
+    logger.info(`Sent support request response notification to user ${userId} via RabbitMQ`);
   } catch (error) {
     logger.error('Error sending notification to user:', error);
     // Don't throw - notification failure shouldn't block response
@@ -248,7 +247,7 @@ export const getUserSupportRequests = async (userId, filters = {}) => {
 
     // Build query
     const query = { 'requester.userId': new mongoose.Types.ObjectId(userId) };
-    
+
     logger.info(`Getting support requests for user ${userId} with filters:`, filters);
     logger.info(`Query:`, query);
 
@@ -346,7 +345,7 @@ export const addFollowUpMessage = async (requestId, userId, messageData, files) 
     // Get user information
     const user = await User.findById(userId).select('email').lean();
     let userName;
-    
+
     if (supportRequest.requester.userType === 'candidate') {
       const { CandidateProfile } = await import('../models/index.js');
       const profile = await CandidateProfile.findOne({ userId }).select('fullname').lean();
@@ -431,7 +430,7 @@ export const markAdminResponseAsRead = async (requestId, userId) => {
  */
 export const getAllSupportRequests = async (filters = {}, sort = {}, pagination = {}) => {
   try {
-    
+
     const page = parseInt(pagination.page, 10) || 1;
     const limit = Math.min(parseInt(pagination.limit, 10) || 20, 100);
     const skip = (page - 1) * limit;
@@ -441,10 +440,10 @@ export const getAllSupportRequests = async (filters = {}, sort = {}, pagination 
 
     if (filters.status) {
       // Handle comma-separated status values
-      const statusArray = typeof filters.status === 'string' 
+      const statusArray = typeof filters.status === 'string'
         ? filters.status.split(',').map(s => s.trim())
         : filters.status;
-      
+
       if (Array.isArray(statusArray) && statusArray.length > 0) {
         query.status = statusArray.length === 1 ? statusArray[0] : { $in: statusArray };
       } else {
@@ -497,7 +496,7 @@ export const getAllSupportRequests = async (filters = {}, sort = {}, pagination 
 
     // Build sort
     const sortOptions = {};
-    
+
     // Parse sortBy string (e.g., "-createdAt" or "createdAt")
     if (sort.sortBy) {
       const sortBy = sort.sortBy;
@@ -627,7 +626,7 @@ export const respondToRequest = async (requestId, adminId, response, statusUpdat
 
     // Add admin response
     supportRequest.adminResponses.push(adminResponse);
-    
+
     // Mark as having unread admin response
     supportRequest.hasUnreadAdminResponse = true;
 
@@ -638,15 +637,12 @@ export const respondToRequest = async (requestId, adminId, response, statusUpdat
       // For registered users: send in-app notification
       await sendNotificationToUser(supportRequest.requester.userId.toString(), supportRequest);
     }
-    
+
     // Always send email notification to requester (both registered and public users)
-    try {
-      await sendSupportResponseEmail(supportRequest, adminResponse);
-      logger.info(`Support response email sent to ${supportRequest.requester.email}`);
-    } catch (emailError) {
-      logger.error('Error sending support response email:', emailError);
-      // Don't throw error - email failure shouldn't block the response
-    }
+    sendSupportResponseEmail(supportRequest, adminResponse)
+      .then(() => logger.info(`Support response email sent to ${supportRequest.requester.email}`))
+      .catch(err => logger.error('Error sending support response email:', err));
+
 
     logger.info(`Admin ${adminId} responded to support request ${requestId}`);
     return supportRequest;
@@ -673,7 +669,7 @@ export const updateRequestStatus = async (requestId, adminId, newStatus) => {
 
     // Validate status transition
     const validTransitions = {
-      'pending': ['in-progress', 'closed','resolved'],
+      'pending': ['in-progress', 'closed', 'resolved'],
       'in-progress': ['resolved', 'closed'],
       'resolved': ['closed', 'in-progress'],
       'closed': [] // Closed requests should use reopen function
@@ -871,12 +867,12 @@ export const getAnalytics = async (dateRange = {}) => {
     });
 
     // Convert milliseconds to hours
-    const avgResponseTimeHours = responseTimeData.length > 0 
-      ? Math.round((responseTimeData[0].avgResponseTime / (1000 * 60 * 60)) * 100) / 100 
+    const avgResponseTimeHours = responseTimeData.length > 0
+      ? Math.round((responseTimeData[0].avgResponseTime / (1000 * 60 * 60)) * 100) / 100
       : 0;
 
-    const avgResolutionTimeHours = resolutionTimeData.length > 0 
-      ? Math.round((resolutionTimeData[0].avgResolutionTime / (1000 * 60 * 60)) * 100) / 100 
+    const avgResolutionTimeHours = resolutionTimeData.length > 0
+      ? Math.round((resolutionTimeData[0].avgResolutionTime / (1000 * 60 * 60)) * 100) / 100
       : 0;
 
     return {

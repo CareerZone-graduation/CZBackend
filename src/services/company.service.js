@@ -98,7 +98,33 @@ export const updateMyCompany = async (recruiterUserId, companyData, file) => {
     dataToUpdate.businessRegistrationUrl = uploadResult.secure_url;
   }
 
+
+  const criticalFields = ['name', 'taxCode', 'address'];
+  let isCriticalUpdate = false;
+
+  // Check if any critical field is being updated
+  for (const field of criticalFields) {
+    if (dataToUpdate[field] && dataToUpdate[field] !== recruiterProfile.company[field]) {
+      isCriticalUpdate = true;
+      break;
+    }
+  }
+
+  if (file) {
+    const folder = `CareerZone/business_registrations/${recruiterProfile.company._id}`;
+    const uploadResult = await uploadService.uploadFile(file, folder);
+    dataToUpdate.businessRegistrationUrl = uploadResult.secure_url;
+    isCriticalUpdate = true; // Uploading a new business registration file is always a critical update
+  }
+
   Object.assign(recruiterProfile.company, dataToUpdate);
+
+  if (isCriticalUpdate) {
+    recruiterProfile.company.verified = false;
+    recruiterProfile.company.status = 'pending';
+    recruiterProfile.company.rejectReason = null; // Clear previous reject reason
+  }
+
   await recruiterProfile.save();
 
   return recruiterProfile.company;

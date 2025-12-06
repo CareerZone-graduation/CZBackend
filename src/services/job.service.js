@@ -19,6 +19,8 @@ import { generateEmbeddingWithRetry } from '../utils/embedding.js';
 import { recordCreditTransaction } from './creditHistory.service.js';
 import { TRANSACTION_TYPES, TRANSACTION_CATEGORIES } from '../constants/index.js';
 
+import { getCoordinatesByLocationName } from '../utils/geoUtils.js';
+
 /**
  * Tìm CandidateProfile từ userId và kiểm tra sự tồn tại
  */
@@ -73,17 +75,21 @@ export const createJob = async (userId, jobData) => {
     // Copy location từ company
     finalJobData.location = { ...recruiterProfile.company.location };
     finalJobData.address = recruiterProfile.company.address;
+  }
 
-    // // Kiểm tra và sửa coordinates nếu không đầy đủ
-    // if (finalJobData.location.coordinates && 
-    //     (!finalJobData.location.coordinates.coordinates || 
-    //      finalJobData.location.coordinates.coordinates.length !== 2)) {
-    //   // Nếu coordinates không đầy đủ, tạo tọa độ mặc định
-    //   finalJobData.location.coordinates = {
-    //     type: 'Point',
-    //     coordinates: [106.6297, 10.8231] // Tọa độ mặc định (TP.HCM)
-    //   };
-    // }
+  // Đảm bảo có coordinates (tự sinh nếu thiếu)
+  if (finalJobData.location) {
+    const hasValidCoordinates = finalJobData.location.coordinates &&
+      Array.isArray(finalJobData.location.coordinates.coordinates) &&
+      finalJobData.location.coordinates.coordinates.length === 2 &&
+      typeof finalJobData.location.coordinates.coordinates[0] === 'number';
+
+    if (!hasValidCoordinates) {
+      finalJobData.location.coordinates = getCoordinatesByLocationName(
+        finalJobData.location.province,
+        finalJobData.location.district
+      );
+    }
   }
 
   const newJob = await Job.create({
@@ -216,34 +222,68 @@ export const getJobsByRecruiter = async (userId, options) => {
   const recruiterProfileId = recruiterProfile._id;
 
   const query = { recruiterProfileId };
-  // Filter by status
+  /* 
+   * Updated logic to handle multiple statuses and mixed checks on status vs moderationStatus 
+   */
+  const conditions = [];
+
+  // 1. Filter by status
   if (status) {
-    if (status === 'PENDING') {
-      // PENDING means moderationStatus is PENDING
-      query.moderationStatus = 'PENDING';
-    } else {
-      // For ACTIVE, INACTIVE, EXPIRED, job must be APPROVED
-      query.status = status;
-      query.moderationStatus = 'APPROVED';
+    const statusList = status.split(',');
+    const moderationStatuses = [];
+    const jobStatuses = [];
+
+    statusList.forEach(s => {
+      if (['PENDING', 'REJECTED'].includes(s)) {
+        moderationStatuses.push(s);
+      } else {
+        jobStatuses.push(s);
+      }
+    });
+
+    const statusConditions = [];
+
+    // Add condition for moderation statuses (PENDING, REJECTED)
+    if (moderationStatuses.length > 0) {
+      statusConditions.push({ moderationStatus: { $in: moderationStatuses } });
+    }
+
+    // Add condition for job statuses (ACTIVE, INACTIVE, EXPIRED) -> must be APPROVED
+    if (jobStatuses.length > 0) {
+      statusConditions.push({
+        status: { $in: jobStatuses },
+        moderationStatus: 'APPROVED'
+      });
+    }
+
+    if (statusConditions.length > 0) {
+      conditions.push({ $or: statusConditions });
     }
   }
 
   /**
- * Escape special characters for MongoDB regex
- * @param {string} text - Text to escape
- * @returns {string} Escaped text
- */
+   * Escape special characters for MongoDB regex
+   * @param {string} text - Text to escape
+   * @returns {string} Escaped text
+   */
   const escapeRegex = (text) => {
     return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   };
 
-  // Add search functionality with escaped regex
+  // 2. Filter by search term
   if (search) {
     const escapedSearch = escapeRegex(search);
-    query.$or = [
-      { title: { $regex: escapedSearch, $options: 'i' } },
-      { skills: { $regex: escapedSearch, $options: 'i' } }
-    ];
+    conditions.push({
+      $or: [
+        { title: { $regex: escapedSearch, $options: 'i' } },
+        { skills: { $regex: escapedSearch, $options: 'i' } }
+      ]
+    });
+  }
+
+  // Combine conditions into query
+  if (conditions.length > 0) {
+    query.$and = conditions;
   }
 
   const sortOptions = {};
@@ -496,16 +536,20 @@ export const updateJob = async (jobId, userId, updateData) => {
     // Copy location từ company
     finalUpdateData.location = { ...recruiterProfile.company.location };
     finalUpdateData.address = recruiterProfile.company.address;
+  }
 
-    // Kiểm tra và sửa coordinates nếu không đầy đủ
-    if (finalUpdateData.location.coordinates &&
-      (!finalUpdateData.location.coordinates.coordinates ||
-        finalUpdateData.location.coordinates.coordinates.length !== 2)) {
-      // Nếu coordinates không đầy đủ, tạo tọa độ mặc định
-      finalUpdateData.location.coordinates = {
-        type: 'Point',
-        coordinates: [106.6297, 10.8231] // Tọa độ mặc định (TP.HCM)
-      };
+  // Đảm bảo có coordinates (tự sinh nếu thiếu) khi update location
+  if (finalUpdateData.location) {
+    const hasValidCoordinates = finalUpdateData.location.coordinates &&
+      Array.isArray(finalUpdateData.location.coordinates.coordinates) &&
+      finalUpdateData.location.coordinates.coordinates.length === 2 &&
+      typeof finalUpdateData.location.coordinates.coordinates[0] === 'number';
+
+    if (!hasValidCoordinates) {
+      finalUpdateData.location.coordinates = getCoordinatesByLocationName(
+        finalUpdateData.location.province,
+        finalUpdateData.location.district
+      );
     }
   }
 

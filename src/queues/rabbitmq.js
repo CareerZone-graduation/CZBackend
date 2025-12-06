@@ -35,6 +35,7 @@ export const ROUTING_KEYS = {
   RECORDING_AVAILABLE: 'notification.recording_available', // Dành cho thông báo recording đã sẵn sàng
   JOB_APPROVAL: 'notification.job_approval', // Dành cho thông báo phê duyệt tin tuyển dụng
   COMPANY_VERIFICATION: 'notification.company_verification', // Dành cho thông báo xác thực công ty
+  SUPPORT_REQUEST: 'notification.support.request', // Dành cho thông báo yêu cầu hỗ trợ
   EMAIL_SEND: 'notification.email.send', // Dành cho các tác vụ gửi email chung
   NEW_APPLICATION: 'notification.new_application', // Dành cho thông báo ứng viên mới apply
   JOB_ALERT_DAILY: 'notification.job_alert.daily', // Dành cho thông báo việc làm hàng ngày
@@ -70,8 +71,8 @@ export async function getChannel() {
     const conn = await amqplib.connect(config.RABBITMQ_URL);
     // Bắt sự kiện khi kết nối bị đóng để xử lý (ví dụ: cố gắng kết nối lại)
     conn.on('close', () => {
-        logger.warn('RabbitMQ connection closed!');
-        channel = null; // Reset channel để lần gọi getChannel() tiếp theo sẽ tạo lại
+      logger.warn('RabbitMQ connection closed!');
+      channel = null; // Reset channel để lần gọi getChannel() tiếp theo sẽ tạo lại
     });
 
     // 2. Tạo một channel trên kết nối đó. Hầu hết các thao tác sẽ được thực hiện qua channel.
@@ -106,6 +107,9 @@ export async function getChannel() {
     await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.RECORDING_AVAILABLE);
     await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.EMAIL_SEND);
     await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.NEW_APPLICATION); // THÊM: Bind routing key mới
+    await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.COMPANY_VERIFICATION);
+    await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.JOB_APPROVAL);
+    await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.SUPPORT_REQUEST);
 
     // 6. Queue cho thông báo TỔNG HỢP (daily digest)  (job alert)
     await channel.assertQueue(QUEUES.DIGEST, {

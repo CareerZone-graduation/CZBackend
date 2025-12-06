@@ -51,12 +51,23 @@ export const getJobsForAdmin = async (queryParams) => {
       }
     }
   }
-  // Filter by status
+  // Filter by status (Unified)
   if (status) {
     if (status === 'PENDING') {
-      // PENDING means not approved yet
-      filter.approved = false;
+      filter.moderationStatus = 'PENDING';
+    } else if (status === 'ACTIVE') {
+      filter.status = 'ACTIVE';
+      filter.moderationStatus = 'APPROVED';
+    } else if (status === 'INACTIVE') {
+      filter.status = 'INACTIVE';
+      filter.moderationStatus = 'APPROVED';
+    } else if (status === 'EXPIRED') {
+      filter.status = 'EXPIRED';
+      filter.moderationStatus = 'APPROVED';
+    } else if (status === 'REJECTED') {
+      filter.moderationStatus = 'REJECTED';
     } else {
+      // Fallback for direct status match if needed
       filter.status = status;
     }
   }
@@ -87,7 +98,7 @@ export const getJobsForAdmin = async (queryParams) => {
         path: 'recruiterProfileId',
         select: 'company.name company.logo'
       })
-      .select('title description approved status createdAt recruiterProfileId')
+      .select('title description approved moderationStatus status createdAt recruiterProfileId')
       .sort(sortOptions)
       .skip(skip)
       .limit(limit)
@@ -105,6 +116,33 @@ export const getJobsForAdmin = async (queryParams) => {
       limit
     },
     data: jobs
+  };
+};
+
+export const getJobStatistics = async () => {
+  const [
+    active,
+    pending,
+    expired,
+    inactive,
+    rejected,
+    total
+  ] = await Promise.all([
+    Job.countDocuments({ status: 'ACTIVE', moderationStatus: 'APPROVED' }),
+    Job.countDocuments({ moderationStatus: 'PENDING' }),
+    Job.countDocuments({ status: 'EXPIRED', moderationStatus: 'APPROVED' }),
+    Job.countDocuments({ status: 'INACTIVE', moderationStatus: 'APPROVED' }),
+    Job.countDocuments({ moderationStatus: 'REJECTED' }),
+    Job.countDocuments()
+  ]);
+
+  return {
+    active,
+    pending,
+    expired,
+    inactive,
+    rejected,
+    total
   };
 };
 
@@ -164,13 +202,23 @@ export const getJobDetail = async (jobId) => {
 export const approveJob = async (jobId) => {
   const updatedJob = await Job.findByIdAndUpdate(
     jobId,
-    { approved: true },
+    { approved: true, moderationStatus: 'APPROVED', status: 'ACTIVE' },
     { new: true }
-  );
+  ).populate('recruiterProfileId');
 
   if (!updatedJob) {
     throw new NotFoundError('Tin tuyển dụng không tồn tại.');
   }
+
+  // Publish notification
+  await queueService.publishNotification(ROUTING_KEYS.JOB_APPROVAL, {
+    recipientId: updatedJob.recruiterProfileId.userId,
+    data: {
+      status: 'APPROVED',
+      jobTitle: updatedJob.title,
+      jobId: updatedJob._id
+    }
+  });
 
   return updatedJob;
 };
@@ -178,13 +226,23 @@ export const approveJob = async (jobId) => {
 export const rejectJob = async (jobId) => {
   const updatedJob = await Job.findByIdAndUpdate(
     jobId,
-    { approved: false, status: 'INACTIVE' },
+    { approved: false, status: 'INACTIVE', moderationStatus: 'REJECTED' },
     { new: true }
-  );
+  ).populate('recruiterProfileId');
 
   if (!updatedJob) {
     throw new NotFoundError('Tin tuyển dụng không tồn tại.');
   }
+
+  // Publish notification
+  await queueService.publishNotification(ROUTING_KEYS.JOB_APPROVAL, {
+    recipientId: updatedJob.recruiterProfileId.userId,
+    data: {
+      status: 'REJECTED',
+      jobTitle: updatedJob.title,
+      jobId: updatedJob._id
+    }
+  });
 
   return updatedJob;
 };
@@ -886,6 +944,19 @@ export const approveCompany = async (companyId) => {
     throw new NotFoundError('Hồ sơ nhà tuyển dụng không tồn tại.');
   }
 
+  // Publish notification
+  if (updatedProfile.userId && updatedProfile.userId._id) {
+    const payload = {
+      recipientId: updatedProfile.userId._id.toString(),
+      type: 'COMPANY_VERIFICATION',
+      data: {
+        status: 'approved',
+        companyName: updatedProfile.company?.name
+      }
+    };
+    await queueService.publishNotification(ROUTING_KEYS.COMPANY_VERIFICATION, payload);
+  }
+
   // Trả về cấu trúc cố định đầy đủ
   return {
     _id: updatedProfile._id,
@@ -940,6 +1011,20 @@ export const rejectCompany = async (companyId, { rejectReason }) => {
 
   if (!updatedProfile) {
     throw new NotFoundError('Hồ sơ nhà tuyển dụng không tồn tại.');
+  }
+
+  // Publish notification
+  if (updatedProfile.userId && updatedProfile.userId._id) {
+    const payload = {
+      recipientId: updatedProfile.userId._id.toString(),
+      type: 'COMPANY_VERIFICATION',
+      data: {
+        status: 'rejected',
+        reason: rejectReason,
+        companyName: updatedProfile.company?.name
+      }
+    };
+    await queueService.publishNotification(ROUTING_KEYS.COMPANY_VERIFICATION, payload);
   }
 
   // Trả về cấu trúc cố định đầy đủ
@@ -1171,7 +1256,8 @@ export const activateJob = async (jobId) => {
     jobId,
     {
       status: 'ACTIVE',
-      approved: true
+      approved: true,
+      moderationStatus: 'APPROVED'
     },
     { new: true }
   );

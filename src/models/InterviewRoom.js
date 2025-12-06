@@ -101,7 +101,7 @@ const interviewRoomSchema = new mongoose.Schema({
       message: 'Scheduled time must be in the future'
     }
   },
-  startTime: { //Mặc dù lịch là 10:00 sáng (scheduledTime), nhưng đến 10:05 sáng nhà tuyển dụng mới nhấn nút "Bắt đầu phỏng vấn" trong hệ thống. startTime sẽ được ghi nhận là 10:05
+  startTime: { //Mặc dù lịch là 10:00 sáng (scheduledTime), nhưng đến 10:05 mới "Bắt đầu phỏng vấn". startTime sẽ được ghi nhận là 10:05
     type: Date
   },
   endTime: { //Ví dụ: Buổi phỏng vấn kết thúc lúc 10:47 sáng. endTime sẽ được ghi nhận là 10:47.

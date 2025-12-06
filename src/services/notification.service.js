@@ -1107,3 +1107,173 @@ export const processJobAlertNotification = async (payload) => {
     throw error;
   }
 };
+
+/**
+ * Xử lý message COMPANY_VERIFICATION - Tạo thông báo khi công ty được phê duyệt/từ chối.
+ * @param {object} payload
+ * @returns {Promise<Notification>}
+ */
+export const handleCompanyVerification = async (payload) => {
+  const { recipientId, data } = payload;
+  const { status, reason, companyName } = data;
+
+  if (!recipientId) {
+    logger.warn('COMPANY_VERIFICATION payload is missing recipientId.', payload);
+    return;
+  }
+
+  let title = '';
+  let message = '';
+  let type = 'company_verification';
+  let url = '/company-profile';
+
+  if (status === 'approved') {
+    title = '✅ Công ty đã được xác thực';
+    message = `Hồ sơ công ty "${companyName || 'của bạn'}" đã được phê duyệt. Bạn có thể bắt đầu đăng tin tuyển dụng ngay bây giờ.`;
+  } else if (status === 'rejected') {
+    title = '❌ Xác thực công ty bị từ chối';
+    message = `Hồ sơ công ty "${companyName || 'của bạn'}" bị từ chối. Lý do: ${reason || 'Thông tin chưa hợp lệ'}. Vui lòng cập nhật và gửi lại.`;
+  } else {
+    logger.warn(`Unknown company verification status: ${status}`);
+    return;
+  }
+
+  const notification = await Notification.create({
+    userId: new mongoose.Types.ObjectId(recipientId),
+    title,
+    message,
+    type,
+    metadata: {
+      status,
+      reason,
+      companyName
+    }
+  });
+
+  // Gửi push notification
+  await pushNotification(recipientId, {
+    title,
+    body: message,
+    data: {
+      url
+    }
+  });
+
+  logger.info(`Company verification notification sent to ${recipientId} [${status}]`);
+  return notification;
+};
+
+/**
+ * Xử lý message JOB_APPROVAL - Tạo thông báo khi tin tuyển dụng được phê duyệt/từ chối.
+ * @param {object} payload
+ * @returns {Promise<Notification>}
+ */
+export const handleJobApproval = async (payload) => {
+  const { recipientId, data } = payload;
+  const { status, jobTitle, jobId } = data;
+
+  if (!recipientId) {
+    logger.warn('JOB_APPROVAL payload is missing recipientId.', payload);
+    return;
+  }
+
+  let title = '';
+  let message = '';
+  let type = 'job_approval';
+  let url = `/jobs/recruiter/${jobId}`;
+
+  if (status === 'APPROVED') {
+    title = '✅ Tin tuyển dụng được phê duyệt';
+    message = `Tin tuyển dụng "${jobTitle}" đã được duyệt và đang hiển thị công khai.`;
+  } else if (status === 'REJECTED') {
+    title = '❌ Tin tuyển dụng bị từ chối';
+    message = `Tin tuyển dụng "${jobTitle}" đã bị từ chối duyệt. Vui lòng kiểm tra lại nội dung.`;
+  } else {
+    logger.warn(`Unknown job approval status: ${status}`);
+    return;
+  }
+
+  const notification = await Notification.create({
+    userId: new mongoose.Types.ObjectId(recipientId),
+    title,
+    message,
+    type,
+    entity: {
+      type: 'Job',
+      id: jobId ? new mongoose.Types.ObjectId(jobId) : null
+    },
+    metadata: {
+      status,
+      jobTitle,
+      jobId
+    }
+  });
+
+  // Gửi push notification
+  await pushNotification(recipientId, {
+    title,
+    body: message,
+    data: {
+      url,
+      jobId
+    }
+  });
+
+  logger.info(`Job approval notification sent to ${recipientId} [${status}]`);
+  return notification;
+};
+
+/**
+ * Xử lý message SUPPORT_REQUEST - Thông báo yêu cầu hỗ trợ
+ * @param {object} payload - Payload từ RabbitMQ
+ */
+export const handleSupportRequest = async (payload) => {
+  const { recipientId, data, type } = payload;
+  let title = '';
+  let message = '';
+  const url = data.url || '/support';
+
+  if (type === 'ADMIN_RESPONSE') {
+    title = '💬 Phản hồi từ quản trị viên';
+    message = `Bạn có phản hồi mới cho yêu cầu hỗ trợ: "${data.subject}"`;
+  } else if (type === 'NEW_REQUEST') {
+    // Trường hợp thông báo cho admin
+    title = '🆘 Yêu cầu hỗ trợ mới';
+    message = `${data.requesterName} đã gửi yêu cầu hỗ trợ: "${data.subject}"`;
+  } else if (type === 'AUTO_CLOSED') {
+    title = 'Yêu cầu hỗ trợ đã đóng';
+    message = `Yêu cầu hỗ trợ "${data.subject}" đã được đóng tự động do quá hạn 48h chưa xử lý.`;
+  } else {
+    // Default fallback
+    title = 'Thông báo hỗ trợ';
+    message = data.message || 'Bạn có thông báo mới từ hỗ trợ.';
+  }
+
+  // 1. Tạo notification trong DB
+  const notification = await Notification.create({
+    userId: new mongoose.Types.ObjectId(recipientId),
+    title,
+    message,
+    type: 'support_request',
+    entity: {
+      type: 'SupportRequest',
+      id: new mongoose.Types.ObjectId(data.supportRequestId)
+    },
+    metadata: {
+      supportRequestId: data.supportRequestId,
+      url
+    }
+  });
+
+  // 2. Gửi Push Notification
+  await pushNotification(recipientId, {
+    title,
+    body: message,
+    data: {
+      url,
+      supportRequestId: data.supportRequestId
+    }
+  });
+
+  return notification;
+};

@@ -40,8 +40,9 @@ const handlerRegistry = {
   [ROUTING_KEYS.JOB_ALERT_WEEKLY]: notificationService.processJobAlertNotification,
 
   // === Legacy/System Notifications ===
-  [ROUTING_KEYS.JOB_APPROVAL]: () => {},
-  [ROUTING_KEYS.COMPANY_VERIFICATION]: () => {},
+  [ROUTING_KEYS.JOB_APPROVAL]: notificationService.handleJobApproval,
+  [ROUTING_KEYS.COMPANY_VERIFICATION]: notificationService.handleCompanyVerification,
+  [ROUTING_KEYS.SUPPORT_REQUEST]: notificationService.handleSupportRequest,
 };
 
 /**

@@ -19,6 +19,10 @@ router
   );
 
 router
+  .route('/jobs/stats')
+  .get(adminController.getJobStatistics);
+
+router
   .route('/jobs/:id')
   .get(
     validationMiddleware.validateParams(adminSchema.idParamsSchema),
