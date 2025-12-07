@@ -20,7 +20,7 @@ import './cron/updateSupportRequestPriority.cron.js';
 import './cron/paymentTimeout.cron.js';
 
 // Import watchers
-import { watchCandidateProfileChanges } from './watchers/candidateEmbedding.watcher.js';
+// import { watchCandidateProfileChanges } from './watchers/candidateEmbedding.watcher.js';
 
 dotenv.config();
 
@@ -53,8 +53,8 @@ const startServer = async () => {
     // await kafkaService.connectProducer();
 
     // Initialize change stream watchers
-    watchCandidateProfileChanges();
-    logger.info('Change stream watchers initialized');
+    // watchCandidateProfileChanges(); // Now handled by worker
+    // logger.info('Change stream watchers initialized');
 
     const PORT = config.PORT || 5000;
     server.listen(PORT, () => {

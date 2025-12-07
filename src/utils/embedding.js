@@ -97,3 +97,95 @@ export const generateEmbeddingWithRetry = async (text, maxRetries = 3) => {
   // If all retries failed, throw the last error
   throw lastError;
 };
+
+/**
+ * Generate multiple embeddings in a batch using Google Gemini API
+ * @param {string[]} texts - Array of texts to generate embeddings for
+ * @param {string} model - Model to use (default: models/gemini-embedding-001)
+ * @returns {Promise<Array<number[] | null>>} Array of embedding vectors (or null for failed items)
+ */
+export const generateBatchEmbeddings = async (texts, model = 'models/gemini-embedding-001') => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error('GEMINI_API_KEY is not configured');
+  if (!texts || texts.length === 0) return [];
+
+  const BATCH_LIMIT = 100; // Gemini API limit
+  const MAX_RETRIES = 10;
+  const allEmbeddings = new Array(texts.length).fill(null);
+
+  // Split input texts into batches of 100
+  const batches = [];
+  for (let i = 0; i < texts.length; i += BATCH_LIMIT) {
+    batches.push({
+      startIdx: i,
+      texts: texts.slice(i, i + BATCH_LIMIT)
+    });
+  }
+
+  for (const batch of batches) {
+    const requests = batch.texts.map(text => ({
+      model,
+      content: { parts: [{ text: text ? text.trim().substring(0, 9000) : '' }] }
+    }));  
+
+    // Retry loop
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents', {
+          method: 'POST',
+          headers: {
+            'x-goog-api-key': apiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ requests })
+        });
+
+        if (!response.ok) {
+          const status = response.status;
+          const errorText = await response.text();
+
+          if ((status === 429 || status >= 500) && attempt < MAX_RETRIES) {
+            // const waitTime = Math.pow(2, attempt) * 1000 + 500;
+            // logger.warn(`Gemini Batch API rate limit/error (${status}). Retrying in ${waitTime}ms... (Attempt ${attempt}/${MAX_RETRIES})`);
+            // await new Promise(r => setTimeout(r, waitTime));
+            const waitTime = 62000;
+            logger.warn(`Gemini Batch API rate limit/error (${status}). Retrying in ${waitTime}ms... (Attempt ${attempt}/${MAX_RETRIES})`);
+            await new Promise(r => setTimeout(r, waitTime));
+            continue; // Retry
+          }
+
+          logger.error(`Gemini Batch API fatal error (${status}):`, errorText);
+          break; // Fatal error, move to next batch
+        }
+
+        const data = await response.json();
+        const embeddings = data.embeddings || [];
+
+        // Map back to result array
+        embeddings.forEach((emb, i) => {
+          if (emb && emb.values) {
+            allEmbeddings[batch.startIdx + i] = emb.values;
+          }
+        });
+
+        break; // Success, exit retry loop
+
+      } catch (error) {
+        if (attempt < MAX_RETRIES) {
+          const waitTime = 61000;
+          logger.warn(`Network error in batch generation. Retrying in ${waitTime}ms...`, error.message);
+          await new Promise(r => setTimeout(r, waitTime));
+        } else {
+          logger.error('Final failure in batch embedding generation:', error);
+        }
+      }
+    }
+
+    // Delay between batches to be nice to API
+    if (batches.length > 1 && batch !== batches[batches.length - 1]) {
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  }
+
+  return allEmbeddings;
+};

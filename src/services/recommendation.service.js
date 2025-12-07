@@ -16,7 +16,7 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   const R = 6371; // Earth's radius in kilometers
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
+  const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
@@ -65,7 +65,7 @@ const filterBySkills = (candidateSkills, jobs) => {
     });
 
     const totalMatches = exactMatches.length + (partialMatches.length * 0.5);
-    
+
     if (totalMatches > 0) {
       matchedJobs.push({
         job,
@@ -75,7 +75,7 @@ const filterBySkills = (candidateSkills, jobs) => {
       });
 
       reasons[job._id.toString()] = reasons[job._id.toString()] || [];
-      
+
       if (exactMatches.length > 0) {
         reasons[job._id.toString()].push({
           type: 'skill_match',
@@ -83,7 +83,7 @@ const filterBySkills = (candidateSkills, jobs) => {
           weight: Math.min(40, exactMatches.length * 10)
         });
       }
-      
+
       if (partialMatches.length > 0) {
         reasons[job._id.toString()].push({
           type: 'skill_match',
@@ -320,7 +320,7 @@ const filterByWorkPreferences = (workPreferences, jobs) => {
       if (workPreferences.workTypes.includes(job.workType)) {
         workTypeMatch = true;
         totalScore += 15;
-        
+
         reasons[job._id.toString()] = reasons[job._id.toString()] || [];
         reasons[job._id.toString()].push({
           type: 'work_type_match',
@@ -335,7 +335,7 @@ const filterByWorkPreferences = (workPreferences, jobs) => {
       if (workPreferences.contractTypes.includes(job.type)) {
         contractTypeMatch = true;
         totalScore += 15;
-        
+
         reasons[job._id.toString()] = reasons[job._id.toString()] || [];
         reasons[job._id.toString()].push({
           type: 'contract_type_match',
@@ -350,7 +350,7 @@ const filterByWorkPreferences = (workPreferences, jobs) => {
       if (workPreferences.experienceLevel === job.experience) {
         experienceMatch = true;
         totalScore += 10;
-        
+
         reasons[job._id.toString()] = reasons[job._id.toString()] || [];
         reasons[job._id.toString()].push({
           type: 'experience_match',
@@ -407,12 +407,12 @@ export const generateRecommendations = async (userId, options = {}) => {
   // Add skills filter to query
   if (profile.skills && profile.skills.length > 0) {
     const skillNames = profile.skills.map(s => s.name);
-    matchQuery.$or.push({ 
-      skills: { 
-        $elemMatch: { 
-          name: { $in: skillNames } 
-        } 
-      } 
+    matchQuery.$or.push({
+      skills: {
+        $elemMatch: {
+          name: { $in: skillNames }
+        }
+      }
     });
   }
 
@@ -443,7 +443,7 @@ export const generateRecommendations = async (userId, options = {}) => {
     delete matchQuery.$or;
   }
 
-  logger.info('Built optimized query', { 
+  logger.info('Built optimized query', {
     userId,
     queryConditions: matchQuery.$or?.length || 0,
     hasCategories: !!profile.preferredCategories?.length,
@@ -519,7 +519,7 @@ export const generateRecommendations = async (userId, options = {}) => {
     userId,
     totalJobs: allJobs.length,
     matchedJobs: recommendations.length,
-    avgScore: recommendations.length > 0 
+    avgScore: recommendations.length > 0
       ? Math.round(recommendations.reduce((sum, r) => sum + r.score, 0) / recommendations.length)
       : 0
   });
@@ -531,7 +531,7 @@ export const generateRecommendations = async (userId, options = {}) => {
   if (topRecommendations.length > 0) {
     // Delete old recommendations for this candidate first
     await JobRecommendation.deleteMany({ candidateId: profile._id });
-    
+
     // Insert new recommendations
     const bulkOps = topRecommendations.map(rec => ({
       insertOne: {
@@ -595,8 +595,8 @@ export const getRecommendations = async (userId, options = {}) => {
     .lean();
 
   // Filter out recommendations where job no longer exists or is inactive
-  const validRecommendations = allRecommendations.filter(rec => 
-    rec.jobId && 
+  const validRecommendations = allRecommendations.filter(rec =>
+    rec.jobId &&
     rec.jobId.status === 'ACTIVE' &&
     new Date(rec.jobId.deadline) >= new Date()
   );
@@ -620,8 +620,8 @@ export const getRecommendations = async (userId, options = {}) => {
       limit,
       hasMore: page * limit < totalValidCount
     },
-    lastUpdated: paginatedRecommendations.length > 0 
-      ? paginatedRecommendations[0].generatedAt 
+    lastUpdated: paginatedRecommendations.length > 0
+      ? paginatedRecommendations[0].generatedAt
       : null
   };
 };
@@ -642,17 +642,17 @@ const calculateAverageEmbedding = (embeddings) => {
 
   const dim = embeddings[0].length;
   const avg = new Array(dim).fill(0);
-  
+
   for (const emb of embeddings) {
     for (let i = 0; i < dim; i++) {
       avg[i] += emb[i];
     }
   }
-  
+
   for (let i = 0; i < dim; i++) {
     avg[i] /= embeddings.length;
   }
-  
+
   return avg;
 };
 
@@ -671,7 +671,7 @@ const extractMatchedSkills = (jobSkills, candidateSkills) => {
   const matched = candidateSkills
     .filter(cs => jobSkillsLower.includes(cs.name.toLowerCase().trim()))
     .map(cs => cs.name);
-  
+
   return matched.slice(0, 5); // Return max 5 matched skills
 };
 
@@ -686,27 +686,27 @@ const calculateExperienceYears = (experiences) => {
   }
 
   let totalMonths = 0;
-  
+
   for (const exp of experiences) {
     try {
       const start = new Date(exp.startDate);
       const end = exp.endDate ? new Date(exp.endDate) : new Date();
-      
+
       if (isNaN(start.getTime())) {
         continue; // Skip invalid dates
       }
-      
-      const months = (end.getFullYear() - start.getFullYear()) * 12 + 
-                     (end.getMonth() - start.getMonth());
+
+      const months = (end.getFullYear() - start.getFullYear()) * 12 +
+        (end.getMonth() - start.getMonth());
       totalMonths += Math.max(0, months);
     } catch (error) {
-      logger.warn('Error calculating experience duration', { 
-        experience: exp, 
-        error: error.message 
+      logger.warn('Error calculating experience duration', {
+        experience: exp,
+        error: error.message
       });
     }
   }
-  
+
   return Math.round(totalMonths / 12);
 };
 
@@ -730,6 +730,61 @@ const getCurrentPosition = (experiences) => {
   return experiences[0]?.position || 'N/A';
 };
 
+/**
+ * Calculate cosine similarity between two vectors
+ * @param {number[]} vecA - Vector A
+ * @param {number[]} vecB - Vector B
+ * @returns {number} Cosine similarity (-1 to 1)
+ */
+const cosineSimilarity = (vecA, vecB) => {
+  if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < vecA.length; i++) {
+    dotProduct += vecA[i] * vecB[i];
+    normA += vecA[i] * vecA[i];
+    normB += vecB[i] * vecB[i];
+  }
+  return (normA === 0 || normB === 0) ? 0 : dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+};
+
+
+// Giai đoạn 1: Lọc thô (Vector Search trên DB)
+// Dòng code:
+// const avgEmbedding = calculateAverageEmbedding(jobEmbeddings); // Nếu Job có 1 chunk thì đây chính là vector của chunk đó
+// // ...
+// $vectorSearch: {
+//     path: 'embedding', // Search vào field embedding chính của User
+//     queryVector: queryVector, // Vector của Job
+//     // ...
+// }
+// Cơ chế: Nó lấy vector của Job so sánh với vector embedding (thường là vector đại diện/trung bình) của Candidate trong Database.
+
+// Mục đích: Lọc ra 100 ứng viên có "hồ sơ tổng quan" giống với Job nhất.
+
+// Giai đoạn 2: Tinh chỉnh (Re-ranking In-Memory)
+// Đây là phần quan trọng xử lý việc Candidate có nhiều chunk.
+
+// JavaScript
+
+// matchedUsers.forEach(user => {
+//     // ...
+//     if (user.chunks && user.chunks.length > 0) {
+//        for (const chunk of user.chunks) {
+//           // So sánh Job Vector với TỪNG Chunk của Candidate
+//           const score = cosineSimilarity(avgEmbedding, chunk.embedding); 
+//           if (score > maxChunkScore) {
+//              bestScore = maxChunkScore; // Lấy điểm của chunk cao nhất (MaxSim)
+//           }
+//        }
+//     }
+//     user.similarityScore = bestScore; // Cập nhật điểm cuối cùng
+// });
+// matchedUsers.sort(...) // Sắp xếp lại
+// Cơ chế: Với danh sách 100 người đã tìm được, code chạy vòng lặp so sánh Job với từng chunk chi tiết (Kinh nghiệm, Kỹ năng...) của ứng viên.
+
+// Logic: Sử dụng thuật toán Max Score (như mình đã đề cập ở câu trả lời trước). Nếu ứng viên có 1 chunk (ví dụ: "Kinh nghiệm làm ReactJS") khớp cực tốt với Job, điểm số sẽ được đẩy lên cao nhất.
 /**
  * Build MongoDB Atlas Vector Search aggregation pipeline
  * @param {Array<number>} queryVector - Query embedding vector
@@ -769,16 +824,23 @@ const buildVectorSearchPipeline = (queryVector, options = {}) => {
       }
     },
     {
+      $project: {
+        _id: 1,
+        similarityScore: 1,
+        chunks: 1 // Include chunks for re-ranking
+      }
+    },
+    // Don't apply skip/limit here yet if we want to re-rank everything returned
+    // But for performance on large sets, maybe we only re-rank the top K?
+    // Current logic applies sort AFTER vector search which returns 'limit' items.
+    // So we are re-ranking the top 'limit' items found by Average vector.
+    // Ideally we should fetch more, re-rank, then slice.
+    // Let's stick to simple re-ranking of the retrieved set for now.
+    {
       $skip: skip
     },
     {
       $limit: limit
-    },
-    {
-      $project: {
-        _id: 1,
-        similarityScore: 1
-      }
     }
   ];
 };
@@ -793,11 +855,11 @@ export const getCandidateSuggestions = async (jobId, options = {}) => {
   const { page = 1, limit = 10, minScore = 0.5 } = options;
   const skip = (page - 1) * limit;
 
-  logger.info('Getting candidate suggestions via vector search', { 
-    jobId, 
-    page, 
-    limit, 
-    minScore 
+  logger.info('Getting candidate suggestions via vector search', {
+    jobId,
+    page,
+    limit,
+    minScore
   });
 
   // Fetch job and validate it has embeddings
@@ -818,13 +880,13 @@ export const getCandidateSuggestions = async (jobId, options = {}) => {
   if (jobEmbeddings.length === 0) {
     throw new BadRequestError('Tin tuyển dụng không có embedding hợp lệ');
   }
-
+  // có thể không cần vì hiện quy định job chỉ có 1 chunk, nên avgEmbedding = jobEmbeddings[0] lun, nhưng dòng này để cho trường hợp job có nhiều chunk (nếu có chỉnh sửa trong tương lai)
   const avgEmbedding = calculateAverageEmbedding(jobEmbeddings);
 
-  logger.info('Calculated average embedding for job', { 
-    jobId, 
+  logger.info('Calculated average embedding for job', {
+    jobId,
     chunkCount: jobEmbeddings.length,
-    embeddingDimension: avgEmbedding.length 
+    embeddingDimension: avgEmbedding.length
   });
 
   // Build and execute MongoDB Atlas Vector Search pipeline
@@ -837,9 +899,43 @@ export const getCandidateSuggestions = async (jobId, options = {}) => {
 
   const matchedUsers = await User.aggregate(pipeline);
 
-  logger.info('Vector search completed', { 
-    jobId, 
-    matchedCount: matchedUsers.length 
+  // Giai đoạn 2: tinh chỉnh
+  // Re-rank based on best chunk match
+  if (matchedUsers.length > 0) {
+    matchedUsers.forEach(user => {
+      // Default to the vector search score (based on average)
+      let bestScore = user.similarityScore;
+
+      // If user has chunks, see if any single chunk matches better than the average
+      if (user.chunks && user.chunks.length > 0) {
+        let maxChunkScore = -1;
+
+        for (const chunk of user.chunks) {
+          if (chunk.embedding && chunk.embedding.length > 0) {
+            // Calculate cosine similarity between Job Average and Candidate Chunk
+            const score = cosineSimilarity(avgEmbedding, chunk.embedding);
+            if (score > maxChunkScore) {
+              maxChunkScore = score;
+            }
+          }
+        }
+
+        // If a specific chunk is a better match, upgrade the score
+        if (maxChunkScore > bestScore) {
+          bestScore = maxChunkScore;
+        }
+      }
+
+      user.similarityScore = bestScore;
+    });
+
+    // Sort by new refined score
+    matchedUsers.sort((a, b) => b.similarityScore - a.similarityScore);
+  }
+
+  logger.info('Vector search completed and re-ranked', {
+    jobId,
+    matchedCount: matchedUsers.length
   });
 
   if (matchedUsers.length === 0) {
@@ -869,9 +965,9 @@ export const getCandidateSuggestions = async (jobId, options = {}) => {
     .select('userId fullname avatar bio skills experiences preferredCategories')
     .lean();
 
-  logger.info('Fetched candidate profiles', { 
-    jobId, 
-    profileCount: profiles.length 
+  logger.info('Fetched candidate profiles', {
+    jobId,
+    profileCount: profiles.length
   });
 
   // Create lookup maps for efficient data access
@@ -911,9 +1007,9 @@ export const getCandidateSuggestions = async (jobId, options = {}) => {
   // Calculate total count for pagination
   const totalCount = candidates.length;
 
-  logger.info('Enriched candidate suggestions', { 
-    jobId, 
-    candidateCount: candidates.length 
+  logger.info('Enriched candidate suggestions', {
+    jobId,
+    candidateCount: candidates.length
   });
 
   return {

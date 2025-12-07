@@ -48,6 +48,10 @@ test-websocket-chat.html
 .kilocode
 serviceAccountKey.json
 .env.lht
+.env.production
+.env.local
+.env.test
+.env.development
 pnpm-lock.yaml
 package-lock.json
 scripts/chuan-hoa-location-data.js

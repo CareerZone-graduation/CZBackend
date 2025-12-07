@@ -62,7 +62,10 @@ import * as notFoundMiddleware from './middleware/notFound.middleware.js';
 dotenv.config();
 
 const app = express();
-app.use(morgan('combined', { stream: logger.stream }));
+// app.use(morgan('combined', { stream: logger.stream }));
+if (process.env.NODE_ENV === "development") {
+  app.use(morgan("combined", { stream: logger.stream }));
+}
 
 // Cấu hình view engine (chỉ dành cho 1 số trang như xác thực email trả về HTML)
 app.set('view engine', 'pug');
@@ -74,7 +77,7 @@ app.set('views', path.join(__dirname, 'views'));
 //         crossOriginResourcePolicy: { policy: 'cross-origin' },
 //     }),
 // );
-
+app.set('trust proxy', 1);
 // Giới hạn số request
 app.use(
   '/api/',

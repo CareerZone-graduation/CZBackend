@@ -1,15 +1,15 @@
 import { Job, User, CandidateProfile } from '../models/index.js';
-import { generateEmbeddingWithRetry } from '../utils/embedding.js';
+import { generateEmbeddingWithRetry, generateBatchEmbeddings } from '../utils/embedding.js';
 import logger from '../utils/logger.js';
 
 /**
  * Split text into chunks for embedding generation
  * @param {string} text - Text to split
- * @param {number} maxChunkSize - Maximum size of each chunk (default: 500)
+ * @param {number} maxChunkSize - Maximum size of each chunk (default: 1000)
  * @param {number} overlap - Overlap between chunks (default: 50)
  * @returns {string[]} Array of text chunks
  */
-const splitTextIntoChunks = (text, maxChunkSize = 500, overlap = 50) => {
+const splitTextIntoChunks = (text, maxChunkSize = 1000, overlap = 50) => {
   if (!text || text.length <= maxChunkSize) {
     return [text];
   }
@@ -19,7 +19,7 @@ const splitTextIntoChunks = (text, maxChunkSize = 500, overlap = 50) => {
 
   while (start < text.length) {
     let end = start + maxChunkSize;
-    
+
     // If this isn't the last chunk, try to break at a word boundary
     if (end < text.length) {
       const lastSpace = text.lastIndexOf(' ', end);
@@ -36,6 +36,21 @@ const splitTextIntoChunks = (text, maxChunkSize = 500, overlap = 50) => {
 };
 
 /**
+ * Prepare text content for job embedding
+ * @param {Object} job - Job document
+ * @returns {string} Combined text
+ */
+const prepareTextForJob = (job) => {
+  const textFields = [
+    job.title,
+    job.description,
+    job.requirements,
+    job.skills?.join(' '),
+  ].filter(Boolean);
+  return textFields.join(' ');
+};
+
+/**
  * Generate embeddings for a job and update the job document
  * @param {string} jobId - ID of the job
  * @returns {Promise<void>}
@@ -48,40 +63,30 @@ export const generateJobEmbeddings = async (jobId) => {
     }
 
     // Combine job text fields for embedding
-    const textFields = [
-      job.title,
-      job.description,
-      job.requirements,
-      job.benefits,
-      job.skills?.join(' '),
-      job.category,
-      job.area
-    ].filter(Boolean);
+    const combinedText = prepareTextForJob(job);
 
-    const combinedText = textFields.join(' ');
-    
     if (!combinedText.trim()) {
       logger.warn('No text content found for job embedding generation', { jobId });
       return;
     }
 
-    // Split text into chunks
-    const textChunks = splitTextIntoChunks(combinedText);
-    
-    logger.info('Generating embeddings for job', { 
-      jobId, 
+    // Split text into chunks (Use 8000 to keep it as 1 chunk mostly)
+    const textChunks = splitTextIntoChunks(combinedText, 8000);
+
+    logger.info('Generating embeddings for job', {
+      jobId,
       textLength: combinedText.length,
-      chunkCount: textChunks.length 
+      chunkCount: textChunks.length
     });
 
     // Generate embeddings for each chunk
     const chunks = [];
     for (let i = 0; i < textChunks.length; i++) {
       const chunkText = textChunks[i];
-      
+
       try {
         const embedding = await generateEmbeddingWithRetry(chunkText);
-        
+
         chunks.push({
           jobId: jobId.toString(),
           chunkIndex: i,
@@ -89,18 +94,18 @@ export const generateJobEmbeddings = async (jobId) => {
           embedding: embedding
         });
 
-        logger.debug('Generated embedding for chunk', { 
-          jobId, 
-          chunkIndex: i, 
+        logger.debug('Generated embedding for chunk', {
+          jobId,
+          chunkIndex: i,
           textLength: chunkText.length,
-          embeddingDimension: embedding.length 
+          embeddingDimension: embedding.length
         });
 
       } catch (error) {
-        logger.error('Failed to generate embedding for chunk', { 
-          jobId, 
-          chunkIndex: i, 
-          error: error.message 
+        logger.error('Failed to generate embedding for chunk', {
+          jobId,
+          chunkIndex: i,
+          error: error.message
         });
         // Continue with other chunks even if one fails
       }
@@ -117,16 +122,16 @@ export const generateJobEmbeddings = async (jobId) => {
       embeddingsUpdatedAt: new Date()
     });
 
-    logger.info('Successfully updated job with embeddings', { 
-      jobId, 
+    logger.info('Successfully updated job with embeddings', {
+      jobId,
       chunksGenerated: chunks.length,
-      totalChunks: textChunks.length 
+      totalChunks: textChunks.length
     });
 
   } catch (error) {
-    logger.error('Error generating job embeddings', { 
-      jobId, 
-      error: error.message 
+    logger.error('Error generating job embeddings', {
+      jobId,
+      error: error.message
     });
     throw error;
   }
@@ -138,45 +143,106 @@ export const generateJobEmbeddings = async (jobId) => {
  * @param {number} batchSize - Number of jobs to process concurrently (default: 5)
  * @returns {Promise<{success: number, failed: number, errors: Array}>}
  */
-export const batchGenerateJobEmbeddings = async (jobIds, batchSize = 5) => {
+export const batchGenerateJobEmbeddings = async (jobIds, batchSize = 50) => {
   const results = {
     success: 0,
     failed: 0,
     errors: []
   };
 
-  logger.info('Starting batch embedding generation', { 
-    totalJobs: jobIds.length, 
-    batchSize 
+  logger.info('Starting batch embedding generation (v2)', {
+    totalJobs: jobIds.length,
+    batchSize
   });
 
-  // Process jobs in batches to avoid overwhelming the API
+  // Process jobs in chunks of batchSize (e.g., 50 or 100)
   for (let i = 0; i < jobIds.length; i += batchSize) {
-    const batch = jobIds.slice(i, i + batchSize);
-    
-    const batchPromises = batch.map(async (jobId) => {
-      try {
-        await generateJobEmbeddings(jobId);
-        results.success++;
-        return { jobId, success: true };
-      } catch (error) {
-        results.failed++;
-        results.errors.push({ jobId, error: error.message });
-        return { jobId, success: false, error: error.message };
+    const batchIds = jobIds.slice(i, i + batchSize);
+
+    try {
+      // 1. Fetch Jobs
+      const jobs = await Job.find({ _id: { $in: batchIds } });
+      if (!jobs.length) continue;
+
+      // 2. Prepare text chunks for all jobs in this batch
+      const batchChunks = []; // { jobId, text, chunkIndex }
+
+      for (const job of jobs) {
+        try {
+          const text = prepareTextForJob(job);
+          if (!text.trim()) {
+            // Handle no text case
+            continue;
+          }
+
+          const chunks = splitTextIntoChunks(text, 3000, 150);
+          chunks.forEach((chunkText, idx) => {
+            batchChunks.push({
+              jobId: job._id.toString(),
+              text: chunkText,
+              chunkIndex: idx
+            });
+          });
+        } catch (err) {
+          results.failed++;
+          results.errors.push({ jobId: job._id, error: err.message });
+        }
       }
-    });
 
-    await Promise.all(batchPromises);
-    
-    logger.info('Completed batch', { 
-      batchStart: i + 1, 
-      batchEnd: Math.min(i + batchSize, jobIds.length),
-      totalJobs: jobIds.length 
-    });
+      if (batchChunks.length === 0) continue;
 
-    // Add a small delay between batches to be respectful to the API
-    if (i + batchSize < jobIds.length) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // 3. Generate embeddings via Batch API
+      const texts = batchChunks.map(c => c.text);
+      const embeddings = await generateBatchEmbeddings(texts);
+
+      // 4. Map results back to jobs
+      const jobUpdates = new Map(); // jobId -> chunks[]
+
+      batchChunks.forEach((item, idx) => {
+        const embedding = embeddings[idx];
+        if (embedding) {
+          if (!jobUpdates.has(item.jobId)) {
+            jobUpdates.set(item.jobId, []);
+          }
+          jobUpdates.get(item.jobId).push({
+            jobId: item.jobId,
+            chunkIndex: item.chunkIndex,
+            text: item.text,
+            pageContent: item.text, // Backward compatibility for scripts
+            embedding: embedding
+          });
+        }
+      });
+
+      // 5. Update Database concurrently
+      const updatePromises = Array.from(jobUpdates.entries()).map(async ([jobId, chunks]) => {
+        try {
+          await Job.findByIdAndUpdate(jobId, {
+            chunks: chunks,
+            embeddingsUpdatedAt: new Date()
+          });
+          results.success++;
+        } catch (error) {
+          results.failed++;
+          results.errors.push({ jobId, error: error.message });
+        }
+      });
+
+      await Promise.all(updatePromises);
+
+      logger.info('Completed batch', {
+        batchStart: i + 1,
+        count: updatePromises.length
+      });
+
+      // Small delay to be safe
+      if (i + batchSize < jobIds.length) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+    } catch (batchError) {
+      logger.error('Critical error in batch processing', batchError);
+      results.errors.push({ error: batchError.message });
     }
   }
 
@@ -204,10 +270,10 @@ export const regenerateOutdatedEmbeddings = async (daysOld = 7) => {
   }).select('_id').lean();
 
   const jobIds = jobsNeedingUpdate.map(job => job._id.toString());
-  
-  logger.info('Found jobs needing embedding updates', { 
-    count: jobIds.length, 
-    cutoffDate 
+
+  logger.info('Found jobs needing embedding updates', {
+    count: jobIds.length,
+    cutoffDate
   });
 
   if (jobIds.length === 0) {
@@ -324,15 +390,15 @@ const extractCVText = async (cvs) => {
   // TODO: Implement CV text extraction using Erax AI
   // For now, return empty string as placeholder
   // This will be implemented when Erax AI integration is available
-  
+
   if (!cvs || cvs.length === 0) {
     return '';
   }
 
-  logger.info('CV text extraction not yet implemented', { 
-    cvCount: cvs.length 
+  logger.info('CV text extraction not yet implemented', {
+    cvCount: cvs.length
   });
-  
+
   return '';
 };
 
@@ -369,41 +435,91 @@ export const generateCandidateEmbedding = async (userId, force = false) => {
 
     // Extract text from profile
     const profileText = extractProfileText(profile);
-    
+
     // Extract text from CV files
     const cvText = await extractCVText(profile.cvs);
-    
+
     // Combine all text content
     const combinedText = combineTextContent(profileText, cvText);
-    
+
     if (!combinedText.trim()) {
       logger.warn('No text content found for candidate embedding', { userId });
       return;
     }
 
-    logger.info('Generating embedding for candidate', { 
-      userId, 
-      textLength: combinedText.length 
+    // Split text into chunks to avoid exceeding token limits
+    const textChunks = splitTextIntoChunks(combinedText);
+
+    logger.info('Generating embedding for candidate', {
+      userId,
+      textLength: combinedText.length,
+      chunkCount: textChunks.length
     });
 
-    // Generate embedding with retry logic
-    const embedding = await generateEmbeddingWithRetry(combinedText);
+    // Generate embeddings for each chunk
+    const chunks = [];
+    const validEmbeddings = [];
 
-    // Update user with embedding
+    for (let i = 0; i < textChunks.length; i++) {
+      const chunkText = textChunks[i];
+      try {
+        const embedding = await generateEmbeddingWithRetry(chunkText);
+
+        chunks.push({
+          chunkIndex: i,
+          text: chunkText,
+          embedding: embedding
+        });
+
+        validEmbeddings.push(embedding);
+
+      } catch (error) {
+        logger.error('Failed to generate embedding for candidate chunk', {
+          userId,
+          chunkIndex: i,
+          error: error.message
+        });
+        // Continue with other chunks
+      }
+    }
+
+    if (validEmbeddings.length === 0) {
+      logger.error('No embeddings generated for candidate', { userId });
+      return;
+    }
+
+    // Calculate average embedding for the main 'embedding' field
+    // This maintains backward compatibility with vector search which expects a single vector
+    const dim = validEmbeddings[0].length;
+    const avgEmbedding = new Array(dim).fill(0);
+
+    for (const emb of validEmbeddings) {
+      for (let i = 0; i < dim; i++) {
+        avgEmbedding[i] += emb[i];
+      }
+    }
+
+    for (let i = 0; i < dim; i++) {
+      avgEmbedding[i] /= validEmbeddings.length;
+    }
+
+    // Update user with average embedding and detailed chunks
     await User.findByIdAndUpdate(userId, {
-      embedding: embedding,
+      embedding: avgEmbedding,
+      chunks: chunks,
       embeddingUpdatedAt: new Date()
     });
 
-    logger.info('Successfully updated candidate with embedding', { 
+    logger.info('Successfully updated candidate with embedding', {
       userId,
-      embeddingDimension: embedding.length 
+      chunksGenerated: chunks.length,
+      embeddingDimension: avgEmbedding.length
     });
 
   } catch (error) {
-    logger.error('Error generating candidate embedding', { 
-      userId, 
-      error: error.message 
+    logger.error('Error generating candidate embedding', {
+      userId,
+      error: error.message
     });
     throw error;
   }
@@ -415,44 +531,122 @@ export const generateCandidateEmbedding = async (userId, force = false) => {
  * @param {number} batchSize - Number to process concurrently (default: 3)
  * @returns {Promise<{success: number, failed: number, errors: Array}>}
  */
-export const batchGenerateCandidateEmbeddings = async (userIds, batchSize = 3) => {
+export const batchGenerateCandidateEmbeddings = async (userIds, batchSize = 50) => {
   const results = {
     success: 0,
     failed: 0,
     errors: []
   };
 
-  logger.info('Starting batch candidate embedding generation', { 
-    totalCandidates: userIds.length, 
-    batchSize 
+  logger.info('Starting batch candidate embedding generation (v2)', {
+    totalCandidates: userIds.length,
+    batchSize
   });
 
   for (let i = 0; i < userIds.length; i += batchSize) {
-    const batch = userIds.slice(i, i + batchSize);
-    
-    const batchPromises = batch.map(async (userId) => {
-      try {
-        await generateCandidateEmbedding(userId);
-        results.success++;
-        return { userId, success: true };
-      } catch (error) {
-        results.failed++;
-        results.errors.push({ userId, error: error.message });
-        return { userId, success: false, error: error.message };
+    const batchIds = userIds.slice(i, i + batchSize);
+
+    try {
+      // 1. Fetch Profiles
+      const profiles = await CandidateProfile.find({ userId: { $in: batchIds } }).lean();
+
+      // 2. Prepare chunks
+      const batchChunks = [];
+
+      for (const profile of profiles) {
+        try {
+          const profileText = extractProfileText(profile);
+          const cvText = await extractCVText(profile.cvs);
+          const combinedText = combineTextContent(profileText, cvText);
+
+          if (!combinedText || !combinedText.trim()) continue;
+
+          const chunks = splitTextIntoChunks(combinedText, 1000, 150);
+          chunks.forEach((text, idx) => {
+            batchChunks.push({
+              userId: profile.userId.toString(),
+              text,
+              chunkIndex: idx
+            });
+          });
+        } catch (err) {
+          results.failed++;
+          results.errors.push({ userId: profile.userId, error: err.message });
+        }
       }
-    });
 
-    await Promise.all(batchPromises);
-    
-    logger.info('Completed batch', { 
-      batchStart: i + 1, 
-      batchEnd: Math.min(i + batchSize, userIds.length),
-      totalCandidates: userIds.length 
-    });
+      if (batchChunks.length === 0) continue;
 
-    // Add delay between batches to respect API limits
-    if (i + batchSize < userIds.length) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // 3. Generate Embeddings (Batch API)
+      const texts = batchChunks.map(c => c.text);
+      const embeddings = await generateBatchEmbeddings(texts);
+
+      // 4. Map & Average
+      const userUpdates = new Map(); // userId -> { chunks: [], validEmbeddings: [] }
+
+      batchChunks.forEach((item, idx) => {
+        const embedding = embeddings[idx];
+        if (embedding) {
+          if (!userUpdates.has(item.userId)) {
+            userUpdates.set(item.userId, { chunks: [], validEmbeddings: [] });
+          }
+          const update = userUpdates.get(item.userId);
+          update.chunks.push({
+            chunkIndex: item.chunkIndex,
+            text: item.text,
+            embedding: embedding
+          });
+          update.validEmbeddings.push(embedding);
+        }
+      });
+
+      // 5. Update Database
+      const updatePromises = Array.from(userUpdates.entries()).map(async ([userId, data]) => {
+        if (data.validEmbeddings.length === 0) return;
+
+        // Calculate average vector for backward compatibility / single search
+        const dim = data.validEmbeddings[0].length;
+        const avgEmbedding = new Array(dim).fill(0);
+
+        for (const emb of data.validEmbeddings) {
+          for (let k = 0; k < dim; k++) {
+            avgEmbedding[k] += emb[k];
+          }
+        }
+
+        for (let k = 0; k < dim; k++) {
+          avgEmbedding[k] /= data.validEmbeddings.length;
+        }
+
+        try {
+          await User.findByIdAndUpdate(userId, {
+            embedding: avgEmbedding,
+            chunks: data.chunks,
+            embeddingUpdatedAt: new Date()
+          });
+          results.success++;
+        } catch (err) {
+          results.failed++;
+          results.errors.push({ userId, error: err.message });
+        }
+      });
+
+      await Promise.all(updatePromises);
+
+      logger.info('Completed batch', {
+        batchStart: i + 1,
+        count: updatePromises.length
+      });
+
+      // Delay to respect rate limits
+      // Delay to respect rate limits
+      if (i + batchSize < userIds.length) {
+        await new Promise(r => setTimeout(r, 500));
+      }
+
+    } catch (err) {
+      logger.error('Batch error', err);
+      results.errors.push({ error: err.message });
     }
   }
 

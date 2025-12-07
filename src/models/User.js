@@ -41,7 +41,7 @@ const userSchema = new mongoose.Schema({
     default: null
   },
   fcmTokens: [{ type: String }], // Lưu một mảng các token
-  
+
   // AI Recommendation fields
   allowSearch: {
     type: Boolean,
@@ -57,6 +57,15 @@ const userSchema = new mongoose.Schema({
     type: [Number],
     default: [],
     comment: 'Vector embedding of candidate profile and CV content'
+  },
+  chunks: {
+    type: [{
+      chunkIndex: Number,
+      text: String,
+      embedding: [Number]
+    }],
+    default: [],
+    comment: 'Detailed chunks with embeddings'
   },
   embeddingUpdatedAt: {
     type: Date,
@@ -75,10 +84,10 @@ userSchema.index({ embeddingUpdatedAt: 1 });
 /**
  * Hash password before saving
  */
-userSchema.pre('save', async function(next) {
+userSchema.pre('save', async function (next) {
   // Only hash the password if it has been modified (or is new) and it exists
   if (!this.password || !this.isModified('password')) return next();
-  
+
   try {
     // Hash password with cost of 12
     const salt = await bcrypt.genSalt(12);
@@ -89,12 +98,12 @@ userSchema.pre('save', async function(next) {
   }
 });
 
-userSchema.methods.comparePassword = async function(password) {
+userSchema.methods.comparePassword = async function (password) {
   return await bcrypt.compare(password, this.password);
 };
 
 // Xóa token cũ khỏi mảng
-userSchema.statics.removeToken = function(userId, tokenToRemove) {
+userSchema.statics.removeToken = function (userId, tokenToRemove) {
   return this.updateOne(
     { _id: userId },
     { $pull: { fcmTokens: tokenToRemove } }
@@ -102,7 +111,7 @@ userSchema.statics.removeToken = function(userId, tokenToRemove) {
 };
 
 
-userSchema.methods.toSafeObject = function() {
+userSchema.methods.toSafeObject = function () {
   const userObject = this.toObject();
   delete userObject.password;
   return userObject;
