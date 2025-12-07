@@ -192,7 +192,7 @@ const supportRequestSchema = new mongoose.Schema({
     type: [attachmentSchema],
     default: [],
     validate: {
-      validator: function(attachments) {
+      validator: function (attachments) {
         return attachments.length <= 5;
       },
       message: 'Cannot attach more than 5 files'
@@ -226,6 +226,10 @@ const supportRequestSchema = new mongoose.Schema({
   hasUnreadAdminResponse: {
     type: Boolean,
     default: false
+  },
+  hasUnreadCustomerResponse: {
+    type: Boolean,
+    default: true
   }
 }, {
   timestamps: true
@@ -242,7 +246,7 @@ supportRequestSchema.index({ 'requester.email': 1 });
  * Check if a follow-up message can be added to this support request
  * @returns {boolean} True if message can be added (status is pending or in-progress)
  */
-supportRequestSchema.methods.canAddMessage = function() {
+supportRequestSchema.methods.canAddMessage = function () {
   return this.status === 'pending' || this.status === 'in-progress';
 };
 
@@ -250,7 +254,7 @@ supportRequestSchema.methods.canAddMessage = function() {
  * Check if this support request can be reopened
  * @returns {boolean} True if request can be reopened (status is closed)
  */
-supportRequestSchema.methods.canReopen = function() {
+supportRequestSchema.methods.canReopen = function () {
   return this.status === 'closed';
 };
 
@@ -258,7 +262,7 @@ supportRequestSchema.methods.canReopen = function() {
  * Mark admin response as read by the requester
  * @returns {Promise<SupportRequest>} Updated support request
  */
-supportRequestSchema.methods.markAdminResponseAsRead = async function() {
+supportRequestSchema.methods.markAdminResponseAsRead = async function () {
   this.hasUnreadAdminResponse = false;
   return await this.save();
 };

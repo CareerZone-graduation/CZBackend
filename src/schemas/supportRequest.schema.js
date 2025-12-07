@@ -32,12 +32,12 @@ export const createSupportRequestSchema = z.object({
     .trim()
     .min(5, 'Tiêu đề phải có ít nhất 5 ký tự')
     .max(200, 'Tiêu đề không được vượt quá 200 ký tự'),
-  
+
   description: z.string({ required_error: 'Mô tả là bắt buộc' })
     .trim()
     .min(20, 'Mô tả phải có ít nhất 20 ký tự')
     .max(5000, 'Mô tả không được vượt quá 5000 ký tự'),
-  
+
   category: z.enum(categoryEnum, {
     required_error: 'Danh mục là bắt buộc',
     invalid_type_error: 'Danh mục không hợp lệ'
@@ -58,9 +58,9 @@ export const respondToRequestSchema = z.object({
     .trim()
     .min(1, 'Phản hồi không được để trống')
     .max(5000, 'Phản hồi không được vượt quá 5000 ký tự'),
-  
+
   statusUpdate: z.enum(statusEnum).optional(),
-  
+
   priorityUpdate: z.enum(priorityEnum).optional()
 });
 
@@ -101,6 +101,7 @@ export const getAdminSupportRequestsQuerySchema = z.object({
   fromDate: z.coerce.date().optional(),
   toDate: z.coerce.date().optional(),
   isGuest: z.enum(['true', 'false']).optional(),
+  hasUnreadCustomerResponse: z.enum(['true', 'false']).optional(),
   sortBy: z.string().default('-createdAt')
 }).refine(data => {
   // If both dates are provided, fromDate must be before or equal to toDate

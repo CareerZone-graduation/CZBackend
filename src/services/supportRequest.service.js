@@ -374,6 +374,9 @@ export const addFollowUpMessage = async (requestId, userId, messageData, files) 
       createdAt: new Date()
     });
 
+    // Mark as having unread customer response for admins
+    supportRequest.hasUnreadCustomerResponse = true;
+
     await supportRequest.save();
 
     // Send notification to admins
@@ -493,6 +496,21 @@ export const getAllSupportRequests = async (filters = {}, sort = {}, pagination 
 
     console.log('📝 Query:', JSON.stringify(query, null, 2));
     console.log('📝 isGuest filter:', filters.isGuest);
+
+    // Filter by unread customer response OR pending status
+    if (filters.hasUnreadCustomerResponse === 'true' || filters.hasUnreadCustomerResponse === true) {
+      // If other filters exist (like keyword), we need to careful with $or
+      // But usually this filter is used alone for the badge or "Attention needed" view
+      if (query.$or) {
+        query.$and = [
+          { $or: query.$or },
+          { $or: [{ hasUnreadCustomerResponse: true }, { status: 'pending' }] }
+        ];
+        delete query.$or;
+      } else {
+        query.$or = [{ hasUnreadCustomerResponse: true }, { status: 'pending' }];
+      }
+    }
 
     // Build sort
     const sortOptions = {};
@@ -629,6 +647,9 @@ export const respondToRequest = async (requestId, adminId, response, statusUpdat
 
     // Mark as having unread admin response
     supportRequest.hasUnreadAdminResponse = true;
+
+    // Clear unread customer response flag since admin has responded
+    supportRequest.hasUnreadCustomerResponse = false;
 
     await supportRequest.save();
 

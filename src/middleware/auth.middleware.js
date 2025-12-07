@@ -11,6 +11,9 @@ export const handleLocalAuth = (req, res, next) => {
       // Use the message from passport's 'done' function.
       throw new UnauthorizedError(info.message || 'Tên đăng nhập hoặc mật khẩu không chính xác.');
     }
+    if (!user.active) {
+      throw new UnauthorizedError('Tài khoản của bạn đã bị khóa.');
+    }
     logger.info(user);
     req.user = user; // Manually attach user to the request
     next(); // Proceed to the controller

@@ -186,7 +186,8 @@ export const getAllSupportRequests = asyncHandler(async (req, res) => {
     keyword: query?.keyword,
     dateFrom: query?.fromDate,
     dateTo: query?.toDate,
-    isGuest: query?.isGuest
+    isGuest: query?.isGuest,
+    hasUnreadCustomerResponse: query?.hasUnreadCustomerResponse
   };
 
   console.log('📥 Admin getAllSupportRequests - Raw query:', req.query);
@@ -222,7 +223,13 @@ export const getAdminSupportRequestById = asyncHandler(async (req, res) => {
   const requestId = req.params.id;
 
   const { SupportRequest } = await import('../models/index.js');
-  const supportRequest = await SupportRequest.findById(requestId).lean();
+
+  // Get request and mark as read by admin
+  const supportRequest = await SupportRequest.findByIdAndUpdate(
+    requestId,
+    { hasUnreadCustomerResponse: false },
+    { new: true }
+  ).lean();
 
   if (!supportRequest) {
     return res.status(404).json({

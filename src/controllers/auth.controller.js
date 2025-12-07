@@ -7,6 +7,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { CandidateProfile, User, RecruiterProfile } from '../models/index.js';
 import logger from '../utils/logger.js';
 import * as onboardingService from '../services/onboarding.service.js';
+import { UnauthorizedError } from '../utils/AppError.js';
 
 const client = new OAuth2Client(config.GOOGLE_CLIENT_ID);
 
@@ -149,7 +150,9 @@ export const googleLogin = asyncHandler(async (req, res) => {
       user = newUser;
     }
   }
-
+  if (!user.active) {
+    throw new UnauthorizedError('Tài khoản của bạn đã bị khóa.');
+  }
   const { accessToken, refreshToken } = generateTokens(user);
 
   res.cookie('refreshToken', refreshToken, {
