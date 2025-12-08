@@ -21,7 +21,7 @@ export const registerSchema = z.object({
     .max(100, 'Họ tên phải từ 2 đến 100 ký tự')
     .trim(),
   email: z.string({
-     required_error: 'Email là bắt buộc'
+    required_error: 'Email là bắt buộc'
   })
     .email('Email phải đúng định dạng')
     .max(100, 'Email không được dài quá 100 ký tự')
@@ -29,7 +29,8 @@ export const registerSchema = z.object({
     .trim(),
   role: z.enum(['candidate', 'recruiter'], {
     errorMap: () => ({ message: 'Loại người dùng phải là candidate hoặc recruiter' })
-  })
+  }),
+  turnstileToken: z.string().optional()
 });
 
 export const googleLoginSchema = z.object({
@@ -38,10 +39,11 @@ export const googleLoginSchema = z.object({
 
 export const emailSchema = z.object({
   email: z.string().email('Email không hợp lệ').trim(),
+  turnstileToken: z.string().optional()
 });
 
 export const verifyEmailSchema = z.object({
-    token: z.string().min(1, 'Token xác thực là bắt buộc'),
+  token: z.string().min(1, 'Token xác thực là bắt buộc'),
 });
 
 export const changePasswordSchema = z.object({

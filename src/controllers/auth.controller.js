@@ -20,13 +20,52 @@ const generateTokens = (user) => {
 };
 
 export const register = asyncHandler(async (req, res) => {
+  const { turnstileToken } = req.body;
+
+  // Verify Turnstile Token
+  if (turnstileToken) {
+    try {
+      const secretKey = process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY;
+      const verifyResponse = await axios.post('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+        secret: secretKey,
+        response: turnstileToken
+      });
+
+      console.log('Turnstile Verify Response:', verifyResponse.data);
+
+      if (!verifyResponse.data.success) {
+        return res.status(400).json({
+          success: false,
+          message: "Xác thực Captcha thất bại. Vui lòng thử lại."
+        });
+      }
+    } catch (error) {
+      logger.error('Turnstile verification error:', error);
+      // Optional: Fail open or closed depending on requirements. 
+      // For now, let's allow if verification errors out networking-wise, or block? 
+      // Safest is to block but helpful error.
+      return res.status(500).json({
+        success: false,
+        message: "Lỗi hệ thống khi xác thực Captcha."
+      });
+    }
+  } else {
+    // If we want to enforce it:
+    return res.status(400).json({ success: false, message: "Vui lòng hoàn thành xác thực Captcha" });
+    // But maybe the frontend isn't fully ready yet or user wants optional?
+    // User said "add authentication", implying enforcement.
+    // if (process.env.NODE_ENV === 'production' || process.env.ENABLE_TURNSTILE === 'true') {
+    //   return res.status(400).json({ success: false, message: "Vui lòng hoàn thành xác thực Captcha" });
+    // }
+  }
+
   await authService.register(req.body);
-  res.cookie('refreshToken', refreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'Lax',
-    maxAge: 999999999 || 7 * 24 * 60 * 60 * 1000,
-  });
+  // Remove sensitive data
+  const { password, ...userWithoutPassword } = req.body; // crude approximation, authService usually handles user creation
+
+  // Note: authService.register doesn't return the user usually? 
+  // checking previous code: await authService.register(req.body);
+  // It seems it sends email and returns nothing or promise void.
 
   res.status(201).json({
     success: true,
@@ -270,7 +309,37 @@ export const verifyEmail = asyncHandler(async (req, res) => {
 
 
 export const forgotPassword = asyncHandler(async (req, res) => {
-  const { email } = req.body;
+  const { email, turnstileToken } = req.body;
+
+  // Verify Turnstile Token
+  if (turnstileToken) {
+    try {
+      const secretKey = process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY;
+      const verifyResponse = await axios.post('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+        secret: secretKey,
+        response: turnstileToken
+      });
+
+      if (!verifyResponse.data.success) {
+        return res.status(400).json({
+          success: false,
+          message: "Xác thực Captcha thất bại. Vui lòng thử lại."
+        });
+      }
+    } catch (error) {
+      logger.error('Turnstile verification error:', error);
+      return res.status(500).json({
+        success: false,
+        message: "Lỗi hệ thống khi xác thực Captcha."
+      });
+    }
+  } else {
+    // Enforce Turnstile
+    // if (process.env.NODE_ENV === 'production' || process.env.ENABLE_TURNSTILE === 'true') {
+    return res.status(400).json({ success: false, message: "Vui lòng hoàn thành xác thực Captcha" });
+    // }
+  }
+
   await authService.forgotPassword(email);
   res.status(200).json({
     success: true,

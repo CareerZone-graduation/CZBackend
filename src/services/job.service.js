@@ -553,6 +553,52 @@ export const updateJob = async (jobId, userId, updateData) => {
     }
   }
 
+  // 3. Logic kích hoạt lại quy trình kiểm duyệt (Moderation)
+  // Nếu người dùng chỉnh sửa các trường quan trọng -> set lại moderationStatus = PENDING
+  const criticalFields = [
+    'title', 'description', 'requirements', 'benefits',
+    'minSalary', 'maxSalary', 'experience', 'category', 'skills',
+    'address', 'type', 'workType'
+  ];
+
+  let shouldReModerate = false;
+
+  const isFieldChanged = (original, updated) => {
+    if (updated === undefined) return false;
+    const normOriginal = original ? original.toString() : '';
+    const normUpdated = updated ? updated.toString() : '';
+
+    if (Array.isArray(original) || Array.isArray(updated)) {
+      const arr1 = Array.isArray(original) ? [...original].sort() : [];
+      const arr2 = Array.isArray(updated) ? [...updated].sort() : [];
+      return JSON.stringify(arr1) !== JSON.stringify(arr2);
+    }
+    return normOriginal !== normUpdated;
+  };
+
+  for (const field of criticalFields) {
+    if (isFieldChanged(job[field], finalUpdateData[field])) {
+      shouldReModerate = true;
+      break;
+    }
+  }
+
+  // Check location specifically if present
+  if (!shouldReModerate && finalUpdateData.location) {
+    const oldProv = job.location?.province || '';
+    const newProv = finalUpdateData.location.province || '';
+    const oldDist = job.location?.district || '';
+    const newDist = finalUpdateData.location.district || '';
+
+    if (oldProv !== newProv || oldDist !== newDist) {
+      shouldReModerate = true;
+    }
+  }
+
+  if (shouldReModerate) {
+    finalUpdateData.moderationStatus = 'PENDING';
+  }
+
   // Logic cập nhật status dựa trên deadline
   if (finalUpdateData.deadline) {
     const newDeadline = new Date(finalUpdateData.deadline);
@@ -2656,7 +2702,7 @@ const buildSearchFilter = (searchParams) => {
       must: [
         { equals: { path: 'status', value: 'ACTIVE' } },
         { equals: { path: 'moderationStatus', value: 'APPROVED' } },
-        // { range: { path: 'deadline', gte: new Date() } }
+        { range: { path: 'deadline', gte: new Date() } }
       ],
       should: [],
     }
@@ -2717,7 +2763,7 @@ const buildSearchFilter = (searchParams) => {
 const buildPreFilter = (searchParams) => {
   const preFilter = {
     status: 'ACTIVE',
-    // moderationStatus: 'APPROVED',
+    moderationStatus: 'APPROVED',
     deadline: { $gte: new Date() }
   };
   if (searchParams.category) {

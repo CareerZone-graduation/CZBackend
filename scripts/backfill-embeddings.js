@@ -14,7 +14,7 @@ dotenv.config();
 const MONGODB_URI = process.env.DB_URI || "mongodb://localhost:27017/careerzone";
 const CANDIDATE_BATCH_SIZE = 80; // Process 3 candidates concurrently
 const JOB_BATCH_SIZE = 100; // Process 5 jobs concurrently
-const MODE = 'candidates'; // 'candidates', 'jobs', or 'both'
+const MODE = 'jobs'; // 'candidates', 'jobs', or 'both'
 
 /* ===================== UTILITIES ===================== */
 function maskConnStr(uri) {

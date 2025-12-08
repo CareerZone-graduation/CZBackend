@@ -35,20 +35,20 @@ import RedisKeys from '../src/utils/redisKeys.js';
  */
 const calculateJobRelevanceScore = async (job, subscription, userId) => {
     let baseScore = 0;
-    
+
     // 1. Điểm matching keyword (0-40 điểm)
     // Kiểm tra keyword xuất hiện ở đâu trong job
     const keywordInTitle = job.title.toLowerCase().includes(subscription.keyword.toLowerCase());
-    const keywordInSkills = job.skills?.some(skill => 
+    const keywordInSkills = job.skills?.some(skill =>
         skill.toLowerCase().includes(subscription.keyword.toLowerCase())
     );
     const keywordInDescription = job.description?.toLowerCase().includes(subscription.keyword.toLowerCase());
-    
+
     // Phân bổ điểm theo độ quan trọng
     if (keywordInTitle) baseScore += 20;        // Keyword trong title: quan trọng nhất
     if (keywordInSkills) baseScore += 15;       // Keyword trong skills: quan trọng thứ 2
     if (keywordInDescription) baseScore += 5;   // Keyword trong description: ít quan trọng nhất
-    
+
     // 2. Điểm matching filters (0-30 điểm)
     // Kiểm tra job có khớp với tất cả filters của subscription không
     if (matchJobWithSubscription(job, subscription)) {
@@ -56,13 +56,13 @@ const calculateJobRelevanceScore = async (job, subscription, userId) => {
     } else {
         return 0; // Không match filters → không gửi notification
     }
-    
+
     // 3. Bonus điểm nếu category khớp chính xác (0-10 điểm)
     // Nếu user chọn category cụ thể (không phải 'ALL') và job khớp đúng category đó
     if (subscription.category !== 'ALL' && subscription.category === job.category) {
         baseScore += 10;
     }
-    
+
     // Tổng điểm tối đa: 20 + 15 + 5 + 30 + 10 = 80 điểm
     // Nhưng thực tế max là 70 vì không thể có cả 3 keyword positions cùng lúc
     return Math.round(baseScore);
@@ -78,10 +78,10 @@ const matchJobWithSubscription = (job, subscription) => {
     // Helper function: Kiểm tra salary range có khớp không
     const salaryMatch = (subRange) => {
         if (!subRange || subRange === 'ALL') return true; // User không filter salary
-        
+
         const min = parseFloat(job.minSalary?.toString() || '0');
         const max = parseFloat(job.maxSalary?.toString() || '999999999');
-        
+
         // Mapping các range với điều kiện
         const ranges = {
             'UNDER_10M': max < 10000000,                              // Dưới 10 triệu
@@ -97,10 +97,10 @@ const matchJobWithSubscription = (job, subscription) => {
     const provinceMatch = location.province === 'ALL' || location.province === job.location.province;
     const districtMatch = !location.district || location.district === 'ALL' || location.district === job.location.district;
     const communeMatch = !location.commune || location.commune === job.location.commune;
-    
+
     // 2. Category matching
     const categoryMatch = subscription.category === 'ALL' || subscription.category === job.category;
-    
+
     // 3. Kết hợp tất cả filters (logic AND - phải match tất cả)
     return (
         provinceMatch &&                                                          // Tỉnh/Thành phố
@@ -161,14 +161,14 @@ async function processJobForMatching(job) {
         ...job.title.toLowerCase().split(/\s+/),                              // Tách title thành từng từ
         ...(job.skills || []).map(s => s.toLowerCase()),                      // Lowercase tất cả skills
         ...(job.description || '').toLowerCase().split(/\s+/).slice(0, 20)   // Lấy 20 từ đầu description
-    ].filter((keyword, index, self) => 
+    ].filter((keyword, index, self) =>
         keyword.length > 2 && self.indexOf(keyword) === index                 // Loại bỏ từ ngắn (<3 ký tự) và duplicate
     );
 
     // Chuyển keywords thành Redis keys
     // Ví dụ: "nodejs" → "job_alert:keyword:nodejs"
     const redisKeys = jobKeywords.map(x => RedisKeys.getKeywordKey(x)).filter(key => key);
-            
+
     if (redisKeys.length === 0) {
         logger.info(`No valid keywords found for job ${job._id}`);
         return;
@@ -206,7 +206,7 @@ async function processJobForMatching(job) {
 
     const pendingNotificationsToInsert = [];
     const processedUsers = new Set();
-    logger.info('allMatchedUserIds',allMatchedUserIds)
+    logger.info('allMatchedUserIds', allMatchedUserIds)
 
     // BƯỚC 5: Xử lý từng user
     for (const userId of allMatchedUserIds) {
@@ -243,7 +243,7 @@ async function processJobForMatching(job) {
                 // (30 = điểm của filter match, đảm bảo job ít nhất match filters cơ bản)
                 if (score > 30) {
                     allMatchingSubs.push(subscription);
-                    
+
                     // Lưu subscription có điểm cao nhất
                     if (score > bestScore) {
                         bestScore = score;
@@ -301,18 +301,18 @@ async function startMatchingWorker() {
     try {
         await connectDB();
         logger.info('✅ Connected to MongoDB');
-        
+
         // Kiểm tra MongoDB có phải Replica Set không
         const db = await import('mongoose').then(m => m.default.connection.db);
         const adminDb = db.admin();
         const serverStatus = await adminDb.serverStatus();
-        
+
         if (!serverStatus.repl) {
             logger.error('❌ MongoDB is NOT a Replica Set! Change Streams require Replica Set.');
             logger.error('Please convert to Replica Set or use a MongoDB Atlas cluster.');
             process.exit(1);
         }
-        
+
         logger.info(`✅ MongoDB Replica Set detected: ${serverStatus.repl.setName}`);
         logger.info('Matching worker started. Listening to Job collection changes...');
 
@@ -327,54 +327,55 @@ async function startMatchingWorker() {
                 $match: {
                     $or: [
                         // Case 1: Job mới insert với status APPROVED
-                        {
-                            operationType: 'insert',
-                            'fullDocument.moderationStatus': 'APPROVED',
-                            'fullDocument.status': 'ACTIVE'
-                        },
+                        // {
+                        //     operationType: 'insert',
+                        //     'fullDocument.moderationStatus': 'APPROVED',
+                        //     'fullDocument.status': 'ACTIVE'
+                        // },
+                        // thực tế chỉ cân case 2
                         // Case 2: Job được update từ PENDING → APPROVED
                         {
                             operationType: 'update',
                             'updateDescription.updatedFields.moderationStatus': 'APPROVED',
                             'fullDocument.status': 'ACTIVE'
                         },
-                        // Case 3: Job được update từ INACTIVE → ACTIVE (và đã APPROVED)
-                        {
-                            operationType: 'update',
-                            'updateDescription.updatedFields.status': 'ACTIVE',
-                            'fullDocument.moderationStatus': 'APPROVED'
-                        },
-                        // không check updateDescription.* nữa → mọi update trên job đã duyệt + active đều vào
+                        // // Case 3: Job được update từ INACTIVE → ACTIVE (và đã APPROVED)
+                        // {
+                        //     operationType: 'update',
+                        //     'updateDescription.updatedFields.status': 'ACTIVE',
+                        //     'fullDocument.moderationStatus': 'APPROVED'
+                        // },
+                        // // không check updateDescription.* nữa → mọi update trên job đã duyệt + active đều vào
 
-                        {
-                            operationType: 'update',
-                            'fullDocument.moderationStatus': 'APPROVED',
-                            'fullDocument.status': 'ACTIVE'
-                            
-                        }
+                        // {
+                        //     operationType: 'update',
+                        //     'fullDocument.moderationStatus': 'APPROVED',
+                        //     'fullDocument.status': 'ACTIVE'
+
+                        // }
                     ]
                 }
             }
         ];
-                
+
         const changeStream = Job.watch(pipeline, {
             fullDocument: 'updateLookup'  // Lấy toàn bộ document sau khi update
         });
-        
+
         logger.info('✅ Change Stream created successfully. Waiting for events...');
 
         // Event handler: Khi có thay đổi trong collection
         changeStream.on('change', async (change) => {
             try {
-                
+
                 const job = change.fullDocument;
-                
+
                 if (!job) {
                     logger.warn('No fullDocument in change event!');
                     return;
                 }
-                
-                
+
+
                 // Validation bổ sung (double-check)
                 if (job.moderationStatus !== 'APPROVED' || job.status !== 'ACTIVE') {
                     logger.info(`Skipping job ${job._id}: not approved (${job.moderationStatus}) or not active (${job.status})`);
@@ -383,7 +384,7 @@ async function startMatchingWorker() {
 
                 // Xử lý matching cho job này (cả insert và update đều xử lý giống nhau)
                 await processJobForMatching(job);
-                
+
             } catch (error) {
                 logger.error('Error processing change stream event:', error);
                 logger.error('Error stack:', error.stack);
@@ -394,7 +395,7 @@ async function startMatchingWorker() {
         // Event handler: Khi có lỗi với Change Stream
         changeStream.on('error', (error) => {
             logger.error('Change stream error:', error);
-            
+
             // Tự động reconnect sau 5 giây
             setTimeout(() => {
                 logger.info('Attempting to restart change stream...');
@@ -406,7 +407,7 @@ async function startMatchingWorker() {
         // Event handler: Khi Change Stream bị đóng
         changeStream.on('close', () => {
             logger.warn('Change stream closed. Attempting to restart...');
-            
+
             // Tự động restart sau 5 giây
             setTimeout(() => {
                 startMatchingWorker();

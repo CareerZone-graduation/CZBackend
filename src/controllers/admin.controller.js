@@ -190,7 +190,6 @@ export const getAllSupportRequests = asyncHandler(async (req, res) => {
     hasUnreadCustomerResponse: query?.hasUnreadCustomerResponse
   };
 
-  console.log('📥 Admin getAllSupportRequests - Raw query:', req.query);
   console.log('📥 Admin getAllSupportRequests - Filters:', filters);
 
   const sort = {

@@ -63,9 +63,9 @@ dotenv.config();
 
 const app = express();
 // app.use(morgan('combined', { stream: logger.stream }));
-if (process.env.NODE_ENV === "development") {
-  app.use(morgan("combined", { stream: logger.stream }));
-}
+// if (process.env.NODE_ENV === "development") {
+//   app.use(morgan("combined", { stream: logger.stream }));
+// }
 
 // Cấu hình view engine (chỉ dành cho 1 số trang như xác thực email trả về HTML)
 app.set('view engine', 'pug');

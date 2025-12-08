@@ -27,7 +27,7 @@ const generateTokens = (user) => {
 
 const sendVerificationEmail = async (user, fullname) => {
   const verificationToken = crypto.randomBytes(32).toString("hex");
-  
+
   // Lưu token vào database thay vì Redis
   user.emailVerificationToken = verificationToken;
   user.emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 giờ
@@ -109,7 +109,7 @@ export const refreshToken = async (token) => {
 
 export const verifyEmail = async (token) => {
   console.log(`Verifying email with token: ${token}`);
-  
+
   // Tìm user với token và kiểm tra token chưa hết hạn
   const user = await User.findOne({
     emailVerificationToken: token,
@@ -143,12 +143,12 @@ export const verifyEmail = async (token) => {
     //     });
     //   }
     // }
-    
+
     // Lấy thông tin profile để trả về
-    const profile = user.role === 'candidate' 
+    const profile = user.role === 'candidate'
       ? await CandidateProfile.findOne({ userId: user._id })
       : await RecruiterProfile.findOne({ userId: user._id });
-    
+
     return {
       userId: user._id,
       email: user.email,
@@ -176,9 +176,9 @@ export const resendVerificationEmail = async (email) => {
     throw new BadRequestError("Email này đã được xác thực.");
   }
   const profile =
-      user.role === "candidate"
-        ? await CandidateProfile.findOne({ userId: user._id })
-        : await RecruiterProfile.findOne({ userId: user._id });
+    user.role === "candidate"
+      ? await CandidateProfile.findOne({ userId: user._id })
+      : await RecruiterProfile.findOne({ userId: user._id });
   // Kiểm tra xem có token cũ chưa hết hạn không
   const now = new Date();
   if (user.emailVerificationToken && user.emailVerificationExpires && user.emailVerificationExpires > now) {
@@ -204,13 +204,18 @@ export const forgotPassword = async (email) => {
   const resetToken = jwt.sign({ id: user._id }, config.JWT_SECRET, {
     expiresIn: "10m", // Token chỉ có hiệu lực 10 phút
   });
+  console.log(user);
+  // Determine the frontend URL based on the user's role
+  const frontendUrl = user.role === 'recruiter'
+    ? config.RECRUITER_FE_URL
+    : config.CANDIDATE_FE_URL;
 
-  const resetURL = `${config.CANDIDATE_FE_URL}/reset-password?token=${resetToken}`;
+  const resetURL = `${frontendUrl}/reset-password?token=${resetToken}`;
 
   const emailPayload = {
     to: user.email,
     subject: "Yêu cầu đặt lại mật khẩu CareerZone",
-    template: "passwordReset", // Đảm bảo template này tồn tại trong `src/views/emails`
+    template: "passwordReset", // Ensure this template exists in `src/views/emails`
     data: {
       name: user.email,
       resetUrl: resetURL,
