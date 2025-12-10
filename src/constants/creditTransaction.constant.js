@@ -15,6 +15,7 @@ export const ALL_TRANSACTION_TYPES = Object.values(TRANSACTION_TYPES);
 export const TRANSACTION_CATEGORIES = {
   // Deposit categories
   RECHARGE: 'RECHARGE',
+  COMPANY_VERIFIED_BONUS: 'COMPANY_VERIFIED_BONUS', // Bonus when company is verified
 
   // Usage categories
   JOB_VIEW: 'JOB_VIEW',
@@ -29,7 +30,8 @@ export const ALL_TRANSACTION_CATEGORIES = Object.values(TRANSACTION_CATEGORIES);
 
 // Deposit categories
 export const DEPOSIT_CATEGORIES = [
-  TRANSACTION_CATEGORIES.RECHARGE
+  TRANSACTION_CATEGORIES.RECHARGE,
+  TRANSACTION_CATEGORIES.COMPANY_VERIFIED_BONUS
 ];
 
 // Usage categories
@@ -45,6 +47,7 @@ export const USAGE_CATEGORIES = [
 // Category display names (Vietnamese)
 export const CATEGORY_LABELS = {
   [TRANSACTION_CATEGORIES.RECHARGE]: 'Nạp xu',
+  [TRANSACTION_CATEGORIES.COMPANY_VERIFIED_BONUS]: 'Thưởng xãc thực công ty',
   [TRANSACTION_CATEGORIES.JOB_VIEW]: 'Xem số lượng ứng viên',
   [TRANSACTION_CATEGORIES.CV_UNLOCK]: 'Mở khóa CV',
   [TRANSACTION_CATEGORIES.PROFILE_BOOST]: 'Đẩy hồ sơ',

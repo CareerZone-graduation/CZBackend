@@ -1,4 +1,5 @@
-import { Job, User, RecruiterProfile, CandidateProfile, Application, CoinRecharge, CV } from '../models/index.js';
+import { Job, User, RecruiterProfile, CandidateProfile, Application, CoinRecharge, CV, CreditTransaction } from '../models/index.js';
+import { TRANSACTION_TYPES, TRANSACTION_CATEGORIES } from '../constants/index.js';
 import { NotFoundError, BadRequestError, UnauthorizedError } from '../utils/AppError.js';
 import mongoose from 'mongoose';
 import * as queueService from './queue.service.js';
@@ -955,6 +956,32 @@ export const approveCompany = async (companyId) => {
       }
     };
     await queueService.publishNotification(ROUTING_KEYS.COMPANY_VERIFICATION, payload);
+  }
+
+  // --- LOGIC MỚI: Tặng 200 xu cho nhà tuyển dụng ---
+  if (updatedProfile.userId && updatedProfile.userId._id) {
+    const bonusAmount = 200;
+
+    // 1. Cộng xu cho user
+    const user = await User.findByIdAndUpdate(
+      updatedProfile.userId._id,
+      { $inc: { coinBalance: bonusAmount } },
+      { new: true }
+    );
+
+    // 2. Tạo lịch sử giao dịch
+    if (user) {
+      await CreditTransaction.create({
+        userId: user._id,
+        type: TRANSACTION_TYPES.DEPOSIT,
+        category: TRANSACTION_CATEGORIES.COMPANY_VERIFIED_BONUS,
+        amount: bonusAmount,
+        balanceAfter: user.coinBalance,
+        description: 'Tặng 200 xu khi xác thực công ty thành công',
+        referenceId: updatedProfile._id,
+        referenceModel: 'RecruiterProfile'
+      });
+    }
   }
 
   // Trả về cấu trúc cố định đầy đủ

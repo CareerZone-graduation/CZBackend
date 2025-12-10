@@ -72,7 +72,8 @@ const companyInfoSchema = new mongoose.Schema({
   website: {
     type: String,
     trim: true,
-    match: [/^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/, 'Please enter a valid website URL']
+    // Cho phép localhost và port (ví dụ: http://localhost:3000) và các domain thông thường
+    match: [/^(https?:\/\/)?(localhost|([\da-z\.-]+)\.([a-z\.]{2,6}))(:\d{1,5})?([\/\w \.-]*)*\/?$/, 'Please enter a valid website URL']
   },
   location: {
     province: {
@@ -99,10 +100,10 @@ const companyInfoSchema = new mongoose.Schema({
       coordinates: {
         type: [Number], // [longitude, latitude]
         validate: {
-          validator: function(coords) {
+          validator: function (coords) {
             return coords && coords.length === 2 &&
-                   coords[0] >= -180 && coords[0] <= 180 &&
-                   coords[1] >= -90 && coords[1] <= 90;
+              coords[0] >= -180 && coords[0] <= 180 &&
+              coords[1] >= -90 && coords[1] <= 90;
           },
           message: 'Invalid coordinates format'
         }
