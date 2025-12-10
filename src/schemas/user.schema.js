@@ -402,11 +402,13 @@ export const workPreferencesSchema = z.object({
       errorMap: () => ({ message: 'Loại hợp đồng không hợp lệ' })
     })
   ).optional(),
-  experienceLevel: z.enum(
-    ['ENTRY_LEVEL', 'MID_LEVEL', 'SENIOR_LEVEL', 'EXECUTIVE', 'NO_EXPERIENCE', 'INTERN', 'FRESHER'],
-    {
-      errorMap: () => ({ message: 'Mức độ kinh nghiệm không hợp lệ' })
-    }
+  experienceLevel: z.array(
+    z.enum(
+      ['ENTRY_LEVEL', 'MID_LEVEL', 'SENIOR_LEVEL', 'EXECUTIVE', 'NO_EXPERIENCE', 'INTERN', 'FRESHER'],
+      {
+        errorMap: () => ({ message: 'Mức độ kinh nghiệm không hợp lệ' })
+      }
+    )
   ).optional()
 });
 

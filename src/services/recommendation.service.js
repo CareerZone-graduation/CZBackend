@@ -347,7 +347,11 @@ const filterByWorkPreferences = (workPreferences, jobs) => {
 
     // Check experience level match
     if (workPreferences.experienceLevel && job.experience) {
-      if (workPreferences.experienceLevel === job.experience) {
+      const candidateExpLevels = Array.isArray(workPreferences.experienceLevel)
+        ? workPreferences.experienceLevel
+        : [workPreferences.experienceLevel];
+
+      if (candidateExpLevels.includes(job.experience)) {
         experienceMatch = true;
         totalScore += 10;
 

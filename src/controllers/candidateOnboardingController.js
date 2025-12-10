@@ -120,16 +120,31 @@ export const updateProfileData = asyncHandler(async (req, res) => {
   const transformedData = transformProfileData(profileData);
 
   // Update các trường được gửi lên
+  // Update các trường được gửi lên
   const allowedFields = [
     'fullname', 'phone', 'avatar', 'bio', 'address',
     'skills', 'experiences', 'educations', 'certificates', 'projects',
     'expectedSalary', 'preferredLocations', 'workPreferences',
-    'experienceLevel', 'linkedin', 'github', 'website'
+    'experienceLevel', 'linkedin', 'github', 'website', 'preferredCategories'
   ];
 
   for (const field of allowedFields) {
     if (transformedData[field] !== undefined) {
-      profile[field] = transformedData[field];
+      if (field === 'workPreferences') {
+        if (!profile.workPreferences) profile.workPreferences = {};
+
+        if (transformedData.workPreferences.workTypes) {
+          profile.workPreferences.workTypes = transformedData.workPreferences.workTypes;
+        }
+        if (transformedData.workPreferences.contractTypes) {
+          profile.workPreferences.contractTypes = transformedData.workPreferences.contractTypes;
+        }
+        if (transformedData.workPreferences.experienceLevel) {
+          profile.workPreferences.experienceLevel = transformedData.workPreferences.experienceLevel;
+        }
+      } else {
+        profile[field] = transformedData[field];
+      }
     }
   }
 

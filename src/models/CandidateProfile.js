@@ -313,11 +313,11 @@ const candidateProfileSchema = new mongoose.Schema({
       enum: ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERNSHIP', 'TEMPORARY', 'FREELANCE'],
       trim: true
     }],
-    experienceLevel: {
+    experienceLevel: [{
       type: String,
       enum: ['ENTRY_LEVEL', 'MID_LEVEL', 'SENIOR_LEVEL', 'EXECUTIVE', 'NO_EXPERIENCE', 'INTERN', 'FRESHER'],
       trim: true
-    }
+    }],
   },
   // Onboarding tracking - Đánh dấu user đã hoàn thành onboarding
   onboardingCompleted: {
@@ -352,11 +352,21 @@ const candidateProfileSchema = new mongoose.Schema({
       type: String,
       trim: true
     }],
-    // Legacy fields for backward compatibility
+    // Detailed completeness flags
     hasBasicInfo: { type: Boolean, default: false },
+    hasSkills: { type: Boolean, default: false },
+    hasCategories: { type: Boolean, default: false },
+    hasSalary: { type: Boolean, default: false },
+    hasWorkTypes: { type: Boolean, default: false },
+    hasContractTypes: { type: Boolean, default: false },
+    hasExperienceLevel: { type: Boolean, default: false },
+    hasBio: { type: Boolean, default: false },
+    hasAvatar: { type: Boolean, default: false },
     hasExperience: { type: Boolean, default: false },
     hasEducation: { type: Boolean, default: false },
-    hasSkills: { type: Boolean, default: false },
+    hasCertificates: { type: Boolean, default: false },
+    hasProjects: { type: Boolean, default: false },
+    hasSocialLinks: { type: Boolean, default: false },
     hasCV: { type: Boolean, default: false }
   }
 }, {

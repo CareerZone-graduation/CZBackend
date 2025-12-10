@@ -18,7 +18,9 @@ export const calculateProfileCompleteness = (profile) => {
       hasEducation: false,
       hasSkills: false,
       hasCV: false,
-      hasPreferences: false,
+      hasSalary: false,
+      hasWorkTypes: false,
+      hasContractTypes: false,
       lastCalculated: new Date()
     };
   }
@@ -27,8 +29,11 @@ export const calculateProfileCompleteness = (profile) => {
   const weights = {
     basicInfo: 20,      // Essential: fullname, phone, preferredLocations (từ bước 1)
     skills: 20,         // Critical for job matching (từ bước 2)
-    categories: 15,     // NEW: Job categories preference (ngành nghề mong muốn)
-    preferences: 15,    // Important: salary, work preferences (từ bước 3)
+    categories: 10,     // NEW: Job categories preference (ngành nghề mong muốn)
+    salary: 5,          // Split from preferences
+    workTypes: 5,       // Split from preferences
+    contractTypes: 5,   // Split from preferences
+    experienceLevel: 5, // NEW: Experience Level
     bio: 5,             // Nice to have (bước 1)
     avatar: 5,          // Nice to have (bước 1)
     experience: 5,      // Optional for freshers (bước 4)
@@ -46,15 +51,23 @@ export const calculateProfileCompleteness = (profile) => {
   // Skills (20%): >= 3 skills (bước 2)
   const skillsComplete = profile.skills?.length >= 3;
 
-  // Categories (15%): >= 1 preferred category (ngành nghề - bước 2 mới)
+  // Categories (10%): >= 1 preferred category (ngành nghề - bước 2 mới)
   const categoriesComplete = profile.preferredCategories?.length >= 1;
 
-  // Preferences (15%): salary + workTypes + contractTypes (bước 3)
-  const preferencesComplete = !!(
-    profile.expectedSalary?.min > 0 &&
-    profile.workPreferences?.workTypes?.length > 0 &&
-    profile.workPreferences?.contractTypes?.length > 0
-  );
+  // Preferences breakdown (20% total)
+  // Salary (5%) - Allow 0 as valid value
+  const salaryComplete = profile.expectedSalary &&
+    profile.expectedSalary.min !== undefined &&
+    profile.expectedSalary.min !== null;
+
+  // Work Types (5%)
+  const workTypesComplete = profile.workPreferences?.workTypes?.length > 0;
+
+  // Contract Types (5%)
+  const contractTypesComplete = profile.workPreferences?.contractTypes?.length > 0;
+
+  // Experience Level (5%)
+  const experienceLevelComplete = profile.workPreferences?.experienceLevel?.length > 0;
 
   // Optional fields
   const hasBio = !!profile.bio;
@@ -70,7 +83,10 @@ export const calculateProfileCompleteness = (profile) => {
     hasBasicInfo: basicInfoComplete,
     hasSkills: skillsComplete,
     hasCategories: categoriesComplete,
-    hasPreferences: preferencesComplete,
+    hasSalary: salaryComplete,
+    hasWorkTypes: workTypesComplete,
+    hasContractTypes: contractTypesComplete,
+    hasExperienceLevel: experienceLevelComplete,
     hasBio,
     hasAvatar,
     hasExperience: experienceComplete,
@@ -86,7 +102,7 @@ export const calculateProfileCompleteness = (profile) => {
   const missingFields = [];
   const recommendations = [];
 
-  // Basic Info (25%) - Bước 1: fullname, phone, preferredLocations
+  // Basic Info (20%)
   if (checks.hasBasicInfo) {
     percentage += weights.basicInfo;
   } else {
@@ -104,7 +120,7 @@ export const calculateProfileCompleteness = (profile) => {
     }
   }
 
-  // Bio (5%) - Optional (bước 1)
+  // Bio (5%)
   if (checks.hasBio) {
     percentage += weights.bio;
   } else {
@@ -112,7 +128,7 @@ export const calculateProfileCompleteness = (profile) => {
     recommendations.push('Viết giới thiệu ngắn về bản thân');
   }
 
-  // Avatar (5%) - Optional (bước 1)
+  // Avatar (5%)
   if (checks.hasAvatar) {
     percentage += weights.avatar;
   } else {
@@ -120,7 +136,7 @@ export const calculateProfileCompleteness = (profile) => {
     recommendations.push('Tải lên ảnh đại diện');
   }
 
-  // Skills (20%) - Bước 2: >= 3 skills
+  // Skills (20%)
   if (checks.hasSkills) {
     percentage += weights.skills;
   } else {
@@ -133,7 +149,7 @@ export const calculateProfileCompleteness = (profile) => {
     }
   }
 
-  // Categories (15%) - Bước 2: >= 1 preferred category (ngành nghề)
+  // Categories (10%)
   if (checks.hasCategories) {
     percentage += weights.categories;
   } else {
@@ -141,25 +157,39 @@ export const calculateProfileCompleteness = (profile) => {
     recommendations.push('Chọn ít nhất 1 ngành nghề mong muốn');
   }
 
-  // Preferences (15%) - Bước 3: salary + workTypes + contractTypes
-  if (checks.hasPreferences) {
-    percentage += weights.preferences;
+  // Salary (5%)
+  if (checks.hasSalary) {
+    percentage += weights.salary;
   } else {
-    if (!profile.expectedSalary?.min || profile.expectedSalary.min === 0) {
-      missingFields.push('expectedSalary');
-      recommendations.push('Thiết lập mức lương mong muốn');
-    }
-    if (!profile.workPreferences?.workTypes?.length) {
-      missingFields.push('workTypes');
-      recommendations.push('Chọn hình thức làm việc (Remote, Hybrid, On-site)');
-    }
-    if (!profile.workPreferences?.contractTypes?.length) {
-      missingFields.push('contractTypes');
-      recommendations.push('Chọn loại hợp đồng (Full-time, Part-time, Contract, v.v.)');
-    }
+    missingFields.push('expectedSalary');
+    recommendations.push('Thiết lập mức lương mong muốn');
   }
 
-  // Experience (5%) - Optional (bước 4)
+  // Work Types (5%)
+  if (checks.hasWorkTypes) {
+    percentage += weights.workTypes;
+  } else {
+    missingFields.push('workTypes');
+    recommendations.push('Chọn hình thức làm việc (Remote, Hybrid, On-site)');
+  }
+
+  // Contract Types (5%)
+  if (checks.hasContractTypes) {
+    percentage += weights.contractTypes;
+  } else {
+    missingFields.push('contractTypes');
+    recommendations.push('Chọn loại hợp đồng (Full-time, Part-time, Contract, v.v.)');
+  }
+
+  // Experience Level (5%)
+  if (checks.hasExperienceLevel) {
+    percentage += weights.experienceLevel;
+  } else {
+    missingFields.push('experienceLevel');
+    recommendations.push('Chọn cấp bậc kinh nghiệm mong muốn (Fresher, Junior, Senior...)');
+  }
+
+  // Experience (5%)
   if (checks.hasExperience) {
     percentage += weights.experience;
   } else {
@@ -167,7 +197,7 @@ export const calculateProfileCompleteness = (profile) => {
     recommendations.push('Thêm kinh nghiệm làm việc (không bắt buộc)');
   }
 
-  // Education (5%) - Optional (bước 4)
+  // Education (5%)
   if (checks.hasEducation) {
     percentage += weights.education;
   } else {
@@ -175,7 +205,7 @@ export const calculateProfileCompleteness = (profile) => {
     recommendations.push('Thêm thông tin học vấn (không bắt buộc)');
   }
 
-  // Certificates (5%) - Optional (bước 5)
+  // Certificates (5%)
   if (checks.hasCertificates) {
     percentage += weights.certificates;
   } else {
@@ -183,7 +213,7 @@ export const calculateProfileCompleteness = (profile) => {
     recommendations.push('Thêm chứng chỉ chuyên môn (không bắt buộc)');
   }
 
-  // Projects (5%) - Optional (bước 5)
+  // Projects (5%)
   if (checks.hasProjects) {
     percentage += weights.projects;
   } else {
@@ -194,10 +224,6 @@ export const calculateProfileCompleteness = (profile) => {
   // Add threshold-based recommendations
   const finalPercentage = Math.round(percentage);
 
-  // Hoàn thành 3 bước bắt buộc = 70% (25% + 25% + 20%)
-  // Bước 4 (Experience + Education) = 10%
-  // Bước 5 (Certificates + Projects) = 10%
-  // Bio + Avatar = 10%
   if (finalPercentage < 70) {
     recommendations.unshift('⚠️ Vui lòng hoàn thành 3 bước bắt buộc để sử dụng đầy đủ tính năng');
   } else if (finalPercentage < 80) {
@@ -216,8 +242,7 @@ export const calculateProfileCompleteness = (profile) => {
     recommendations,
     ...checks,
     lastCalculated: new Date(),
-    // Threshold flags for easy checking
-    // Hoàn thành 3 bước bắt buộc = 70% → có thể nhận gợi ý việc làm
+    // Threshold flags
     canGenerateRecommendations: finalPercentage >= 70,
     isWellCompleted: finalPercentage >= 80,
     isFullyCompleted: finalPercentage === 100
@@ -241,7 +266,7 @@ export const updateProfileCompleteness = async (profileId, profile = null) => {
     const completeness = calculateProfileCompleteness(profileData);
 
     // Chỉ save nếu có thay đổi về percentage hoặc missingFields
-    const hasChanged = 
+    const hasChanged =
       profileData.profileCompleteness?.percentage !== completeness.percentage ||
       JSON.stringify(profileData.profileCompleteness?.missingFields || []) !== JSON.stringify(completeness.missingFields);
 
@@ -309,7 +334,7 @@ export const getProfileImprovementRecommendations = (profile) => {
     });
   }
 
-  if (!profile.expectedSalary?.min || profile.expectedSalary.min === 0) {
+  if (!profile.expectedSalary || profile.expectedSalary.min === undefined || profile.expectedSalary.min === null) {
     recommendations.important.push({
       field: 'expectedSalary',
       message: 'Thiết lập mức lương mong muốn',

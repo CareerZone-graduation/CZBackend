@@ -45,7 +45,7 @@ export const updateProfile = async (userId, updateData) => {
     const {
         fullname, phone, bio, skills, educations, experiences,
         address, website, linkedin, github, certificates, projects,
-        expectedSalary, preferredLocations, workPreferences
+        expectedSalary, preferredLocations, workPreferences, preferredCategories
     } = updateData;
 
     // Prepare data for database update - only set provided fields
@@ -64,7 +64,15 @@ export const updateProfile = async (userId, updateData) => {
     if (projects !== undefined) profileUpdateData.projects = projects;
     if (expectedSalary !== undefined) profileUpdateData.expectedSalary = expectedSalary;
     if (preferredLocations !== undefined) profileUpdateData.preferredLocations = preferredLocations;
-    if (workPreferences !== undefined) profileUpdateData.workPreferences = workPreferences;
+
+    // Handle nested workPreferences to avoid overwriting
+    if (workPreferences) {
+        if (workPreferences.workTypes) profileUpdateData['workPreferences.workTypes'] = workPreferences.workTypes;
+        if (workPreferences.contractTypes) profileUpdateData['workPreferences.contractTypes'] = workPreferences.contractTypes;
+        if (workPreferences.experienceLevel) profileUpdateData['workPreferences.experienceLevel'] = workPreferences.experienceLevel;
+    }
+
+    if (preferredCategories !== undefined) profileUpdateData.preferredCategories = preferredCategories;
 
     // Update the profile in CandidateProfile model (without .lean() to get _id)
     // Note: Don't use .select() here because it doesn't include nested array fields properly

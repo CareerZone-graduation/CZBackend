@@ -80,7 +80,7 @@ export const login = asyncHandler(async (req, res) => {
   res.cookie('refreshToken', refreshToken, {
     httpOnly: true,
     secure: config.NODE_ENV === 'production',
-    sameSite: 'Lax',
+    sameSite: 'None',
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 
@@ -197,7 +197,7 @@ export const googleLogin = asyncHandler(async (req, res) => {
   res.cookie('refreshToken', refreshToken, {
     httpOnly: true,
     secure: config.NODE_ENV === 'production',
-    sameSite: 'Lax',
+    sameSite: 'None',
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 
@@ -265,7 +265,7 @@ export const logout = asyncHandler(async (req, res) => {
   res.cookie('refreshToken', '', {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'Lax',
+    sameSite: 'None',
     maxAge: 0, // Set maxAge to 0 to delete the cookie
   });
   res.json({

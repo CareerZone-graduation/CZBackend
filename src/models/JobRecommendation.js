@@ -23,7 +23,7 @@ const jobRecommendationSchema = new mongoose.Schema({
   reasons: [{
     type: {
       type: String,
-      enum: ['skill_match', 'location_match', 'salary_match', 'experience_match', 'work_type_match', 'contract_type_match'],
+      enum: ['category_match', 'skill_match', 'location_match', 'salary_match', 'experience_match', 'work_type_match', 'contract_type_match'],
       required: true,
       comment: 'Loại lý do gợi ý'
     },
