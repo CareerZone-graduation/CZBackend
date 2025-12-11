@@ -45,21 +45,23 @@ async function startWorker() {
             if (change.operationType === 'update' && change.updateDescription) {
                 const updatedFields = Object.keys(change.updateDescription.updatedFields || {});
 
-                // Fields that don't affect embedding
-                const ignoredFields = [
-                    'updatedAt',
-                    'onboardingCompleted',
-                    'onboardingCompletedAt',
-                    'onboardingStatus',
-                    'profileCompleteness',
-                    'profileCompleteness.percentage',
-                    'profileCompleteness.lastCalculated',
-                    'profileCompleteness.missingFields'
+                // Fields that should trigger embedding generation
+                const includedFields = [
+                    'fullname',
+                    'bio',
+                    'skills',
+                    'experiences',
+                    'educations',
+                    'certificates',
+                    'projects',
+                    'preferredCategories',
+                    'workPreferences',
+                    'cvs'
                 ];
 
-                // Check if only ignored fields were updated
+                // Check if any updated field is relevant (starts with one of the included fields)
                 const hasRelevantChanges = updatedFields.some(field => {
-                    return !ignoredFields.some(ignored => field.startsWith(ignored));
+                    return includedFields.some(included => field === included || field.startsWith(`${included}.`));
                 });
 
                 if (!hasRelevantChanges) {
