@@ -81,6 +81,15 @@ router.patch(
   applicationController.updateApplicationNotes
 );
 
+// Route export Application PDF using Snapshot
+router.get(
+  '/:applicationId/export-pdf',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.recruiterOnly,
+  validationMiddleware.validateParams(applicationSchema.applicationIdParam),
+  applicationController.exportApplicationCvPdf
+);
+
 
 
 export default router;

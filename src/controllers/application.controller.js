@@ -90,6 +90,10 @@ export const updateApplicationNotes = asyncHandler(async (req, res) => {
 
 
 
+// ... imports at top ...
+import puppeteer from 'puppeteer';
+import config from '../config/index.js';
+
 /**
  * @desc      Get CV data for rendering in iframe (for CV template type)
  * @route     GET /api/applications/:applicationId/render-cv
@@ -106,3 +110,82 @@ export const getApplicationCVData = asyncHandler(async (req, res) => {
     data: cvData
   });
 });
+
+/**
+ * @desc      Export Application CV (Snapshot) to PDF
+ * @route     GET /api/applications/:applicationId/export-pdf
+ * @access    Private - Recruiter Only
+ */
+export const exportApplicationCvPdf = async (req, res) => {
+  const { applicationId } = req.params;
+  const browser = await puppeteer.launch({
+    headless: "new",
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-web-security",
+    ],
+  });
+
+  try {
+    const page = await browser.newPage();
+    // Set viewport A4
+    await page.setViewport({
+      width: 794,
+      height: 1123,
+      deviceScaleFactor: 2,
+    });
+
+    const token = req.headers.authorization?.split(" ")[1] || process.env.INTERNAL_PDF_TOKEN;
+    const renderUrl = `${config.CANDIDATE_FE_URL}/render-application.html?applicationId=${applicationId}&token=${token}`;
+
+    console.log("Navigating to:", renderUrl);
+
+    // Set token in localStorage
+    await page.evaluateOnNewDocument((token) => {
+      localStorage.setItem('accessToken', token);
+    }, token);
+
+    // Set auth header
+    await page.setExtraHTTPHeaders({
+      Authorization: `Bearer ${token}`,
+    });
+
+    await page.goto(renderUrl, {
+      waitUntil: "networkidle0",
+      timeout: 90000,
+    });
+
+    console.log('[DEBUG] Waiting for frontend signal (data-cv-ready="true")...');
+    await page.waitForSelector('body[data-cv-ready="true"]', {
+      timeout: 30000, // Wait up to 30s
+    });
+    console.log("[DEBUG] Frontend signal received!");
+
+    const pdfBuffer = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      width: '210mm',
+      height: '1123px',
+      margin: {
+        top: "0mm",
+        right: "0mm",
+        bottom: "0mm",
+        left: "0mm",
+      },
+      preferCSSPageSize: false,
+      displayHeaderFooter: false,
+    });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename=application-cv-${applicationId}.pdf`);
+    res.send(pdfBuffer);
+
+  } catch (error) {
+    console.error("Error generating Application PDF:", error);
+    res.status(500).json({ success: false, message: "Failed to generate PDF" });
+  } finally {
+    await browser.close();
+  }
+};
