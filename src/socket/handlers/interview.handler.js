@@ -31,6 +31,56 @@ export const registerInterviewHandlers = (io, socket, interviewRoomParticipants)
                 return;
             }
 
+            // If recruiter, fetch company logo and name, and set as avatar/name
+            if (joinResult.userRole === 'recruiter') {
+                try {
+                    const { RecruiterProfile } = await import('../../models/index.js');
+                    const profile = await RecruiterProfile.findOne({ userId: socket.userId }).select('company.logo fullname').lean();
+                    if (profile) {
+                        if (profile.company && profile.company.logo) {
+                            socket.user.avatar = profile.company.logo;
+                            // Also update in interview object for the client
+                            if (joinResult.interview.recruiterId && typeof joinResult.interview.recruiterId === 'object') {
+                                joinResult.interview.recruiterId.avatar = profile.company.logo;
+                            }
+                        }
+                        if (profile.fullname) {
+                            socket.user.fullName = profile.fullname;
+                            socket.user.name = profile.fullname; // Fallback
+                            if (joinResult.interview.recruiterId && typeof joinResult.interview.recruiterId === 'object') {
+                                joinResult.interview.recruiterId.fullName = profile.fullname;
+                            }
+                        }
+                    }
+                } catch (err) {
+                    logger.error(`Error fetching recruiter profile for ${socket.userId}:`, err);
+                }
+            } else if (joinResult.userRole === 'candidate') {
+                try {
+                    const { CandidateProfile } = await import('../../models/index.js');
+                    const profile = await CandidateProfile.findOne({ userId: socket.userId }).select('fullname avatar').lean();
+
+                    if (profile) {
+                        if (profile.avatar) {
+                            socket.user.avatar = profile.avatar;
+                            // Update in interview object
+                            if (joinResult.interview.candidateId && typeof joinResult.interview.candidateId === 'object') {
+                                joinResult.interview.candidateId.avatar = profile.avatar;
+                            }
+                        }
+                        if (profile.fullname) {
+                            socket.user.fullName = profile.fullname;
+                            socket.user.name = profile.fullname;
+                            if (joinResult.interview.candidateId && typeof joinResult.interview.candidateId === 'object') {
+                                joinResult.interview.candidateId.fullName = profile.fullname;
+                            }
+                        }
+                    }
+                } catch (err) {
+                    logger.error(`Error fetching candidate profile for ${socket.userId}:`, err);
+                }
+            }
+
             // === Check status and time for auto-start logic ===
             // If status is SCHEDULED or RESCHEDULED and it's time (or slightly past), update to STARTED.
             // This covers cases where Cron hasn't run yet or user joins exactly at start time.
@@ -48,8 +98,7 @@ export const registerInterviewHandlers = (io, socket, interviewRoomParticipants)
                     // But simply updating DB is safer for "participation trigger" regardless of role.
 
                     // We'll use a direct update similar to cron for flexibility
-                    const InterviewRoom = (await import('../../models/InterviewRoom.js')).default;
-                    const Application = (await import('../../models/index.js')).Application;
+                    const { InterviewRoom, ChatMessage, User, RecruiterProfile, Application } = await import('../../models/index.js');
 
                     const updatedInterview = await InterviewRoom.findByIdAndUpdate(interviewId, {
                         status: 'STARTED',
@@ -62,7 +111,9 @@ export const registerInterviewHandlers = (io, socket, interviewRoomParticipants)
                                 actor: socket.userId
                             }
                         }
-                    }, { new: true });
+                    }, { new: true })
+                        .populate('candidateId', 'fullName email avatar')
+                        .populate('recruiterId', 'fullName email avatar');
 
                     // Update existing joinResult object so client gets fresh status
                     joinResult.interview = updatedInterview.toObject ? updatedInterview.toObject() : updatedInterview;
@@ -87,7 +138,6 @@ export const registerInterviewHandlers = (io, socket, interviewRoomParticipants)
             const socketsInRoomBefore = await io.in(roomName).fetchSockets();
             const actualSocketIds = new Set(socketsInRoomBefore.map(s => s.id));
             const actualUserIds = new Set(socketsInRoomBefore.map(s => s.userId));
-
             // Clean up our tracking map - remove users who are not actually connected
             const trackedUsers = interviewRoomParticipants.get(roomId);
             for (const userId of trackedUsers) {
@@ -107,7 +157,8 @@ export const registerInterviewHandlers = (io, socket, interviewRoomParticipants)
                     userId: s.userId,
                     socketId: s.id,
                     userRole: s.userRole || 'unknown',
-                    userName: s.user?.fullName || s.user?.name || 'User'
+                    userName: s.user?.fullName || s.user?.name || 'User',
+                    userAvatar: s.user?.avatar || null
                 }));
 
             logger.info(`[BEFORE JOIN] Existing users in room:`, existingUsers);
@@ -127,6 +178,7 @@ export const registerInterviewHandlers = (io, socket, interviewRoomParticipants)
             const userJoinedEvent = {
                 userId: socket.userId,
                 userName: socket.user?.fullName || socket.user?.name || 'User',
+                userAvatar: socket.user?.avatar || null,
                 userRole: joinResult.userRole,
                 timestamp: new Date(),
                 // Signal to initiator (recruiter) to send offer if this is candidate joining
@@ -537,6 +589,22 @@ export const registerInterviewHandlers = (io, socket, interviewRoomParticipants)
             });
         } catch (error) {
             logger.error(`Error sending emoji from ${socket.userId}:`, error);
+        }
+    });
+
+    // Handle screen share stopped
+    socket.on('interview:screen-share-stopped', (data) => {
+        try {
+            const { roomId } = data;
+            if (!roomId) return;
+
+            // Broadcast to other participants
+            socket.to(`interview:${roomId}`).emit('interview:screen-share-stopped', {
+                userId: socket.userId,
+                timestamp: new Date()
+            });
+        } catch (error) {
+            logger.error(`Error handling screen share stop from ${socket.userId}:`, error);
         }
     });
 

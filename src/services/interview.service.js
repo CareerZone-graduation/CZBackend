@@ -1168,8 +1168,8 @@ export const getCandidateInterviews = async (candidateId, options = {}) => {
  */
 export const getInterviewDetails = async (interviewId, userId, userRole) => {
   const interview = await InterviewRoom.findById(interviewId)
-    .populate('candidateId', 'fullName email avatar')
-    .populate('recruiterId', 'fullName email avatar')
+    .populate('candidateId', 'fullname email avatar')
+    .populate('recruiterId', 'fullname email avatar')
     .populate({
       path: 'applicationId',
       select: 'jobSnapshot candidateProfileId appliedAt status candidateName candidateEmail candidatePhone coverLetter candidateRating notes submittedCV activityHistory'
@@ -1199,6 +1199,47 @@ export const getInterviewDetails = async (interviewId, userId, userRole) => {
     };
   }
 
+  // For recruiter and candidate, try to fetch details from profiles as User model lacks fullname/avatar
+  let recruiterAvatar = interview.recruiterId.avatar;
+  let recruiterName = interview.recruiterId.fullName;
+  let candidateAvatar = interview.candidateId.avatar;
+  let candidateName = interview.candidateId.fullName;
+
+  // Check Job Snapshot first for company logo
+  if (interview.applicationId && interview.applicationId.jobSnapshot && interview.applicationId.jobSnapshot.logo) {
+    recruiterAvatar = interview.applicationId.jobSnapshot.logo;
+  }
+
+  // Fetch Profiles to get missing info (fullname, avatar)
+  // We import dynamically to avoid circular deps
+  try {
+    const { RecruiterProfile, CandidateProfile } = await import('../models/index.js');
+
+    const [rProfile, cProfile] = await Promise.all([
+      RecruiterProfile.findOne({ userId: interview.recruiterId._id }).select('company.logo fullname').lean(),
+      CandidateProfile.findOne({ userId: interview.candidateId._id }).select('fullname avatar').lean()
+    ]);
+
+    if (rProfile) {
+      // If logo not found in snapshot, use profile logo
+      if (!recruiterAvatar && rProfile.company && rProfile.company.logo) {
+        recruiterAvatar = rProfile.company.logo;
+      }
+      // Always try to get fuller name from profile
+      if (rProfile.fullname) {
+        recruiterName = rProfile.fullname;
+      }
+    }
+
+    if (cProfile) {
+      if (cProfile.fullname) candidateName = cProfile.fullname;
+      if (cProfile.avatar) candidateAvatar = cProfile.avatar;
+    }
+
+  } catch (err) {
+    logger.warn(`Could not fetch profiles for avatar/name: ${err.message}`);
+  }
+
   const formattedInterview = {
     id: interview._id,
     roomName: interview.roomName,
@@ -1214,16 +1255,16 @@ export const getInterviewDetails = async (interviewId, userId, userRole) => {
     updatedAt: interview.updatedAt,
     candidate: {
       id: interview.candidateId._id,
-      fullName: interview.candidateId.fullName || interview.applicationId?.candidateName,
+      fullName: candidateName || interview.candidateId.fullname || interview.applicationId?.candidateName,
       email: interview.candidateId.email || interview.applicationId?.candidateEmail,
-      avatar: interview.candidateId.avatar,
+      avatar: candidateAvatar || interview.candidateId.avatar,
       phone: interview.applicationId?.candidatePhone
     },
     recruiter: {
       id: interview.recruiterId._id,
-      fullName: interview.recruiterId.fullName,
+      fullName: recruiterName,
       email: interview.recruiterId.email,
-      avatar: interview.recruiterId.avatar
+      avatar: recruiterAvatar
     },
     application: interview.applicationId ? {
       id: interview.applicationId._id,
