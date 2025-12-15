@@ -43,11 +43,8 @@ const sendTestNotification = async () => {
     const result = await pushNotification(user._id, {
       title: title,
       body: message,
-      type: 'system', // Or any other relevant type
       data: {
         url: "/messages/123",
-        info: 'This is a test notification from a manual script.',
-        sentAt: new Date().toISOString(),
       },
     });
 
@@ -56,7 +53,7 @@ const sendTestNotification = async () => {
       if (result.response) {
         logger.info(`FCM Response: Success: ${result.response.successCount}, Failure: ${result.response.failureCount}`);
       }
-      logger.info('Notification saved to DB with ID:', result.notification._id);
+      logger.info('Notification saved to DB with ID:', result.notification);
     } else {
       logger.error('Failed to send notification:', result.error);
     }

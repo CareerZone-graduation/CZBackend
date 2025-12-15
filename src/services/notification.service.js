@@ -25,13 +25,25 @@ export async function pushNotification(userId, payload) {
       return { success: true, message: 'Notification saved, but user has no device tokens to push.' };
     }
 
+    const uniqueTokens = [...new Set(user.fcmTokens)];
+
+    // Convert payload.data values to strings to satisfy FCM requirements
+    const stringData = {};
+    if (payload.data) {
+      for (const [key, value] of Object.entries(payload.data)) {
+        stringData[key] = String(value);
+      }
+    }
+
     const message = {
-      notification: {
-        title: payload.title,
-        body: payload.body,
+      // notification: { ... }, // Removed to prevent double notifications (OS + SW)
+      data: {
+        ...stringData,
+        title: String(payload.title),
+        body: String(payload.body),
+        type: String(payload.type || ''), // Optional: pass type if needed
       },
-      data: payload.data || {}, // Gửi data kèm theo push
-      tokens: user.fcmTokens,
+      tokens: uniqueTokens,
     };
 
     const response = await admin.messaging().sendEachForMulticast(message);
@@ -735,7 +747,7 @@ export const handleStatusUpdate = async (payload) => {
         title: "Nộp đơn thành công",
         body: `Bạn đã nộp đơn thành công vào vị trí "${application.jobSnapshot.title}" tại ${application.jobSnapshot.company}.`,
         data: {
-          url: `/jobs/${application.jobId}/applications/${applicationId}`,
+          url: `/dashboard/applications/${applicationId}`,
         }
       });
       break;
@@ -800,7 +812,7 @@ export const createApplicationViewedNotification = async (applicationId) => {
     title,
     body: message,
     data: {
-      url: `/jobs/${application.jobId}/applications/${applicationId}`
+      url: `/dashboard/applications/${applicationId}`
     }
   });
 
@@ -868,7 +880,7 @@ export const createStatusChangeNotification = async (applicationId, newStatus) =
     title: notification.title,
     body: notification.message,
     data: {
-      url: `/jobs/${application.jobId}/applications/${applicationId}`,
+      url: `/dashboard/applications/${applicationId}`,
     }
   });
 };
