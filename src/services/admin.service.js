@@ -670,30 +670,143 @@ export const getCompaniesForAdmin = async (queryParams) => {
     filter['company.industry'] = industry;
   }
 
-  const sortOptions = {};
-  switch (sort) {
-    case 'name_asc':
-      sortOptions['company.name'] = 1;
-      break;
-    case 'name_desc':
-      sortOptions['company.name'] = -1;
-      break;
-    case 'createdAt_asc':
-      sortOptions.createdAt = 1;
-      break;
-    case 'updatedAt_asc':
-      sortOptions.updatedAt = 1;
-      break;
-    case 'updatedAt_desc':
-      sortOptions.updatedAt = -1;
-      break;
-    case 'createdAt_desc':
-    default:
-      sortOptions.createdAt = -1;
-      break;
+  const skip = (page - 1) * limit;
+
+  // Check if sorting by jobs or applications (requires aggregation)
+  const isAggregateSort = ['jobs_desc', 'jobs_asc', 'applications_desc', 'applications_asc'].includes(sort);
+
+  if (isAggregateSort) {
+    // Use aggregation pipeline for sorting by computed fields
+    const pipeline = [
+      { $match: filter },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'userId',
+          foreignField: '_id',
+          as: 'user'
+        }
+      },
+      { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'jobs',
+          let: { profileId: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ['$recruiterProfileId', '$$profileId'] },
+                status: 'ACTIVE',
+                approved: true
+              }
+            },
+            { $count: 'count' }
+          ],
+          as: 'jobsData'
+        }
+      },
+      {
+        $addFields: {
+          activeJobs: { $ifNull: [{ $arrayElemAt: ['$jobsData.count', 0] }, 0] }
+        }
+      },
+      {
+        $lookup: {
+          from: 'jobs',
+          localField: '_id',
+          foreignField: 'recruiterProfileId',
+          as: 'allJobs'
+        }
+      },
+      {
+        $lookup: {
+          from: 'applications',
+          let: { jobIds: '$allJobs._id' },
+          pipeline: [
+            { $match: { $expr: { $in: ['$jobId', '$$jobIds'] } } },
+            { $count: 'count' }
+          ],
+          as: 'applicationsData'
+        }
+      },
+      {
+        $addFields: {
+          totalApplications: { $ifNull: [{ $arrayElemAt: ['$applicationsData.count', 0] }, 0] }
+        }
+      },
+      { $project: { jobsData: 0, allJobs: 0, applicationsData: 0 } }
+    ];
+
+    let sortField, sortOrder;
+    switch (sort) {
+      case 'jobs_desc': sortField = 'activeJobs'; sortOrder = -1; break;
+      case 'jobs_asc': sortField = 'activeJobs'; sortOrder = 1; break;
+      case 'applications_desc': sortField = 'totalApplications'; sortOrder = -1; break;
+      case 'applications_asc': sortField = 'totalApplications'; sortOrder = 1; break;
+    }
+    pipeline.push({ $sort: { [sortField]: sortOrder, createdAt: -1 } });
+
+    const [countResult] = await RecruiterProfile.aggregate([{ $match: filter }, { $count: 'total' }]);
+    const total = countResult?.total || 0;
+
+    pipeline.push({ $skip: skip }, { $limit: parseInt(limit) });
+    const results = await RecruiterProfile.aggregate(pipeline);
+
+    const formattedData = results.map(profile => ({
+      _id: profile._id,
+      activeJobs: profile.activeJobs || 0,
+      totalApplications: profile.totalApplications || 0,
+      recruiterInfo: {
+        fullname: profile.fullname,
+        userId: profile.user?._id,
+        email: profile.user?.email,
+        active: profile.user?.active,
+        userCreatedAt: profile.user?.createdAt
+      },
+      company: {
+        name: profile.company?.name || null,
+        about: profile.company?.about || null,
+        logo: profile.company?.logo || null,
+        industry: profile.company?.industry || null,
+        taxCode: profile.company?.taxCode || null,
+        businessRegistrationUrl: profile.company?.businessRegistrationUrl || null,
+        size: profile.company?.size || null,
+        website: profile.company?.website || null,
+        location: {
+          province: profile.company?.location?.province || null,
+          district: profile.company?.location?.district || null,
+          commune: profile.company?.location?.commune || null
+        },
+        address: profile.company?.address || null,
+        contactInfo: {
+          email: profile.company?.contactInfo?.email || null,
+          phone: profile.company?.contactInfo?.phone || null
+        },
+        verified: profile.company?.verified || false,
+        status: profile.company?.status || 'pending',
+        rejectReason: profile.company?.rejectReason || null
+      },
+      profileCreatedAt: profile.createdAt,
+      profileUpdatedAt: profile.updatedAt
+    }));
+
+    return {
+      meta: { currentPage: parseInt(page), totalPages: Math.ceil(total / limit), totalItems: total, limit: parseInt(limit) },
+      data: formattedData
+    };
   }
 
-  const skip = (page - 1) * limit;
+  // Standard sorting (non-aggregate)
+  const sortOptions = {};
+  switch (sort) {
+    case 'name_asc': sortOptions['company.name'] = 1; break;
+    case 'name_desc': sortOptions['company.name'] = -1; break;
+    case 'createdAt_asc': sortOptions.createdAt = 1; break;
+    case 'updatedAt_asc': sortOptions.updatedAt = 1; break;
+    case 'updatedAt_desc': sortOptions.updatedAt = -1; break;
+    case 'createdAt_desc':
+    default: sortOptions.createdAt = -1; break;
+  }
 
   const [recruiterProfiles, total] = await Promise.all([
     RecruiterProfile.find(filter)
@@ -704,7 +817,7 @@ export const getCompaniesForAdmin = async (queryParams) => {
       .select('fullname company createdAt updatedAt userId')
       .sort(sortOptions)
       .skip(skip)
-      .limit(limit)
+      .limit(parseInt(limit))
       .lean(),
     RecruiterProfile.countDocuments(filter),
   ]);

@@ -70,7 +70,13 @@ export const adminCompaniesQuerySchema = z.object({
     'Khác'
   ]).optional(),
   sort: z
-    .enum(['name_asc', 'name_desc', 'createdAt_asc', 'createdAt_desc', 'updatedAt_asc', 'updatedAt_desc'])
+    .enum([
+      'name_asc', 'name_desc', 
+      'createdAt_asc', 'createdAt_desc', 
+      'updatedAt_asc', 'updatedAt_desc',
+      'jobs_desc', 'jobs_asc',
+      'applications_desc', 'applications_asc'
+    ])
     .optional()
     .default('createdAt_desc'),
 });
