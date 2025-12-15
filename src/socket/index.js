@@ -12,11 +12,22 @@ const connectedUsers = new Map();
 // Store interview room participants (Map: roomId -> Set<userId>)
 const interviewRoomParticipants = new Map();
 
+// Global io instance
+let ioInstance;
+
+export const getIO = () => {
+  if (!ioInstance) {
+    throw new Error('Socket.IO not initialized!');
+  }
+  return ioInstance;
+};
+
 /**
  * Initialize Socket.IO with authentication and event handlers
  * @param {SocketIO.Server} io - Socket.IO server instance
  */
 export const initializeSocket = (io) => {
+  ioInstance = io;
   logger.info('Initializing Socket.IO...');
   // Authentication middleware for Socket.IO
   io.use(async (socket, next) => {

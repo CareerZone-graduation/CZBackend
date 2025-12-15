@@ -315,7 +315,7 @@ export const createInterviewStartedNotification = async (interviewId) => {
 
   const title = '🎥 Phỏng vấn đã bắt đầu';
   const candidateMessage = `Cuộc phỏng vấn cho vị trí "${interview.applicationId?.jobSnapshot?.title}" đã bắt đầu.`;
-  const recruiterMessage = `Cuộc phỏng vấn với ${interview.candidateId.fullName} đã bắt đầu.`;
+  const recruiterMessage = candidateMessage;
 
   // Thông báo cho candidate
   const notificationForCandidate = await Notification.create({
@@ -391,7 +391,7 @@ export const createInterviewEndedNotification = async (interviewId, duration) =>
 
   const title = '✅ Phỏng vấn đã kết thúc';
   const candidateMessage = `Cuộc phỏng vấn cho vị trí "${interview.applicationId?.jobSnapshot?.title}" đã kết thúc. Thời lượng: ${duration} phút.`;
-  const recruiterMessage = `Cuộc phỏng vấn với ${interview.candidateId.fullName} đã kết thúc. Thời lượng: ${duration} phút.`;
+  const recruiterMessage = candidateMessage;
 
   // Thông báo cho candidate
   const notificationForCandidate = await Notification.create({

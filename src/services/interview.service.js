@@ -338,8 +338,9 @@ export const joinInterview = async (interviewId, userId) => {
   // Validate time window (15 minutes before to 30 minutes after scheduled time)
   const now = new Date();
   const scheduledTime = new Date(interview.scheduledTime);
+  const duration = interview.duration;
   const windowStart = new Date(scheduledTime.getTime() - 15 * 60000); // 15 min before
-  const windowEnd = new Date(scheduledTime.getTime() + 30 * 60000); // 30 min after
+  const windowEnd = new Date(scheduledTime.getTime() + duration * 60000); // 30 min after
 
   if (now < windowStart) {
     const minutesUntilStart = Math.ceil((windowStart - now) / 60000);
@@ -347,7 +348,7 @@ export const joinInterview = async (interviewId, userId) => {
   }
 
   if (now > windowEnd) {
-    throw new BadRequestError('Chỉ có thể tham gia phòng phỏng vấn 15 phút trước cho đến 30 phút sau phỏng vấn bắt đầu');
+    throw new BadRequestError('Chỉ có thể tham gia phòng phỏng vấn 15 phút trước cho đến khi phỏng vấn kết thúc theo dự kiến');
   }
 
   logger.info(`User ${userId} validated to join interview ${interviewId}`);
@@ -430,6 +431,132 @@ export const startInterview = async (interviewId, userId) => {
  * @param {Object} feedback - Feedback data (rating, notes, technicalIssues, issueDescription)
  * @returns {Object} Updated interview
  */
+/**
+ * Auto-start scheduled interviews
+ * (Called by cron job)
+ */
+export const autoStartScheduledInterviews = async () => {
+  const now = new Date();
+
+  // Find interviews that are SCHEDULED or RESCHEDULED and scheduled time has passed
+  const interviewsToStart = await InterviewRoom.find({
+    status: { $in: ['SCHEDULED', 'RESCHEDULED'] },
+    scheduledTime: { $lte: now }
+  });
+
+  logger.info(`Found ${interviewsToStart.length} interviews to auto-start`);
+
+  for (const interview of interviewsToStart) {
+    try {
+      interview.status = 'STARTED';
+      interview.startTime = interview.scheduledTime;
+
+      interview.changeHistory.push({
+        timestamp: now,
+        action: 'STARTED',
+        notes: 'Phòng phỏng vấn tự động bắt đầu bởi hệ thống',
+        actor: interview.recruiterId // or system user ID if available, but using recruiterId as owner is safe enough or maybe undefined
+      });
+
+      await interview.save();
+
+      // Notify via RabbitMQ
+      queueService.publishNotification(rabbitmq.ROUTING_KEYS.INTERVIEW_STARTED, {
+        type: 'INTERVIEW_STARTED',
+        data: {
+          interviewId: interview._id.toString()
+        }
+      });
+
+      // Notify via Socket.IO
+      try {
+        const { getIO } = await import('../socket/index.js');
+        const io = getIO();
+        io.to(`interview:${interview._id.toString()}`).emit('interview:started', {
+          startTime: interview.startTime,
+          timestamp: now
+        });
+      } catch (socketError) {
+        logger.error(`Failed to emit socket event for auto-start interview ${interview._id}:`, socketError);
+      }
+
+      logger.info(`Auto-started interview ${interview._id}`);
+    } catch (error) {
+      logger.error(`Failed to auto-start interview ${interview._id}:`, error);
+    }
+  }
+};
+
+/**
+ * Auto-end expired interviews
+ * (Called by cron job)
+ */
+export const autoEndExpiredInterviews = async () => {
+  const now = new Date();
+
+  // Find interviews that are STARTED and duration has passed
+  // We need to check each interview's specific duration
+  // So we find all STARTED interviews first
+  const startedInterviews = await InterviewRoom.find({
+    status: 'STARTED',
+    startTime: { $exists: true }
+  });
+
+  const interviewsToEnd = startedInterviews.filter(interview => {
+    const startTime = new Date(interview.startTime);
+    const durationMs = (interview.duration || 60) * 60 * 1000;
+    const endTime = new Date(startTime.getTime() + durationMs);
+    // Add a small buffer (e.g. 5 minutes) to avoid cutting off exactly at the minute
+    const bufferMs = 5 * 60 * 1000;
+    return now > new Date(endTime.getTime() + bufferMs);
+  });
+
+  logger.info(`Found ${interviewsToEnd.length} interviews to auto-end`);
+
+  for (const interview of interviewsToEnd) {
+    try {
+      interview.status = 'ENDED';
+      // Set endTime to the expected end time based on duration
+      const startTime = new Date(interview.startTime);
+      const durationMs = (interview.duration || 60) * 60 * 1000;
+      interview.endTime = new Date(startTime.getTime() + durationMs);
+
+      interview.changeHistory.push({
+        timestamp: now,
+        action: 'ENDED', // Using ENDED as per new enum
+        notes: 'Phòng phỏng vấn tự động kết thúc bởi hệ thống (quá thời lượng)',
+        actor: interview.recruiterId
+      });
+
+      await interview.save();
+
+      // Notify via Socket.IO
+      try {
+        const { getIO } = await import('../socket/index.js');
+        const io = getIO();
+        io.to(`interview:${interview._id.toString()}`).emit('interview:ended', {
+          endTime: interview.endTime,
+          type: 'expired',
+          timestamp: now
+        });
+      } catch (socketError) {
+        logger.error(`Failed to emit socket event for auto-end interview ${interview._id}:`, socketError);
+      }
+
+      logger.info(`Auto-ended interview ${interview._id}`);
+    } catch (error) {
+      logger.error(`Failed to auto-end interview ${interview._id}:`, error);
+    }
+  }
+};
+
+/**
+ * End interview with feedback storage
+ * @param {string} interviewId - ID of the interview
+ * @param {string} userId - ID of the user ending (must be recruiter)
+ * @param {Object} feedback - Feedback data (rating, notes, technicalIssues, issueDescription)
+ * @returns {Object} Updated interview
+ */
 export const endInterview = async (interviewId, userId, feedback = {}) => {
   if (!interviewId || !userId) {
     throw new BadRequestError('Interview ID and User ID are required');
@@ -447,12 +574,27 @@ export const endInterview = async (interviewId, userId, feedback = {}) => {
   }
 
   // Only recruiter can end the interview
-  if (interview.recruiterId.toString() !== userId.toString()) {
-    throw new ForbiddenError('Only the recruiter can end the interview');
+  // Allow candidate to end? Usually only recruiter. 
+  // Requirement says "nhà tuyển dụng và ứng viên tham gia và kết thúc" (recruiter and candidate join and end).
+  // So maybe we should allow candidate to "end" the call, which effectively completes it if they are the last one?
+  // Or just allow both to call "end".
+  // For now, let's keep it restricted but check if we need to relax it.
+  // The user said "thấy cập nhật khi có các sự kiện như nhà tuyển dụng và ứng viên tham gia và kết thúc".
+  // This implies when *they* end the call.
+  // Let's allow either party to "Compete" it? Or just Update EndTime?
+  // Use 'canUserJoin' logic for participants.
+
+  const isRecruiter = interview.recruiterId.toString() === userId.toString();
+  const isCandidate = interview.candidateId.toString() === userId.toString();
+
+  if (!isRecruiter && !isCandidate) {
+    throw new ForbiddenError('Only participants can end the interview');
   }
 
   // Can only end if status is STARTED
   if (interview.status !== 'STARTED') {
+    // If it's already COMPLETED, just return it
+    if (interview.status === 'COMPLETED') return interview;
     throw new BadRequestError(`Cannot end interview with status: ${interview.status}`);
   }
 
@@ -461,7 +603,8 @@ export const endInterview = async (interviewId, userId, feedback = {}) => {
   interview.endTime = new Date();
 
   // Calculate duration
-  const durationMs = interview.endTime - interview.startTime;
+  const startTime = interview.startTime || interview.scheduledTime; // Fallback
+  const durationMs = interview.endTime - startTime;
   const durationMinutes = Math.round(durationMs / (1000 * 60));
 
   // Add to change history
@@ -483,24 +626,25 @@ export const endInterview = async (interviewId, userId, feedback = {}) => {
       application.lastStatusUpdateAt = new Date();
 
       // Store feedback if provided
-      if (feedback.rating || feedback.notes) {
-        application.candidateRating = feedback.rating || application.candidateRating;
-        if (feedback.notes) {
-          application.notes = (application.notes || '') + `\n\nInterview Feedback (${new Date().toLocaleString('vi-VN')}): ${feedback.notes}`;
-        }
+      if (feedback.rating || (feedback.notes && isRecruiter)) { // Only recruiter feedback usually updates app rating
+        if (feedback.rating) application.candidateRating = feedback.rating;
+        if (feedback.notes) application.notes = (application.notes || '') + `\n\nInterview Feedback (${new Date().toLocaleString('vi-VN')}): ${feedback.notes}`;
       }
 
       application.activityHistory.push({
         action: 'INTERVIEW_COMPLETED',
-        detail: `Interview completed. Duration: ${durationMinutes} minutes.`,
+        detail: `Interview completed by ${isRecruiter ? 'Recruiter' : 'Candidate'}. Duration: ${durationMinutes} minutes.`,
         timestamp: new Date()
       });
 
-      application.activityHistory.push({
-        action: 'STATUS_CHANGE',
-        detail: `Status changed from ${oldStatus} to INTERVIEWED`,
-        timestamp: new Date()
-      });
+      // Only change status if it hasn't been advanced (simple check)
+      if (oldStatus !== 'INTERVIEWED' && oldStatus !== 'OFFERED' && oldStatus !== 'HIRED' && oldStatus !== 'REJECTED') {
+        application.activityHistory.push({
+          action: 'STATUS_CHANGE',
+          detail: `Status changed from ${oldStatus} to INTERVIEWED`,
+          timestamp: new Date()
+        });
+      }
 
       await application.save();
     }
@@ -515,7 +659,7 @@ export const endInterview = async (interviewId, userId, feedback = {}) => {
     }
   });
 
-  logger.info(`Interview ${interviewId} ended by recruiter ${userId}. Duration: ${durationMinutes} minutes`);
+  logger.info(`Interview ${interviewId} ended by user ${userId}. Duration: ${durationMinutes} minutes`);
 
   return interview;
 };
@@ -626,7 +770,7 @@ export const rescheduleInterview = async (interviewId, userId, newScheduledAt, r
   }
 
   // Can only reschedule if status is SCHEDULED or RESCHEDULED
-  if (!['SCHEDULED', 'RESCHEDULED'].includes(interview.status)) {
+  if (!['SCHEDULED', 'RESCHEDULED', 'ENDED'].includes(interview.status)) {
     throw new BadRequestError(`Cannot reschedule interview with status: ${interview.status}`);
   }
 
@@ -1064,6 +1208,7 @@ export const getInterviewDetails = async (interviewId, userId, userRole) => {
     duration,
     status: interview.status,
     changeHistory: interview.changeHistory,
+    chatTranscript: interview.chatTranscript,
     isReminderSent: interview.isReminderSent,
     createdAt: interview.createdAt,
     updatedAt: interview.updatedAt,
@@ -1074,12 +1219,12 @@ export const getInterviewDetails = async (interviewId, userId, userRole) => {
       avatar: interview.candidateId.avatar,
       phone: interview.applicationId?.candidatePhone
     },
-    recruiter: isCandidate ? {
+    recruiter: {
       id: interview.recruiterId._id,
       fullName: interview.recruiterId.fullName,
       email: interview.recruiterId.email,
       avatar: interview.recruiterId.avatar
-    } : null,
+    },
     application: interview.applicationId ? {
       id: interview.applicationId._id,
       appliedAt: interview.applicationId.appliedAt,

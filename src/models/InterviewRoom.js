@@ -73,7 +73,7 @@ const interviewRoomSchema = new mongoose.Schema({
     trim: true,
     comment: 'Unique identifier for WebRTC room'
   },
-  
+
   meetingUrl: {
     type: String,
     trim: true,
@@ -90,7 +90,7 @@ const interviewRoomSchema = new mongoose.Schema({
     type: Date,
     required: [true, 'Scheduled time is required'],
     validate: {
-      validator: function(value) {
+      validator: function (value) {
         // Only validate future time when creating new interview
         // Allow past times for existing interviews (e.g., when updating chat transcript)
         if (this.isNew) {
@@ -111,7 +111,7 @@ const interviewRoomSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: {
-      values: ['SCHEDULED', 'STARTED', 'COMPLETED', 'CANCELLED', 'RESCHEDULED'],
+      values: ['SCHEDULED', 'STARTED', 'COMPLETED', 'CANCELLED', 'RESCHEDULED', 'ENDED'],
       message: '{VALUE} is not a valid interview status'
     },
     default: 'SCHEDULED'
@@ -124,7 +124,7 @@ const interviewRoomSchema = new mongoose.Schema({
     action: {
       type: String,
       required: true,
-      enum: ['CREATED', 'RESCHEDULED', 'CANCELLED', 'STARTED', 'COMPLETED', 'NOTE_ADDED']
+      enum: ['CREATED', 'RESCHEDULED', 'CANCELLED', 'STARTED', 'COMPLETED', 'NOTE_ADDED','ENDED']
     },
     fromTime: {
       type: Date // Thời gian cũ (dành cho RESCHEDULED)
@@ -195,39 +195,39 @@ interviewRoomSchema.index({ jobId: 1 });
 
 // ================================= Virtual Properties =================================
 // Virtual property to check if interview is currently active
-interviewRoomSchema.virtual('isActive').get(function() {
+interviewRoomSchema.virtual('isActive').get(function () {
   return this.status === 'STARTED';
 });
 
 // ================================= Instance Methods =================================
 // Instance method to check if a user can join the interview
-interviewRoomSchema.methods.canUserJoin = function(userId) {
+interviewRoomSchema.methods.canUserJoin = function (userId) {
   const userIdStr = userId.toString();
-  
+
   // Check if user is a participant (recruiter or candidate)
-  const isParticipant = 
-    this.recruiterId.toString() === userIdStr || 
+  const isParticipant =
+    this.recruiterId.toString() === userIdStr ||
     this.candidateId.toString() === userIdStr;
-  
+
   // Check if interview is in valid status
-  const isScheduledOrStarted = 
-    this.status === 'SCHEDULED' || 
+  const isScheduledOrStarted =
+    this.status === 'SCHEDULED' ||
     this.status === 'STARTED';
-  
+
   // Check if current time is within the allowed time window
   const isWithinTimeWindow = () => {
     const now = new Date();
     const scheduledTime = new Date(this.scheduledTime);
-    
+
     // Allow joining 15 minutes before scheduled time
     const windowStart = new Date(scheduledTime.getTime() - 15 * 60000);
-    
+
     // Allow joining up to 30 minutes after scheduled time
     const windowEnd = new Date(scheduledTime.getTime() + 30 * 60000);
-    
+
     return now >= windowStart && now <= windowEnd;
   };
-  
+
   return isParticipant && isScheduledOrStarted && isWithinTimeWindow();
 };
 

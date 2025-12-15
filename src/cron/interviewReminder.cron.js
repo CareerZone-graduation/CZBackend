@@ -1,4 +1,5 @@
 // src/cron/interviewReminder.cron.js
+import './interviewStatus.cron.js';
 import cron from 'node-cron';
 import logger from '../utils/logger.js';
 import { sendInterviewReminders } from '../services/interview.service.js';

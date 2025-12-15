@@ -21,7 +21,7 @@ export const registerInterviewHandlers = (io, socket, interviewRoomParticipants)
 
             // Validate access and time window using interview service
             const interviewService = await import('../../services/interview.service.js');
-            const joinResult = await interviewService.joinInterview(interviewId, socket.userId);
+            let joinResult = await interviewService.joinInterview(interviewId, socket.userId);
 
             if (!joinResult.canJoin) {
                 const error = { message: 'Cannot join interview at this time' };
@@ -29,6 +29,50 @@ export const registerInterviewHandlers = (io, socket, interviewRoomParticipants)
                 if (callback) callback({ success: false, error: error.message });
                 socket.emit('interview:error', error);
                 return;
+            }
+
+            // === Check status and time for auto-start logic ===
+            // If status is SCHEDULED or RESCHEDULED and it's time (or slightly past), update to STARTED.
+            // This covers cases where Cron hasn't run yet or user joins exactly at start time.
+            if (['SCHEDULED', 'RESCHEDULED'].includes(joinResult.interview.status)) {
+                const now = new Date();
+                const scheduledTime = new Date(joinResult.interview.scheduledTime);
+
+                // If now is >= scheduledTime (or even 5 mins before? let's stick to >= scheduledTime for "official" start)
+                // Actually `joinInterview` allows joining 15 mins before.
+                // We should probably only switch to STARTED if it's actually >= scheduledTime.
+                if (now >= scheduledTime) {
+                    logger.info(`[AUTO-START] User joined and time passed, auto-starting interview ${interviewId}`);
+                    // We can mimic the cron logic here or call a service. 
+                    // Since `autoStartScheduledInterviews` scans all, let's just do a direct update or call startInterview (if recruiter).
+                    // But simply updating DB is safer for "participation trigger" regardless of role.
+
+                    // We'll use a direct update similar to cron for flexibility
+                    const InterviewRoom = (await import('../../models/InterviewRoom.js')).default;
+                    const Application = (await import('../../models/index.js')).Application;
+
+                    const updatedInterview = await InterviewRoom.findByIdAndUpdate(interviewId, {
+                        status: 'STARTED',
+                        startTime: scheduledTime, // Consistent with cron logic
+                        $push: {
+                            changeHistory: {
+                                timestamp: now,
+                                action: 'STARTED',
+                                notes: `Auto-started on ${socket.userRole} join`,
+                                actor: socket.userId
+                            }
+                        }
+                    }, { new: true });
+
+                    // Update existing joinResult object so client gets fresh status
+                    joinResult.interview = updatedInterview.toObject ? updatedInterview.toObject() : updatedInterview;
+
+                    // Also notify room of start
+                    io.to(`interview:${roomId}`).emit('interview:started', {
+                        startTime: scheduledTime,
+                        timestamp: now
+                    });
+                }
             }
 
             const roomName = `interview:${roomId}`;
@@ -510,21 +554,18 @@ export const registerInterviewHandlers = (io, socket, interviewRoomParticipants)
 
             // Verify user has permission (recruiter or candidate can end)
             const interviewService = await import('../../services/interview.service.js');
-            const accessCheck = await interviewService.checkInterviewAccess(interviewId, socket.userId);
-
-            if (!accessCheck.hasAccess) {
-                const error = { message: 'You do not have permission to end this interview' };
-                logger.warn(`User ${socket.userId} attempted to end interview without permission`);
-                if (callback) callback({ success: false, error: error.message });
-                return;
-            }
+            // Call endInterview service to update DB status to COMPLETED
+            // Note: endInterview handles permission checks & logic
+            const updatedInterview = await interviewService.endInterview(interviewId, socket.userId);
 
             logger.info(`Interview ${interviewId} ended by user ${socket.userId}`);
 
             // Notify all participants that interview has ended
             io.to(`interview:${roomId}`).emit('interview:ended', {
                 endedBy: socket.userId,
-                timestamp: new Date()
+                timestamp: new Date(),
+                endTime: updatedInterview.endTime,
+                duration: updatedInterview.changeHistory[updatedInterview.changeHistory.length - 1].notes // Extract duration from notes or use calculated logic
             });
 
             // Remove all users from the interview room
@@ -532,6 +573,9 @@ export const registerInterviewHandlers = (io, socket, interviewRoomParticipants)
             for (const socketInRoom of socketsInRoom) {
                 socketInRoom.leave(`interview:${roomId}`);
             }
+
+            // Clean up tracking
+            interviewRoomParticipants.delete(roomId);
 
             if (callback) callback({ success: true });
 
