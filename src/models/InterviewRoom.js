@@ -157,7 +157,7 @@ const interviewRoomSchema = new mongoose.Schema({
     type: Number,
     default: 60,
     min: [15, 'Duration must be at least 15 minutes'],
-    max: [180, 'Duration cannot exceed 180 minutes'],
+    max: [300, 'Duration cannot exceed 300 minutes'],
     comment: 'Expected duration in minutes'
   },
   recording: {

@@ -55,7 +55,10 @@ import talentPoolRoutes from './routes/talentPool.route.js'; // Talent pool mana
 import supportRequestRoutes from './routes/supportRequest.route.js'; // Support request system
 import contactRoutes from './routes/contact.route.js'; // Public contact form
 
-// 🚧 Middlewares
+// � Python Proxy (for Development - WebRTC, Streaming, AI Gateway)
+import { pythonProxyMiddleware, getPythonProxyInstance } from './middleware/pythonProxy.middleware.js';
+
+// �🚧 Middlewares
 import * as errorMiddleware from './middleware/error.middleware.js';
 import * as notFoundMiddleware from './middleware/notFound.middleware.js';
 
@@ -106,7 +109,28 @@ app.use(cors({
 }));
 
 // app.options("*", cors()); // xử lý preflight
-// Khác
+
+// === KHỞI TẠO PASSPORT (CẦN TRƯỚC PROXY ĐỂ VERIFY JWT) ===
+app.use(passport.initialize());
+
+// === PYTHON PROXY (ĐẶT TRƯỚC BODY PARSER ĐỂ TRÁNH BUFFER STREAMING/UPLOAD) ===
+// Route: /api/python/* -> Python FastAPI service
+// Chỉ hoạt động trong development hoặc khi ENABLE_PYTHON_PROXY=true
+// Yêu cầu JWT authentication và role = 'candidate'
+if (config.NODE_ENV === 'development' || process.env.ENABLE_PYTHON_PROXY === 'true') {
+  // Authenticated proxy cho candidate (WebRTC, AI features)
+  app.use('/api/python', pythonProxyMiddleware({ 
+    requireAuth: true, 
+    allowedRole: 'candidate' 
+  }));
+  
+  // Nếu cần thêm route public (không cần auth), có thể thêm:
+  // app.use('/api/python-public', pythonProxyMiddleware({ requireAuth: false }));
+  
+  console.log('[Python Proxy] ✅ Enabled - proxying /api/python/* (candidate auth required)');
+}
+
+// Khác - ĐẶT SAU PROXY ĐỂ KHÔNG CONSUME BODY CỦA PROXY REQUESTS
 const shouldCompress = (req, res) => {
   if (req.noCompression) {
     // don't compress responses with this request header
@@ -119,9 +143,6 @@ app.use(compression({ filter: shouldCompress }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
-
-// === KHỞI TẠO PASSPORT ===
-app.use(passport.initialize());
 
 // welcome
 app.get('/', (_, res) => res.status(200).json(

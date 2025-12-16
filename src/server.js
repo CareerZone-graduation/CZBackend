@@ -11,6 +11,9 @@ import * as rabbitmq from './queues/rabbitmq.js';
 
 import app from './app.js';
 
+// Python Proxy - for WebSocket upgrade handling
+import { getPythonProxyInstance } from './middleware/pythonProxy.middleware.js';
+
 // Import cron jobs to activate them
 import './cron/interviewReminder.cron.js';
 import './cron/jobAlert.cron.js';
@@ -44,6 +47,23 @@ const io = new socketio.Server(server, {
   path: '/socket.io',
 });
 socket.initializeSocket(io);
+
+// === WEBSOCKET UPGRADE HANDLER CHO PYTHON PROXY ===
+// Quan trọng: Cần handle WebSocket upgrade thủ công cho proxy
+if (config.NODE_ENV === 'development' || process.env.ENABLE_PYTHON_PROXY === 'true') {
+  server.on('upgrade', (req, socket, head) => {
+    // Kiểm tra nếu là request tới Python proxy
+    if (req.url?.startsWith('/api/python')) {
+      const pythonProxy = getPythonProxyInstance();
+      if (pythonProxy && pythonProxy.handleUpgrade) {
+        logger.info(`[Python Proxy] WebSocket upgrade request: ${req.url}`);
+        pythonProxy.handleUpgrade(req, socket, head);
+      }
+    }
+    // Lưu ý: Socket.IO xử lý upgrade riêng qua path '/socket.io'
+  });
+  logger.info('[Python Proxy] WebSocket upgrade handler registered');
+}
 
 // Khởi động
 const startServer = async () => {
