@@ -52,6 +52,17 @@ socket.initializeSocket(io);
 // Quan trọng: Cần handle WebSocket upgrade thủ công cho proxy
 if (config.NODE_ENV === 'development' || process.env.ENABLE_PYTHON_PROXY === 'true') {
   server.on('upgrade', (req, socket, head) => {
+    // Debug log to trace what URLs are hitting the upgrade handler
+    if (req.url && !req.url.includes('/socket.io/')) {
+      logger.debug(`[Server] Upgrade request: ${req.url}`);
+    }
+
+    // Explicitly ignore socket.io requests to let Socket.IO handle them
+    // Socket.IO listens to the same 'upgrade' event, so we must not interfere
+    if (req.url?.includes('/socket.io/') || req.url?.includes('transport=websocket')) {
+      return;
+    }
+
     // Kiểm tra nếu là request tới Python proxy
     if (req.url?.startsWith('/api/python')) {
       const pythonProxy = getPythonProxyInstance();
