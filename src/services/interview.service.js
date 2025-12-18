@@ -996,7 +996,11 @@ export const getRecruiterInterviews = async (recruiterId, options = {}) => {
 
   // Lọc theo status nếu có
   if (status) {
-    query.status = status;
+    if (Array.isArray(status)) {
+      query.status = { $in: status };
+    } else {
+      query.status = status;
+    }
   }
 
   // Lọc theo từ khóa tìm kiếm (search by roomName)
