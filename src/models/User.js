@@ -81,6 +81,7 @@ userSchema.index({ emailVerificationToken: 1 });
 userSchema.index({ emailVerificationExpires: 1 });
 userSchema.index({ role: 1, allowSearch: 1 });
 userSchema.index({ embeddingUpdatedAt: 1 });
+userSchema.index({ createdAt: -1 });
 /**
  * Hash password before saving
  */
