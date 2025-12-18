@@ -37,6 +37,9 @@ export const getSuggestions = asyncHandler(async (req, res) => {
     throw new ForbiddenError('Bạn không có quyền xem gợi ý cho tin tuyển dụng này');
   }
   
+  // NOTE: Embedding check removed - now using manual matching
+  // If switching back to AI matching, uncomment this check:
+  /*
   // Check if job has embeddings
   if (!job.chunks || job.chunks.length === 0) {
     logger.warn('Job has no embeddings', { jobId });
@@ -44,8 +47,9 @@ export const getSuggestions = asyncHandler(async (req, res) => {
       'Tin tuyển dụng chưa được xử lý. Vui lòng thử lại sau vài phút.'
     );
   }
+  */
   
-  // Get suggestions from service
+  // Get suggestions from service (using manual matching)
   const results = await getCandidateSuggestions(jobId, {
     page: parseInt(page),
     limit: Math.min(parseInt(limit), 50),

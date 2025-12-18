@@ -850,12 +850,249 @@ const buildVectorSearchPipeline = (queryVector, options = {}) => {
 };
 
 /**
- * Get candidate suggestions using MongoDB Atlas Vector Search
+ * Get candidate suggestions using manual matching (thủ công)
+ * Matches based on: skills, category, location, experience level
  * @param {string} jobId - Job ID
  * @param {Object} options - Query options
  * @returns {Promise<Object>} Suggestion results with candidates and pagination
  */
 export const getCandidateSuggestions = async (jobId, options = {}) => {
+  const { page = 1, limit = 10, minScore = 0.3 } = options;
+  const skip = (page - 1) * limit;
+
+  logger.info('Getting candidate suggestions via manual matching', {
+    jobId,
+    page,
+    limit,
+    minScore
+  });
+
+  // Fetch job
+  const job = await Job.findById(jobId).lean();
+  if (!job) {
+    throw new NotFoundError('Không tìm thấy tin tuyển dụng');
+  }
+
+  // Build query conditions based on job criteria
+  const candidateQuery = {};
+  const orConditions = [];
+
+  // Match by preferred categories
+  if (job.category) {
+    orConditions.push({ preferredCategories: job.category });
+  }
+
+  // Match by preferred locations (province)
+  if (job.location?.province) {
+    orConditions.push({ 'preferredLocations.province': job.location.province });
+  }
+
+  // Match by work preferences (experience level)
+  if (job.experience) {
+    orConditions.push({ 'workPreferences.experienceLevel': job.experience });
+  }
+
+  // Match by work type
+  if (job.workType) {
+    orConditions.push({ 'workPreferences.workTypes': job.workType });
+  }
+
+  // Match by contract type
+  if (job.type) {
+    orConditions.push({ 'workPreferences.contractTypes': job.type });
+  }
+
+  // Only get candidates with some matching criteria
+  if (orConditions.length > 0) {
+    candidateQuery.$or = orConditions;
+  }
+  console.log('Candidate Query:', JSON.stringify(candidateQuery));
+
+  // Fetch candidate profiles with basic filters
+  const candidateProfiles = await CandidateProfile.find(candidateQuery)
+    .populate({
+      path: 'userId',
+      select: 'allowSearch',
+      match: { allowSearch: true, role: 'candidate' }
+    })
+    .select('userId fullname avatar bio skills experiences preferredCategories preferredLocations workPreferences expectedSalary')
+    .lean();
+
+  // Filter out candidates whose userId didn't match (allowSearch = false)
+  const validProfiles = candidateProfiles.filter(p => p.userId !== null);
+
+  logger.info('Found potential candidates', {
+    jobId,
+    candidateCount: validProfiles.length
+  });
+
+  // Calculate match score for each candidate
+  const scoredCandidates = validProfiles.map(profile => {
+    let score = 0;
+    const matchReasons = [];
+
+    // 1. Skills matching (max 40 points)
+    if (job.skills && job.skills.length > 0 && profile.skills && profile.skills.length > 0) {
+      const jobSkillsLower = job.skills.map(s => s.toLowerCase().trim());
+      const candidateSkillsLower = profile.skills.map(s => s.name.toLowerCase().trim());
+      
+      let exactMatches = 0;
+      let partialMatches = 0;
+      const matchedSkillNames = [];
+
+      candidateSkillsLower.forEach(candidateSkill => {
+        if (jobSkillsLower.includes(candidateSkill)) {
+          exactMatches++;
+          matchedSkillNames.push(candidateSkill);
+        } else {
+          // Check partial match
+          const hasPartial = jobSkillsLower.some(jobSkill => 
+            jobSkill.includes(candidateSkill) || candidateSkill.includes(jobSkill)
+          );
+          if (hasPartial) {
+            partialMatches++;
+          }
+        }
+      });
+
+      const skillScore = Math.min(40, (exactMatches * 10) + (partialMatches * 3));
+      score += skillScore;
+
+      if (exactMatches > 0) {
+        matchReasons.push({
+          type: 'skill_match',
+          value: `Khớp ${exactMatches} kỹ năng: ${matchedSkillNames.slice(0, 3).join(', ')}${matchedSkillNames.length > 3 ? '...' : ''}`,
+          weight: skillScore
+        });
+      }
+    }
+
+    // 2. Category matching (max 25 points)
+    if (job.category && profile.preferredCategories?.includes(job.category)) {
+      score += 25;
+      matchReasons.push({
+        type: 'category_match',
+        value: `Đúng ngành nghề mong muốn`,
+        weight: 25
+      });
+    }
+
+    // 3. Location matching (max 20 points)
+    if (job.location?.province && profile.preferredLocations?.length > 0) {
+      const locationMatch = profile.preferredLocations.find(loc => 
+        loc.province === job.location.province
+      );
+      if (locationMatch) {
+        let locationScore = 15;
+        // Bonus for district match
+        if (locationMatch.district && job.location.district && 
+            locationMatch.district === job.location.district) {
+          locationScore = 20;
+        }
+        score += locationScore;
+        matchReasons.push({
+          type: 'location_match',
+          value: `Vị trí phù hợp: ${job.location.province}${locationMatch.district ? ', ' + locationMatch.district : ''}`,
+          weight: locationScore
+        });
+      }
+    }
+
+    // 4. Experience level matching (max 10 points)
+    if (job.experience && profile.workPreferences?.experienceLevel?.includes(job.experience)) {
+      score += 10;
+      matchReasons.push({
+        type: 'experience_match',
+        value: `Cấp độ kinh nghiệm phù hợp`,
+        weight: 10
+      });
+    }
+
+    // 5. Work type matching (max 5 points)
+    if (job.workType && profile.workPreferences?.workTypes?.includes(job.workType)) {
+      score += 5;
+      matchReasons.push({
+        type: 'worktype_match',
+        value: `Hình thức làm việc phù hợp`,
+        weight: 5
+      });
+    }
+
+    // Normalize score to 0-1 range (max possible = 100)
+    const normalizedScore = score / 100;
+
+    return {
+      profile,
+      score: normalizedScore,
+      matchReasons
+    };
+  });
+
+  // Filter by minimum score and sort by score descending
+  const filteredCandidates = scoredCandidates
+    .filter(c => c.score >= minScore)
+    .sort((a, b) => b.score - a.score);
+
+  const totalCount = filteredCandidates.length;
+
+  // Apply pagination
+  const paginatedCandidates = filteredCandidates.slice(skip, skip + limit);
+
+  // Format response
+  const candidates = paginatedCandidates.map(({ profile, score, matchReasons }) => {
+    const currentPosition = getCurrentPosition(profile.experiences || []);
+    const experienceYears = calculateExperienceYears(profile.experiences || []);
+    const matchedSkills = extractMatchedSkills(job.skills || [], profile.skills || []);
+
+    return {
+      userId: profile.userId._id?.toString() || profile.userId.toString(),
+      candidateProfileId: profile._id.toString(),
+      fullname: profile.fullname,
+      avatar: profile.avatar,
+      bio: profile.bio,
+      currentPosition,
+      skills: profile.skills?.slice(0, 5) || [],
+      similarityScore: score,
+      similarityPercentage: Math.round(score * 100),
+      matchedSkills,
+      experienceYears,
+      matchReasons
+    };
+  });
+
+  logger.info('Manual matching completed', {
+    jobId,
+    totalMatched: totalCount,
+    returnedCount: candidates.length
+  });
+
+  return {
+    data: {
+      candidates,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalCount / limit),
+        totalItems: totalCount,
+        limit,
+        hasNextPage: page * limit < totalCount,
+        hasPrevPage: page > 1
+      },
+      jobInfo: {
+        jobId,
+        title: job.title,
+        matchingMethod: 'manual' // Indicate this is manual matching
+      }
+    }
+  };
+};
+
+/* ========================================
+ * AI Vector Search Implementation (COMMENTED OUT FOR FUTURE USE)
+ * ========================================
+ * Uncomment this function and rename to getCandidateSuggestions to use AI-powered matching
+ */
+/*
+export const getCandidateSuggestionsAI = async (jobId, options = {}) => {
   const { page = 1, limit = 10, minScore = 0.5 } = options;
   const skip = (page - 1) * limit;
 
@@ -1035,3 +1272,5 @@ export const getCandidateSuggestions = async (jobId, options = {}) => {
     }
   };
 };
+*/
+// ======== END OF AI VECTOR SEARCH IMPLEMENTATION ========

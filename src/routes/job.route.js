@@ -64,6 +64,14 @@ router.get(
   validationMiddleware.validateQuery(jobSchema.getMyJobsQuerySchema), // Updated schema validation
   jobController.getMyJobs
 );
+
+router.get(
+  '/my-jobs/mini-dashboard',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.recruiterOnly,
+  jobController.getJobsMiniDashboard
+);
+
 router.get(
   '/recruiter/:id',
   passport.authenticate('jwt', { session: false }),

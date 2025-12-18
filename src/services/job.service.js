@@ -305,17 +305,30 @@ export const getJobsByRecruiter = async (userId, options) => {
 
   const totalJobs = await Job.countDocuments(query);
 
-  // Get application counts for these jobs
+  // Get application counts for these jobs (total and pending)
   const jobIds = jobs.map(job => job._id);
   const applicationCounts = await Application.aggregate([
     { $match: { jobId: { $in: jobIds } } },
-    { $group: { _id: '$jobId', count: { $sum: 1 } } }
+    {
+      $group: {
+        _id: '$jobId',
+        totalCount: { $sum: 1 },
+        pendingCount: {
+          $sum: {
+            $cond: [{ $eq: ['$status', 'PENDING'] }, 1, 0]
+          }
+        }
+      }
+    }
   ]);
 
   // Create a map for quick lookup
   const countMap = {};
   applicationCounts.forEach(item => {
-    countMap[item._id.toString()] = item.count;
+    countMap[item._id.toString()] = {
+      total: item.totalCount,
+      pending: item.pendingCount
+    };
   });
 
   const plainJobs = jobs.map(job => ({
@@ -336,7 +349,8 @@ export const getJobsByRecruiter = async (userId, options) => {
     recruiterProfileId: job.recruiterProfileId,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
-    totalApply: countMap[job._id.toString()] || 0, // Add totalApply field
+    totalApply: countMap[job._id.toString()]?.total || 0, // Total applications
+    pendingApply: countMap[job._id.toString()]?.pending || 0, // Pending applications
   }));
 
   return {
@@ -347,6 +361,66 @@ export const getJobsByRecruiter = async (userId, options) => {
       totalItems: totalJobs,
       limit,
     },
+  };
+};
+
+/**
+ * Lấy thống kê mini dashboard cho trang quản lý tin tuyển dụng
+ * @param {string} userId - ID của nhà tuyển dụng
+ * @returns {Promise<object>} Thống kê mini dashboard
+ */
+export const getJobsMiniDashboard = async (userId) => {
+  const recruiterProfile = await findRecruiterProfileByUserId(userId);
+  const recruiterProfileId = recruiterProfile._id;
+
+  // Get start of today
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Get date 3 days from now for expiring jobs
+  const threeDaysFromNow = new Date();
+  threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
+  threeDaysFromNow.setHours(23, 59, 59, 999);
+
+  // Get all job IDs for this recruiter
+  const jobIds = await Job.find({ recruiterProfileId }).distinct('_id');
+
+  // Run all queries in parallel for better performance
+  const [todayApplications, expiringJobs, totalPendingApplications] = await Promise.all([
+    // Count today's new applications across all jobs
+    Application.countDocuments({
+      jobId: { $in: jobIds },
+      createdAt: { $gte: today }
+    }),
+    
+    // Get jobs expiring in next 3 days (ACTIVE and APPROVED only)
+    Job.find({
+      recruiterProfileId,
+      status: 'ACTIVE',
+      moderationStatus: 'APPROVED',
+      deadline: { $gte: new Date(), $lte: threeDaysFromNow }
+    })
+    .select('_id title deadline')
+    .sort({ deadline: 1 })
+    .limit(5)
+    .lean(),
+    
+    // Count total pending applications across all ACTIVE jobs
+    Application.countDocuments({
+      jobId: { $in: await Job.find({ recruiterProfileId, status: 'ACTIVE' }).distinct('_id') },
+      status: 'PENDING'
+    })
+  ]);
+
+  return {
+    todayApplications,
+    expiringJobs: expiringJobs.map(job => ({
+      _id: job._id,
+      title: job.title,
+      deadline: job.deadline,
+      daysLeft: Math.ceil((new Date(job.deadline) - new Date()) / (1000 * 60 * 60 * 24))
+    })),
+    totalPendingApplications
   };
 };
 
@@ -2802,21 +2876,775 @@ const buildPreFilter = (searchParams) => {
 
 };
 
-/**
- * Hybrid search jobs using RRF (Reciprocal Rank Fusion)
- * @param {object} searchParams - Search parameters
- * @returns {Promise<object>} Search results with pagination
- */
-export const hybridSearchJobs = async (searchParams, userId = null) => {
+// /**
+//  * Hybrid search jobs using RRF (Reciprocal Rank Fusion)
+//  * @param {object} searchParams - Search parameters
+//  * @returns {Promise<object>} Search results with pagination
+//  */
+// export const hybridSearchJobs = async (searchParams, userId = null) => {
+//   const {
+//     query,
+//     page = 1,
+//     size = 10,
+//     textWeight = 0.4,
+//     vectorWeight = 0.6,
+//   } = searchParams;
+
+//   // Nếu không có query, thực hiện tìm kiếm thông thường với filter
+//   if (!query || query.trim() === '') {
+//     console.log('No query provided, performing regular search with filters.');
+//     try {
+//       const preFilter = buildPreFilter(searchParams);
+
+//       // Add distance filter if coordinates and distance are provided
+//       if (searchParams.latitude && searchParams.longitude && searchParams.distance) {
+//         preFilter['location.coordinates'] = {
+//           $geoWithin: {
+//             $centerSphere: [
+//               [searchParams.longitude, searchParams.latitude],
+//               searchParams.distance / 6378.1 // Convert km to radians (Earth radius = 6378.1 km)
+//             ]
+//           }
+//         };
+//       }
+//       console.log('Pre-filter applied:', preFilter);
+
+//       const skip = (page - 1) * size;
+
+//       let [results, totalCount] = await Promise.all([
+//         Job.find(preFilter)
+//           .select('-requirements -description -benefits -address -embeddingsUpdatedAt -chunks')
+//           .populate({
+//             path: 'recruiterProfileId',
+//             select: 'company.name company.logo'
+//           })
+//           .sort({ createdAt: -1 })
+//           .skip(skip)
+//           .limit(size)
+//           .lean(),
+//         Job.countDocuments(preFilter)
+//         // sau đó đưa company.name, logo trải phẳng trong results
+
+//       ]);
+
+//       // Add isSaved status if userId is provided
+//       if (userId) {
+//         const jobIds = results.map(job => job._id);
+//         const savedJobs = await SavedJob.find({
+//           candidateId: userId,
+//           jobId: { $in: jobIds }
+//         }).select('jobId').lean();
+
+//         const savedJobIds = new Set(savedJobs.map(saved => saved.jobId.toString()));
+
+//         results = results.map(job => {
+//           job.isSaved = savedJobIds.has(job._id.toString());
+//           return job;
+//         });
+//       }
+//       results = results.map(job => {
+//         const company = job.recruiterProfileId?.company || {};
+//         return {
+//           ...job,
+//           company: {
+//             name: company.name || null,
+//             logo: company.logo || null
+//           },
+//           recruiterProfileId: job.recruiterProfileId?._id || null // giữ lại id nếu cần
+//         };
+//       });
+//       return {
+//         data: results,
+//         meta: {
+//           currentPage: page,
+//           totalPages: Math.ceil(totalCount / size),
+//           totalItems: totalCount,
+//           limit: size,
+//           searchQuery: '',
+//           appliedFilters: {
+//             category: searchParams.category,
+//             type: searchParams.type,
+//             workType: searchParams.workType,
+//             experience: searchParams.experience,
+//             province: searchParams.province,
+//             district: searchParams.district,
+//             minSalary: searchParams.minSalary,
+//             maxSalary: searchParams.maxSalary,
+//             latitude: searchParams.latitude,
+//             longitude: searchParams.longitude,
+//             distance: searchParams.distance
+//           }
+//         }
+//       };
+//     } catch (error) {
+//       logger.error('Regular job search failed:', { error: error.message, searchParams });
+//       throw new BadRequestError('Lỗi khi tìm kiếm công việc.');
+//     }
+//   }
+//   // Calculate branch limit for pagination
+//   const branchLimit = Math.max(page * size + 100, 500); // Ensure sufficient candidates
+//   const numCandidates = Math.max(1000, branchLimit * 20); // For vector search recall
+
+//   // Build common filter
+//   const searchFilter = buildSearchFilter(searchParams);
+
+//   const preFilter = buildPreFilter(searchParams);
+
+
+//   // Generate query embedding for vector search
+//   const queryVector = await generateQueryEmbedding(query);
+
+//   try {
+//     // Execute hybrid search using RRF with $facet for pagination
+//     const results = await Job.aggregate([
+//       // --- Text search branch (BM25) ---
+//       {
+//         $search: {
+//           index: "kw", // Your Atlas Search index name
+//           compound: {
+//             must: [
+//               {
+//                 text: {
+//                   query: query,
+//                   path: "title",
+//                   fuzzy: {
+//                     maxEdits: 1,
+//                     prefixLength: 2
+//                   },
+//                   score: { boost: { value: 2 } } // ưu tiên mạnh cho title
+//                 }
+//               }
+//             ],
+//             should: [
+//               {
+//                 text: {
+//                   query: query,
+//                   path: ["description", "requirements"],
+//                   fuzzy: { maxEdits: 1, prefixLength: 2 },
+//                 }
+//               }
+//             ],
+//             filter: searchFilter.compound.must
+//           }
+//         }
+//       },
+//       { $set: { src: "text", bm25Score: { $meta: "searchScore" } } },
+//       { $limit: branchLimit },
+//       {
+//         $setWindowFields: {
+//           sortBy: { bm25Score: -1 },
+//           output: { textRank: { $documentNumber: {} } }
+//         }
+//       },
+//       {
+//         $addFields: {
+//           rrf: { $divide: [textWeight, { $add: [60, "$textRank"] }] }
+//         }
+//       },
+//       {
+//         $project: {
+//           _id: 1,
+//           title: 1,
+//           location: 1,
+//           type: 1,
+//           workType: 1,
+//           minSalary: 1,
+//           maxSalary: 1,
+//           deadline: 1,
+//           experience: 1,
+//           category: 1,
+//           skills: 1,
+//           recruiterProfileId: 1,
+//           createdAt: 1,
+//           rrf: 1,
+//           bm25Score: 1
+//         }
+//       },
+
+//       // --- Union with vector search branch ---
+//       {
+//         $unionWith: {
+//           coll: "jobs",
+//           pipeline: [
+//             {
+//               $vectorSearch: {
+//                 index: "vt", // Your vector search index name
+//                 path: "chunks.embedding",
+//                 queryVector: queryVector,
+//                 numCandidates: numCandidates,
+//                 limit: branchLimit,
+//                 filter: preFilter
+//               }
+//             },
+//             { $set: { vectorScore: { $meta: "vectorSearchScore" } } },
+//             {
+//               $setWindowFields: {
+//                 sortBy: { vectorScore: -1 },
+//                 output: { vectorRank: { $documentNumber: {} } }
+//               }
+//             },
+//             {
+//               $addFields: {
+//                 rrf: { $divide: [vectorWeight, { $add: [60, "$vectorRank"] }] }
+//               }
+//             },
+//             {
+//               $project: {
+//                 _id: 1,
+//                 title: 1,
+//                 location: 1,
+//                 type: 1,
+//                 workType: 1,
+//                 minSalary: 1,
+//                 maxSalary: 1,
+//                 deadline: 1,
+//                 experience: 1,
+//                 category: 1,
+//                 skills: 1,
+//                 recruiterProfileId: 1,
+//                 createdAt: 1,
+//                 rrf: 1,
+//                 vectorScore: 1
+//               }
+//             }
+//           ]
+//         }
+//       },
+//       // --- Merge and rank fusion ---
+//       // Apply distance filter if provided (strict radius filtering)
+//       ...(searchParams.latitude && searchParams.longitude && searchParams.distance ? [{
+//         $match: {
+//           'location.coordinates': {
+//             $geoWithin: {
+//               $centerSphere: [
+//                 [searchParams.longitude, searchParams.latitude],
+//                 searchParams.distance / 6378.1 // Convert km to radians (Earth radius = 6378.1 km)
+//               ]
+//             }
+//           }
+//         }
+//       }] : []),
+//       {
+//         $group: {
+//           _id: "$_id",
+//           doc: { $first: "$$ROOT" },
+//           totalRrf: { $sum: "$rrf" },
+//           maxBm25: { $max: "$bm25Score" },
+//           maxVector: { $max: "$vectorScore" }
+//         }
+//       },
+//       {
+//         $replaceRoot: {
+//           newRoot: {
+//             $mergeObjects: [
+//               "$doc",
+//               {
+//                 rrf: "$totalRrf",
+//                 bm25Score: "$maxBm25",
+//                 vectorScore: "$maxVector"
+//               }
+//             ]
+//           }
+//         }
+//       },
+
+//       // Stable sorting: rrf ↓, then vectorScore ↓, then bm25Score ↓, finally _id ↑
+//       {
+//         $sort: {
+//           rrf: -1,
+//           vectorScore: -1,
+//           bm25Score: -1,
+//           _id: 1
+//         }
+//       },
+
+//       // --- Pagination with $facet ---
+//       {
+//         $lookup: {
+//           from: 'recruiterprofiles',
+//           localField: 'recruiterProfileId',
+//           foreignField: '_id',
+//           as: 'recruiter'
+//         }
+//       },
+//       {
+//         $unwind: {
+//           path: '$recruiter',
+//           preserveNullAndEmptyArrays: true
+//         }
+//       },
+//       {
+//         $addFields: {
+//           'company.name': '$recruiter.company.name',
+//           'company.logo': '$recruiter.company.logo',
+//         }
+//       },
+//       {
+//         $project: {
+//           description: 0,
+//           requirements: 0,
+//           benefits: 0,
+//           address: 0,
+//           embeddingsUpdatedAt: 0,
+//           chunks: 0,
+//           recruiter: 0,
+//         }
+//       },
+//       {
+//         $facet: {
+//           page: [
+//             { $skip: (page - 1) * size },
+//             { $limit: size }
+//           ],
+//           total: [
+//             { $count: "value" }
+//           ]
+//         }
+//       }
+//     ]);
+
+//     const pageResults = results[0]?.page || [];
+//     const totalCount = results[0]?.total[0]?.value || 0;
+
+//     let finalResults = pageResults;
+//     // Add isSaved status if userId is provided
+//     if (userId) {
+//       const jobIds = finalResults.map(job => job._id);
+//       const savedJobs = await SavedJob.find({
+//         candidateId: userId,
+//         jobId: { $in: jobIds }
+//       }).select('jobId').lean();
+
+//       const savedJobIds = new Set(savedJobs.map(saved => saved.jobId.toString()));
+
+//       finalResults = finalResults.map(job => {
+//         job.isSaved = savedJobIds.has(job._id.toString());
+//         return job;
+//       });
+//     }
+
+//     return {
+//       data: finalResults,
+//       meta: {
+//         currentPage: page,
+//         totalPages: Math.ceil(totalCount / size),
+//         totalItems: totalCount,
+//         limit: size,
+//         searchQuery: query,
+//         appliedFilters: {
+//           category: searchParams.category,
+//           type: searchParams.type,
+//           workType: searchParams.workType,
+//           experience: searchParams.experience,
+//           province: searchParams.province,
+//           district: searchParams.district,
+//           minSalary: searchParams.minSalary,
+//           maxSalary: searchParams.maxSalary,
+//           latitude: searchParams.latitude,
+//           longitude: searchParams.longitude,
+//           distance: searchParams.distance
+//         }
+//       }
+//     };
+
+//   } catch (error) {
+//     logger.error('Hybrid search error:', {
+//       message: error.message,
+//       stack: error.stack,
+//       query,
+//       searchParams
+//     });
+//     console.error('Hybrid search failed:', error.message);
+//     throw new BadRequestError('Lỗi khi thực hiện tìm kiếm hybrid');
+//   }
+// };
+
+// export const searchJobsForCandidate = async (searchParams, userId = null) => {
+//   const {
+//     query,
+//     page = 1,
+//     size = 10,
+//     textWeight = 0.4,
+//     vectorWeight = 0.6,
+//   } = searchParams;
+
+//   // Nếu không có query, thực hiện tìm kiếm thông thường với filter
+//   if (!query || query.trim() === '') {
+//     console.log('No query provided, performing regular search with filters.');
+//     try {
+//       const preFilter = buildPreFilter(searchParams);
+
+//       // Add distance filter if coordinates and distance are provided
+//       if (searchParams.latitude && searchParams.longitude && searchParams.distance) {
+//         preFilter['location.coordinates'] = {
+//           $geoWithin: {
+//             $centerSphere: [
+//               [searchParams.longitude, searchParams.latitude],
+//               searchParams.distance / 6378.1 // Convert km to radians (Earth radius = 6378.1 km)
+//             ]
+//           }
+//         };
+//       }
+//       console.log('Pre-filter applied:', preFilter);
+
+//       const skip = (page - 1) * size;
+
+//       let [results, totalCount] = await Promise.all([
+//         Job.find(preFilter)
+//           .select('-requirements -description -benefits -address -embeddingsUpdatedAt -chunks')
+//           .populate({
+//             path: 'recruiterProfileId',
+//             select: 'company.name company.logo'
+//           })
+//           .sort({ createdAt: -1 })
+//           .skip(skip)
+//           .limit(size)
+//           .lean(),
+//         Job.countDocuments(preFilter)
+//         // sau đó đưa company.name, logo trải phẳng trong results
+
+//       ]);
+
+//       // Add isSaved status if userId is provided
+//       if (userId) {
+//         const jobIds = results.map(job => job._id);
+//         const savedJobs = await SavedJob.find({
+//           candidateId: userId,
+//           jobId: { $in: jobIds }
+//         }).select('jobId').lean();
+
+//         const savedJobIds = new Set(savedJobs.map(saved => saved.jobId.toString()));
+
+//         results = results.map(job => {
+//           job.isSaved = savedJobIds.has(job._id.toString());
+//           return job;
+//         });
+//       }
+//       results = results.map(job => {
+//         const company = job.recruiterProfileId?.company || {};
+//         return {
+//           ...job,
+//           company: {
+//             name: company.name || null,
+//             logo: company.logo || null
+//           },
+//           recruiterProfileId: job.recruiterProfileId?._id || null // giữ lại id nếu cần
+//         };
+//       });
+//       return {
+//         data: results,
+//         meta: {
+//           currentPage: page,
+//           totalPages: Math.ceil(totalCount / size),
+//           totalItems: totalCount,
+//           limit: size,
+//           searchQuery: '',
+//           appliedFilters: {
+//             category: searchParams.category,
+//             type: searchParams.type,
+//             workType: searchParams.workType,
+//             experience: searchParams.experience,
+//             province: searchParams.province,
+//             district: searchParams.district,
+//             minSalary: searchParams.minSalary,
+//             maxSalary: searchParams.maxSalary,
+//             latitude: searchParams.latitude,
+//             longitude: searchParams.longitude,
+//             distance: searchParams.distance
+//           }
+//         }
+//       };
+//     } catch (error) {
+//       logger.error('Regular job search failed:', { error: error.message, searchParams });
+//       throw new BadRequestError('Lỗi khi tìm kiếm công việc.');
+//     }
+//   }
+//   // Calculate branch limit for pagination
+//   const branchLimit = Math.max(page * size + 100, 500); // Ensure sufficient candidates
+//   const numCandidates = Math.max(1000, branchLimit * 20); // For vector search recall
+
+//   // Build common filter
+//   const searchFilter = buildSearchFilter(searchParams);
+
+//   // const preFilter = buildPreFilter(searchParams);
+
+
+//   // Generate query embedding for vector search
+//   // const queryVector = await generateQueryEmbedding(query);
+
+//   try {
+//     // Execute hybrid search using RRF with $facet for pagination
+//     const results = await Job.aggregate([
+//       // --- Text search branch (BM25) ---
+//       {
+//         $search: {
+//           index: "kw", // Your Atlas Search index name
+//           compound: {
+//             must: [
+//               {
+//                 text: {
+//                   query: query,
+//                   path: "title",
+//                   fuzzy: {
+//                     maxEdits: 1,
+//                     prefixLength: 2
+//                   },
+//                   score: { boost: { value: 2 } } // ưu tiên mạnh cho title
+//                 }
+//               }
+//             ],
+//             should: [
+//               {
+//                 text: {
+//                   query: query,
+//                   path: ["description", "requirements"],
+//                   fuzzy: { maxEdits: 1, prefixLength: 2 },
+//                 }
+//               }
+//             ],
+//             filter: searchFilter.compound.must
+//           }
+//         }
+//       },
+//       { $set: { src: "text", bm25Score: { $meta: "searchScore" } } },
+//       { $limit: branchLimit },
+//       {
+//         $setWindowFields: {
+//           sortBy: { bm25Score: -1 },
+//           output: { textRank: { $documentNumber: {} } }
+//         }
+//       },
+//       {
+//         $addFields: {
+//           rrf: { $divide: [textWeight, { $add: [60, "$textRank"] }] }
+//         }
+//       },
+//       {
+//         $project: {
+//           _id: 1,
+//           title: 1,
+//           location: 1,
+//           type: 1,
+//           workType: 1,
+//           minSalary: 1,
+//           maxSalary: 1,
+//           deadline: 1,
+//           experience: 1,
+//           category: 1,
+//           skills: 1,
+//           recruiterProfileId: 1,
+//           createdAt: 1,
+//           rrf: 1,
+//           bm25Score: 1
+//         }
+//       },
+
+//       // --- Union with vector search branch ---
+//       // {
+//       //   $unionWith: {
+//       //     coll: "jobs",
+//       //     pipeline: [
+//       //       {
+//       //         $vectorSearch: {
+//       //           index: "vt", // Your vector search index name
+//       //           path: "chunks.embedding",
+//       //           queryVector: queryVector,
+//       //           numCandidates: numCandidates,
+//       //           limit: branchLimit,
+//       //           filter: preFilter
+//       //         }
+//       //       },
+//       //       { $set: { vectorScore: { $meta: "vectorSearchScore" } } },
+//       //       {
+//       //         $setWindowFields: {
+//       //           sortBy: { vectorScore: -1 },
+//       //           output: { vectorRank: { $documentNumber: {} } }
+//       //         }
+//       //       },
+//       //       {
+//       //         $addFields: {
+//       //           rrf: { $divide: [vectorWeight, { $add: [60, "$vectorRank"] }] }
+//       //         }
+//       //       },
+//       //       {
+//       //         $project: {
+//       //           _id: 1,
+//       //           title: 1,
+//       //           location: 1,
+//       //           type: 1,
+//       //           workType: 1,
+//       //           minSalary: 1,
+//       //           maxSalary: 1,
+//       //           deadline: 1,
+//       //           experience: 1,
+//       //           category: 1,
+//       //           skills: 1,
+//       //           recruiterProfileId: 1,
+//       //           createdAt: 1,
+//       //           rrf: 1,
+//       //           vectorScore: 1
+//       //         }
+//       //       }
+//       //     ]
+//       //   }
+//       // },
+//       // --- Merge and rank fusion ---
+//       // Apply distance filter if provided (strict radius filtering)
+//       ...(searchParams.latitude && searchParams.longitude && searchParams.distance ? [{
+//         $match: {
+//           'location.coordinates': {
+//             $geoWithin: {
+//               $centerSphere: [
+//                 [searchParams.longitude, searchParams.latitude],
+//                 searchParams.distance / 6378.1 // Convert km to radians (Earth radius = 6378.1 km)
+//               ]
+//             }
+//           }
+//         }
+//       }] : []),
+//       {
+//         $group: {
+//           _id: "$_id",
+//           doc: { $first: "$$ROOT" },
+//           totalRrf: { $sum: "$rrf" },
+//           maxBm25: { $max: "$bm25Score" },
+//           maxVector: { $max: "$vectorScore" }
+//         }
+//       },
+//       {
+//         $replaceRoot: {
+//           newRoot: {
+//             $mergeObjects: [
+//               "$doc",
+//               {
+//                 rrf: "$totalRrf",
+//                 bm25Score: "$maxBm25",
+//                 vectorScore: "$maxVector"
+//               }
+//             ]
+//           }
+//         }
+//       },
+
+//       // Stable sorting: rrf ↓, then vectorScore ↓, then bm25Score ↓, finally _id ↑
+//       {
+//         $sort: {
+//           rrf: -1,
+//           vectorScore: -1,
+//           bm25Score: -1,
+//           _id: 1
+//         }
+//       },
+
+//       // --- Pagination with $facet ---
+//       {
+//         $lookup: {
+//           from: 'recruiterprofiles',
+//           localField: 'recruiterProfileId',
+//           foreignField: '_id',
+//           as: 'recruiter'
+//         }
+//       },
+//       {
+//         $unwind: {
+//           path: '$recruiter',
+//           preserveNullAndEmptyArrays: true
+//         }
+//       },
+//       {
+//         $addFields: {
+//           'company.name': '$recruiter.company.name',
+//           'company.logo': '$recruiter.company.logo',
+//         }
+//       },
+//       {
+//         $project: {
+//           description: 0,
+//           requirements: 0,
+//           benefits: 0,
+//           address: 0,
+//           embeddingsUpdatedAt: 0,
+//           chunks: 0,
+//           recruiter: 0,
+//         }
+//       },
+//       {
+//         $facet: {
+//           page: [
+//             { $skip: (page - 1) * size },
+//             { $limit: size }
+//           ],
+//           total: [
+//             { $count: "value" }
+//           ]
+//         }
+//       }
+//     ]);
+
+//     const pageResults = results[0]?.page || [];
+//     const totalCount = results[0]?.total[0]?.value || 0;
+
+//     let finalResults = pageResults;
+//     // Add isSaved status if userId is provided
+//     if (userId) {
+//       const jobIds = finalResults.map(job => job._id);
+//       const savedJobs = await SavedJob.find({
+//         candidateId: userId,
+//         jobId: { $in: jobIds }
+//       }).select('jobId').lean();
+
+//       const savedJobIds = new Set(savedJobs.map(saved => saved.jobId.toString()));
+
+//       finalResults = finalResults.map(job => {
+//         job.isSaved = savedJobIds.has(job._id.toString());
+//         return job;
+//       });
+//     }
+
+//     return {
+//       data: finalResults,
+//       meta: {
+//         currentPage: page,
+//         totalPages: Math.ceil(totalCount / size),
+//         totalItems: totalCount,
+//         limit: size,
+//         searchQuery: query,
+//         appliedFilters: {
+//           category: searchParams.category,
+//           type: searchParams.type,
+//           workType: searchParams.workType,
+//           experience: searchParams.experience,
+//           province: searchParams.province,
+//           district: searchParams.district,
+//           minSalary: searchParams.minSalary,
+//           maxSalary: searchParams.maxSalary,
+//           latitude: searchParams.latitude,
+//           longitude: searchParams.longitude,
+//           distance: searchParams.distance
+//         }
+//       }
+//     };
+
+//   } catch (error) {
+//     logger.error('Hybrid search error:', {
+//       message: error.message,
+//       stack: error.stack,
+//       query,
+//       searchParams
+//     });
+//     console.error('Hybrid search failed:', error.message);
+//     throw new BadRequestError('Lỗi khi thực hiện tìm kiếm hybrid');
+//   }
+// };
+
+export const searchJobsForCandidate = async (searchParams, userId = null) => {
   const {
     query,
     page = 1,
     size = 10,
-    textWeight = 0.4,
-    vectorWeight = 0.6,
   } = searchParams;
 
-  // Nếu không có query, thực hiện tìm kiếm thông thường với filter
+  // 1. TRƯỜNG HỢP KHÔNG CÓ QUERY: Tìm kiếm thường bằng Filter (Giữ nguyên logic cũ)
   if (!query || query.trim() === '') {
     console.log('No query provided, performing regular search with filters.');
     try {
@@ -2828,13 +3656,12 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
           $geoWithin: {
             $centerSphere: [
               [searchParams.longitude, searchParams.latitude],
-              searchParams.distance / 6378.1 // Convert km to radians (Earth radius = 6378.1 km)
+              searchParams.distance / 6378.1
             ]
           }
         };
       }
-      console.log('Pre-filter applied:', preFilter);
-
+      
       const skip = (page - 1) * size;
 
       let [results, totalCount] = await Promise.all([
@@ -2849,36 +3676,28 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
           .limit(size)
           .lean(),
         Job.countDocuments(preFilter)
-        // sau đó đưa company.name, logo trải phẳng trong results
-
       ]);
 
-      // Add isSaved status if userId is provided
+      // Xử lý isSaved và format lại company (Giữ nguyên logic cũ)
       if (userId) {
         const jobIds = results.map(job => job._id);
         const savedJobs = await SavedJob.find({
           candidateId: userId,
           jobId: { $in: jobIds }
         }).select('jobId').lean();
-
         const savedJobIds = new Set(savedJobs.map(saved => saved.jobId.toString()));
-
-        results = results.map(job => {
-          job.isSaved = savedJobIds.has(job._id.toString());
-          return job;
-        });
+        results = results.map(job => ({ ...job, isSaved: savedJobIds.has(job._id.toString()) }));
       }
+
       results = results.map(job => {
         const company = job.recruiterProfileId?.company || {};
         return {
           ...job,
-          company: {
-            name: company.name || null,
-            logo: company.logo || null
-          },
-          recruiterProfileId: job.recruiterProfileId?._id || null // giữ lại id nếu cần
+          company: { name: company.name || null, logo: company.logo || null },
+          recruiterProfileId: job.recruiterProfileId?._id || null
         };
       });
+
       return {
         data: results,
         meta: {
@@ -2887,46 +3706,26 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
           totalItems: totalCount,
           limit: size,
           searchQuery: '',
-          appliedFilters: {
-            category: searchParams.category,
-            type: searchParams.type,
-            workType: searchParams.workType,
-            experience: searchParams.experience,
-            province: searchParams.province,
-            district: searchParams.district,
-            minSalary: searchParams.minSalary,
-            maxSalary: searchParams.maxSalary,
-            latitude: searchParams.latitude,
-            longitude: searchParams.longitude,
-            distance: searchParams.distance
-          }
+          appliedFilters: searchParams // Simplified for brevity
         }
       };
     } catch (error) {
-      logger.error('Regular job search failed:', { error: error.message, searchParams });
+      console.error('Regular job search failed:', { error: error.message });
       throw new BadRequestError('Lỗi khi tìm kiếm công việc.');
     }
   }
-  // Calculate branch limit for pagination
-  const branchLimit = Math.max(page * size + 100, 500); // Ensure sufficient candidates
-  const numCandidates = Math.max(1000, branchLimit * 20); // For vector search recall
 
-  // Build common filter
+  // 2. TRƯỜNG HỢP CÓ QUERY: Full-text Search với Atlas Search ($search)
+  
+  // Build common filter cho Atlas Search
   const searchFilter = buildSearchFilter(searchParams);
 
-  const preFilter = buildPreFilter(searchParams);
-
-
-  // Generate query embedding for vector search
-  const queryVector = await generateQueryEmbedding(query);
-
   try {
-    // Execute hybrid search using RRF with $facet for pagination
-    const results = await Job.aggregate([
-      // --- Text search branch (BM25) ---
+    const pipeline = [
+      // --- Stage 1: Full-text Search (BM25) ---
       {
         $search: {
-          index: "kw", // Your Atlas Search index name
+          index: "kw", // Đảm bảo index này đã được tạo trên Atlas
           compound: {
             must: [
               {
@@ -2937,7 +3736,7 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
                     maxEdits: 1,
                     prefixLength: 2
                   },
-                  score: { boost: { value: 2 } } // ưu tiên mạnh cho title
+                  score: { boost: { value: 3 } } // Tăng boost cho title
                 }
               }
             ],
@@ -2950,141 +3749,45 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
                 }
               }
             ],
+            // Áp dụng các filter cứng (Category, Type...) ngay trong Search để tối ưu
             filter: searchFilter.compound.must
           }
         }
       },
-      { $set: { src: "text", bm25Score: { $meta: "searchScore" } } },
-      { $limit: branchLimit },
-      {
-        $setWindowFields: {
-          sortBy: { bm25Score: -1 },
-          output: { textRank: { $documentNumber: {} } }
-        }
-      },
-      {
-        $addFields: {
-          rrf: { $divide: [textWeight, { $add: [60, "$textRank"] }] }
-        }
-      },
-      {
-        $project: {
-          _id: 1,
-          title: 1,
-          location: 1,
-          type: 1,
-          workType: 1,
-          minSalary: 1,
-          maxSalary: 1,
-          deadline: 1,
-          experience: 1,
-          category: 1,
-          skills: 1,
-          recruiterProfileId: 1,
-          createdAt: 1,
-          rrf: 1,
-          bm25Score: 1
-        }
-      },
 
-      // --- Union with vector search branch ---
-      {
-        $unionWith: {
-          coll: "jobs",
-          pipeline: [
-            {
-              $vectorSearch: {
-                index: "vt", // Your vector search index name
-                path: "chunks.embedding",
-                queryVector: queryVector,
-                numCandidates: numCandidates,
-                limit: branchLimit,
-                filter: preFilter
-              }
-            },
-            { $set: { vectorScore: { $meta: "vectorSearchScore" } } },
-            {
-              $setWindowFields: {
-                sortBy: { vectorScore: -1 },
-                output: { vectorRank: { $documentNumber: {} } }
-              }
-            },
-            {
-              $addFields: {
-                rrf: { $divide: [vectorWeight, { $add: [60, "$vectorRank"] }] }
-              }
-            },
-            {
-              $project: {
-                _id: 1,
-                title: 1,
-                location: 1,
-                type: 1,
-                workType: 1,
-                minSalary: 1,
-                maxSalary: 1,
-                deadline: 1,
-                experience: 1,
-                category: 1,
-                skills: 1,
-                recruiterProfileId: 1,
-                createdAt: 1,
-                rrf: 1,
-                vectorScore: 1
-              }
-            }
-          ]
-        }
-      },
-      // --- Merge and rank fusion ---
-      // Apply distance filter if provided (strict radius filtering)
+      // --- Stage 2: Filter Location (Nếu có) ---
+      // Lưu ý: Atlas Search có thể handle geo, nhưng để đơn giản ta dùng $match sau search 
+      // nếu logic buildSearchFilter chưa bao gồm geo.
       ...(searchParams.latitude && searchParams.longitude && searchParams.distance ? [{
         $match: {
           'location.coordinates': {
             $geoWithin: {
               $centerSphere: [
                 [searchParams.longitude, searchParams.latitude],
-                searchParams.distance / 6378.1 // Convert km to radians (Earth radius = 6378.1 km)
+                searchParams.distance / 6378.1
               ]
             }
           }
         }
       }] : []),
-      {
-        $group: {
-          _id: "$_id",
-          doc: { $first: "$$ROOT" },
-          totalRrf: { $sum: "$rrf" },
-          maxBm25: { $max: "$bm25Score" },
-          maxVector: { $max: "$vectorScore" }
-        }
-      },
-      {
-        $replaceRoot: {
-          newRoot: {
-            $mergeObjects: [
-              "$doc",
-              {
-                rrf: "$totalRrf",
-                bm25Score: "$maxBm25",
-                vectorScore: "$maxVector"
-              }
-            ]
-          }
-        }
+
+      // --- Stage 3: Project Score & Fields ---
+      { 
+        $addFields: { 
+          score: { $meta: "searchScore" } // Lấy điểm BM25
+        } 
       },
 
-      // Stable sorting: rrf ↓, then vectorScore ↓, then bm25Score ↓, finally _id ↑
+      // --- Stage 4: Sorting ---
+      // Sắp xếp theo điểm số cao nhất, nếu bằng nhau thì xem ngày tạo mới nhất
       {
         $sort: {
-          rrf: -1,
-          vectorScore: -1,
-          bm25Score: -1,
-          _id: 1
+          score: -1,
+          createdAt: -1 
         }
       },
 
-      // --- Pagination with $facet ---
+      // --- Stage 5: Lookup Company Info ---
       {
         $lookup: {
           from: 'recruiterprofiles',
@@ -3105,17 +3808,16 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
           'company.logo': '$recruiter.company.logo',
         }
       },
+      
+      // --- Stage 6: Clean up fields ---
       {
         $project: {
-          description: 0,
-          requirements: 0,
-          benefits: 0,
-          address: 0,
-          embeddingsUpdatedAt: 0,
-          chunks: 0,
-          recruiter: 0,
+          description: 0, requirements: 0, benefits: 0, address: 0,
+          embeddingsUpdatedAt: 0, chunks: 0, recruiter: 0,
         }
       },
+
+      // --- Stage 7: Pagination with Facet ---
       {
         $facet: {
           page: [
@@ -3127,13 +3829,16 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
           ]
         }
       }
-    ]);
+    ];
+
+    const results = await Job.aggregate(pipeline);
 
     const pageResults = results[0]?.page || [];
     const totalCount = results[0]?.total[0]?.value || 0;
 
     let finalResults = pageResults;
-    // Add isSaved status if userId is provided
+
+    // Add isSaved status logic (Giữ nguyên)
     if (userId) {
       const jobIds = finalResults.map(job => job._id);
       const savedJobs = await SavedJob.find({
@@ -3143,10 +3848,10 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
 
       const savedJobIds = new Set(savedJobs.map(saved => saved.jobId.toString()));
 
-      finalResults = finalResults.map(job => {
-        job.isSaved = savedJobIds.has(job._id.toString());
-        return job;
-      });
+      finalResults = finalResults.map(job => ({
+        ...job,
+        isSaved: savedJobIds.has(job._id.toString())
+      }));
     }
 
     return {
@@ -3158,32 +3863,21 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
         limit: size,
         searchQuery: query,
         appliedFilters: {
-          category: searchParams.category,
-          type: searchParams.type,
-          workType: searchParams.workType,
-          experience: searchParams.experience,
-          province: searchParams.province,
-          district: searchParams.district,
-          minSalary: searchParams.minSalary,
-          maxSalary: searchParams.maxSalary,
-          latitude: searchParams.latitude,
-          longitude: searchParams.longitude,
-          distance: searchParams.distance
+          // Map lại filters để trả về frontend
+          ...searchParams
         }
       }
     };
 
   } catch (error) {
-    logger.error('Hybrid search error:', {
+    console.error('Full-text search error:', {
       message: error.message,
-      stack: error.stack,
       query,
-      searchParams
     });
-    console.error('Hybrid search failed:', error.message);
-    throw new BadRequestError('Lỗi khi thực hiện tìm kiếm hybrid');
+    throw new BadRequestError('Lỗi khi thực hiện tìm kiếm.');
   }
 };
+
 
 /**
  * Autocomplete job titles with prioritized sorting

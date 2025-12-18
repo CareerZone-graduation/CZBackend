@@ -37,6 +37,16 @@ export const getMyJobs = asyncHandler(async (req, res) => {
   });
 });
 
+export const getJobsMiniDashboard = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  const result = await jobService.getJobsMiniDashboard(userId);
+  res.status(200).json({
+    success: true,
+    message: 'Lấy thống kê mini dashboard thành công.',
+    data: result
+  });
+});
+
 export const getJobById = asyncHandler(async (req, res) => {
     const { id } = req.params;
     const userId = req.user ? req.user._id : null;
@@ -161,7 +171,7 @@ export const getJobDetailsForRecruiter = asyncHandler(async (req, res) => {
 export const hybridSearchJobs = asyncHandler(async (req, res) => {
   const searchParams = { ...req.validatedQuery || req.query };
   const userId = req.user ? req.user._id : null;
-  const result = await jobService.hybridSearchJobs(searchParams, userId);
+  const result = await jobService.searchJobsForCandidate(searchParams, userId);
   res.status(200).json({
     success: true,
     message: 'Tìm kiếm hybrid công việc thành công.',
