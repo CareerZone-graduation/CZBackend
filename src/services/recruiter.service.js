@@ -58,7 +58,7 @@ export const getCandidateProfile = async (userId, recruiterId) => {
   logger.info(`Fetching candidate profile for userId: ${userId} by recruiter: ${recruiterId}`);
 
   // Check if user exists and is a candidate
-  const user = await User.findById(userId).select('email phone role allowSearch selectedCvId').lean();
+  const user = await User.findById(userId).select('email phone role allowSearch selectedCvIds selectedCvId').lean();
   if (!user || user.role !== 'candidate') {
     throw new NotFoundError('Không tìm thấy ứng viên.');
   }
@@ -93,10 +93,20 @@ export const getCandidateProfile = async (userId, recruiterId) => {
   // Always only show selected CV (both locked and unlocked)
   // The difference is: locked = CV is masked, unlocked = CV is not masked
   if (profile.cvs && profile.cvs.length > 0) {
-    if (user.selectedCvId) {
+    const hasSelectedCvIds = user.selectedCvIds && user.selectedCvIds.length > 0;
+    const hasLegacySelectedCvId = !!user.selectedCvId;
+
+    if (hasSelectedCvIds || hasLegacySelectedCvId) {
       // Chỉ hiển thị CV được chọn (dù locked hay unlocked)
-      const selectedCv = profile.cvs.find(cv => cv._id.toString() === user.selectedCvId.toString());
-      response.cvs = selectedCv ? [selectedCv] : [];
+      let selectedIds = [];
+      if (hasSelectedCvIds) {
+        selectedIds = user.selectedCvIds.map(id => id.toString());
+      } else if (hasLegacySelectedCvId) {
+        selectedIds = [user.selectedCvId.toString()];
+      }
+
+      const selectedCvs = profile.cvs.filter(cv => selectedIds.includes(cv._id.toString()));
+      response.cvs = selectedCvs;
     } else {
       // Nếu không có CV được chọn, không hiển thị CV nào
       response.cvs = [];

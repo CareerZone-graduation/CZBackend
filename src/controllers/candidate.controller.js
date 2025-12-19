@@ -267,18 +267,23 @@ export const updatePrivacySettings = asyncHandler(async (req, res) => {
  */
 export const toggleAllowSearch = asyncHandler(async (req, res) => {
     const userId = req.user._id;
-    const { allowSearch, selectedCvId } = req.body;
+    let { allowSearch, selectedCvIds, selectedCvId } = req.body;
 
-    logger.info('Toggling allow search setting', { userId, allowSearch, selectedCvId });
+    // Backward compatibility: if selectedCvId is provided but selectedCvIds is not, convert to array
+    if (selectedCvId && (!selectedCvIds || selectedCvIds.length === 0)) {
+        selectedCvIds = [selectedCvId];
+    }
 
-    const user = await candidateService.toggleAllowSearch(userId, allowSearch, selectedCvId);
+    logger.info('Toggling allow search setting', { userId, allowSearch, selectedCvIds });
+
+    const user = await candidateService.toggleAllowSearch(userId, allowSearch, selectedCvIds);
 
     res.status(200).json({
         success: true,
         message: 'Cập nhật cài đặt cho phép tìm kiếm thành công.',
         data: {
             allowSearch: user.allowSearch,
-            selectedCvId: user.selectedCvId
+            selectedCvIds: user.selectedCvIds
         }
     });
 });

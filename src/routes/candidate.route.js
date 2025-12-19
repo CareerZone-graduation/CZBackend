@@ -66,7 +66,8 @@ router.patch(
     '/settings/allow-search',
     validationMiddleware.validateBody(z.object({
         allowSearch: z.boolean(),
-        selectedCvId: z.string().optional()
+        selectedCvId: z.string().optional(),
+        selectedCvIds: z.array(z.string()).optional()
     })),
     candidateController.toggleAllowSearch
 );

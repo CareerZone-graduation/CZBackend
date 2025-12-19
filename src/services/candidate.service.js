@@ -233,6 +233,21 @@ export const deleteCv = async (userId, cvId) => {
         throw new NotFoundError('Không tìm thấy CV.');
     }
 
+    // Check if CV is currently being used for job search
+    const user = await User.findById(userId).select('allowSearch selectedCvIds selectedCvId');
+    if (user && user.allowSearch) {
+        let isSelected = false;
+        if (user.selectedCvIds && user.selectedCvIds.some(id => id.toString() === cvId)) {
+            isSelected = true;
+        } else if (user.selectedCvId && user.selectedCvId.toString() === cvId) {
+            isSelected = true;
+        }
+
+        if (isSelected) {
+            throw new BadRequestError('Không thể xóa CV đang được sử dụng để tìm việc. Vui lòng tắt tìm việc hoặc chọn CV khác trước khi xóa.');
+        }
+    }
+
     // Delete file from storage (Cloudinary or S3)
     await uploadService.deleteFile(cvToDelete.path);
 
@@ -630,7 +645,7 @@ export const updatePrivacySettings = async (userId, allowSearch) => {
  * @param {string} selectedCvId - Optional CV ID to use for job search
  * @returns {Promise<Object>}
  */
-export const toggleAllowSearch = async (userId, allowSearch, selectedCvId = null) => {
+export const toggleAllowSearch = async (userId, allowSearch, selectedCvIds = []) => {
     const user = await User.findById(userId);
 
     if (!user) {
@@ -641,23 +656,45 @@ export const toggleAllowSearch = async (userId, allowSearch, selectedCvId = null
         throw new BadRequestError('Chỉ ứng viên mới có thể cập nhật cài đặt này.');
     }
 
-    // Nếu bật tìm việc và có chọn CV
-    if (allowSearch && selectedCvId) {
-        // Kiểm tra CV có tồn tại không
-        const profile = await CandidateProfile.findOne({ userId });
-        if (!profile) {
-            throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
+    // Nếu bật tìm việc
+    if (allowSearch) {
+        if (selectedCvIds && selectedCvIds.length > 0) {
+            if (selectedCvIds.length > 3) {
+                throw new BadRequestError('Bạn chỉ có thể chọn tối đa 3 CV.');
+            }
+
+            // Kiểm tra CV có tồn tại không
+            const profile = await CandidateProfile.findOne({ userId });
+            if (!profile) {
+                throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
+            }
+
+            // Validate all CV IDs
+            const validCvIds = [];
+            for (const cvId of selectedCvIds) {
+                const cvExists = profile.cvs.find(cv => cv._id.toString() === cvId);
+                if (!cvExists) {
+                    throw new BadRequestError(`CV với ID ${cvId} không tồn tại.`);
+                }
+                validCvIds.push(cvId);
+            }
+            user.selectedCvIds = validCvIds;
+        } else {
+            // If allowSearch is true but no CVs sent? maybe keep existing or clear?
+            // Assuming if sent empty array, it means clear. If undefined/null, maybe ignore?
+            // But the prompt says "allow choosing max 3 CVs instead of 1".
+            // Let's assume if they turn it on, they might provide IDs.
+            // If they provide nothing, we can leave it empty or require at least one?
+            // Current logic required 1 CV. User request says "allow choosing max 3".
+            // If array is provided, update.
+            if (Array.isArray(selectedCvIds)) {
+                user.selectedCvIds = selectedCvIds;
+            }
         }
 
-        const cvExists = profile.cvs.some(cv => cv._id.toString() === selectedCvId);
-        if (!cvExists) {
-            throw new BadRequestError('CV được chọn không tồn tại.');
-        }
-
-        user.selectedCvId = selectedCvId;
-    } else if (!allowSearch) {
+    } else {
         // Nếu tắt tìm việc, xóa CV đã chọn
-        user.selectedCvId = null;
+        user.selectedCvIds = [];
     }
 
     user.allowSearch = allowSearch;
@@ -666,7 +703,7 @@ export const toggleAllowSearch = async (userId, allowSearch, selectedCvId = null
     logger.info('Allow search setting toggled', {
         userId,
         allowSearch,
-        selectedCvId: user.selectedCvId
+        selectedCvIds: user.selectedCvIds
     });
 
     return user;
@@ -678,28 +715,38 @@ export const toggleAllowSearch = async (userId, allowSearch, selectedCvId = null
  * @returns {Promise<Object>}
  */
 export const getAllowSearchSettings = async (userId) => {
-    const user = await User.findById(userId).select('allowSearch selectedCvId');
+    const user = await User.findById(userId).select('allowSearch selectedCvIds selectedCvId');
     if (!user) {
         throw new NotFoundError('Không tìm thấy người dùng.');
     }
 
-    // Nếu có selectedCvId, lấy thông tin CV
-    let selectedCv = null;
-    if (user.selectedCvId) {
-        const profile = await CandidateProfile.findOne({ userId }).select('cvs');
-        if (profile) {
-            selectedCv = profile.cvs.find(cv => cv._id.toString() === user.selectedCvId.toString());
-        }
+    // Nếu có selectedCvIds, lấy thông tin CV
+    let selectedCvs = [];
+    let selectedIds = [];
+
+    if (user.selectedCvIds && user.selectedCvIds.length > 0) {
+        selectedIds = user.selectedCvIds.map(id => id.toString());
+    } else if (user.selectedCvId) {
+        selectedIds = [user.selectedCvId.toString()];
     }
 
+    if (selectedIds.length > 0) {
+        const profile = await CandidateProfile.findOne({ userId }).select('cvs');
+        if (profile && profile.cvs) {
+            selectedCvs = profile.cvs
+                .filter(cv => selectedIds.includes(cv._id.toString()))
+                .map(cv => ({
+                    _id: cv._id,
+                    name: cv.name,
+                    uploadedAt: cv.uploadedAt,
+                    path: cv.path // Include path if needed for display/download
+                }));
+        }
+    }
     return {
         allowSearch: user.allowSearch,
-        selectedCvId: user.selectedCvId,
-        selectedCv: selectedCv ? {
-            _id: selectedCv._id,
-            name: selectedCv.name,
-            uploadedAt: selectedCv.uploadedAt
-        } : null
+        selectedCvIds: selectedIds,
+        selectedCvs: selectedCvs
     };
 };
 
