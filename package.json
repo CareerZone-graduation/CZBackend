@@ -24,7 +24,7 @@
     "rebuild:redis:dryrun": "node scripts/rebuild-redis-all.js --dry-run --verbose",
     "test:changestream": "node scripts/test-change-stream.js",
     "check:integrity": "node scripts/check-data-integrity.js",
-    "cleanup:orphaned": "node scripts/cleanup-orphaned-data.js",
+    "cleanup:orphaned": "node scripts/data-integrity-cleanup.js",
     "backfillembeding": "node scripts/backfill-embeddings.js",
     "reminders:schedule": "node scripts/schedule-interview-reminders.js"
   },

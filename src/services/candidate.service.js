@@ -1,4 +1,4 @@
-import { CandidateProfile, User, Application } from '../models/index.js';
+import { CandidateProfile, User, Application, InterviewRoom } from '../models/index.js';
 import { NotFoundError, BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
 import * as uploadService from './upload.service.js';
@@ -426,6 +426,9 @@ export const getApplicationById = async (userId, applicationId) => {
     // Thêm recruiterId vào response để frontend có thể sử dụng cho tính năng nhắn tin
     const recruiterId = application.jobId?.recruiterProfileId?.userId;
 
+    // Lấy thông tin phỏng vấn nếu có
+    const interview = await InterviewRoom.findOne({ applicationId: application._id }).lean();
+
     logger.info('Successfully retrieved application details for candidate', {
         userId,
         candidateProfileId: candidateProfile._id,
@@ -436,7 +439,14 @@ export const getApplicationById = async (userId, applicationId) => {
     return {
         ...application,
         recruiterId,
-        jobId: application.jobId?._id || application.jobId // Giữ lại jobId là string/ObjectId thay vì object
+        jobId: application.jobId?._id || application.jobId, // Giữ lại jobId là string/ObjectId thay vì object
+        interview: interview ? {
+            _id: interview._id,
+            status: interview.status,
+            scheduledTime: interview.scheduledTime,
+            roomName: interview.roomName,
+            isEnded: interview.status === 'ENDED' || interview.status === 'COMPLETED'
+        } : null
     };
 };
 

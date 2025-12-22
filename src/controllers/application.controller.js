@@ -47,7 +47,7 @@ import * as uploadService from '../services/upload.service.js';
  */
 export const updateApplicationStatus = asyncHandler(async (req, res) => {
   const { applicationId } = req.params;
-  const { status, offerLetter } = req.body;
+  const { status, offerLetter, feedback } = req.body;
   let offerFile = null;
 
   // Handle file upload if present
@@ -61,7 +61,8 @@ export const updateApplicationStatus = asyncHandler(async (req, res) => {
     req.user._id,
     status,
     offerLetter,
-    offerFile
+    offerFile,
+    feedback
   );
 
   res.status(200).json({

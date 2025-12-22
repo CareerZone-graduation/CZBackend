@@ -357,23 +357,27 @@ export const getUsersForAdmin = async (queryParams) => {
   const userIds = users.map(u => u._id);
   const recruiterProfiles = await RecruiterProfile.find({
     userId: { $in: userIds }
-  }).select('userId fullname company.name').lean();
+  }).select('userId fullname company.name company.logo').lean();
 
   const candidateProfiles = await CandidateProfile.find({
     userId: { $in: userIds }
-  }).select('userId fullname').lean();
+  }).select('userId fullname avatar').lean();
 
   // Map fullname và hasCompany từ RecruiterProfile
   const recruiterMap = recruiterProfiles.reduce((acc, profile) => {
     acc[profile.userId.toString()] = {
       fullname: profile.fullname,
+      avatar: profile.company?.logo || null,
       hasCompany: !!(profile.company && profile.company.name)
     };
     return acc;
   }, {});
 
   const candidateMap = candidateProfiles.reduce((acc, profile) => {
-    acc[profile.userId.toString()] = profile.fullname;
+    acc[profile.userId.toString()] = {
+      fullname: profile.fullname,
+      avatar: profile.avatar || null
+    };
     return acc;
   }, {});
 
@@ -392,12 +396,15 @@ export const getUsersForAdmin = async (queryParams) => {
       return {
         ...baseUser,
         fullname: recruiterInfo?.fullname || null,
+        avatar: recruiterInfo?.avatar || null,
         hasCompany: recruiterInfo?.hasCompany || false
       };
     } else {
+      const candidateInfo = candidateMap[user._id.toString()];
       return {
         ...baseUser,
-        fullname: candidateMap[user._id.toString()] || null
+        fullname: candidateInfo?.fullname || null,
+        avatar: candidateInfo?.avatar || null
       };
     }
   });

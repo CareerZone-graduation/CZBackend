@@ -760,14 +760,15 @@ export const handleStatusUpdate = async (payload) => {
     case 'SCHEDULED_INTERVIEW':
     case 'OFFER_SENT':
     case 'REJECTED':
-      return createStatusChangeNotification(applicationId, payload.type);
+    case 'INTERVIEW_FAILED': // Added INTERVIEW_FAILED
+      return createStatusChangeNotification(applicationId, payload.type, payload.data?.feedback);
 
     case 'OFFER_ACCEPTED':
     case 'OFFER_DECLINED':
       return createOfferResponseNotification(applicationId, payload.type);
 
     case 'STATUS_CHANGE':
-      return createStatusChangeNotification(applicationId, payload.data.newStatus);
+      return createStatusChangeNotification(applicationId, payload.data.newStatus, payload.data?.feedback);
 
     case 'PROFILE_VIEW':
       return createProfileViewNotification(payload);
@@ -824,8 +825,9 @@ export const createApplicationViewedNotification = async (applicationId) => {
  * Tạo thông báo khi trạng thái đơn ứng tuyển thay đổi.
  * @param {string} applicationId - ID của đơn ứng tuyển
  * @param {string} newStatus - Trạng thái mới
+ * @param {string} [feedback] - Phản hồi từ nhà tuyển dụng (cho INTERVIEW_FAILED)
  */
-export const createStatusChangeNotification = async (applicationId, newStatus) => {
+export const createStatusChangeNotification = async (applicationId, newStatus, feedback) => {
   const application = await Application.findById(applicationId);
   if (!application) {
     throw new NotFoundError('Không tìm thấy đơn ứng tuyển');
@@ -855,6 +857,13 @@ export const createStatusChangeNotification = async (applicationId, newStatus) =
     case 'REJECTED':
       message = `Nhà tuyển dụng đã đánh giá hồ sơ của bạn cho vị trí "${application.jobSnapshot.title}" tại ${application.jobSnapshot.company} là không phù hợp.`;
       break;
+    case 'INTERVIEW_FAILED':
+      title = '⚠️ Kết quả phỏng vấn';
+      message = `Rất tiếc, bạn chưa đạt yêu cầu phỏng vấn cho vị trí "${application.jobSnapshot.title}" tại ${application.jobSnapshot.company}.`;
+      if (feedback) {
+        message += ` Phản hồi: "${feedback}"`;
+      }
+      break;
     default:
       message = `Trạng thái đơn ứng tuyển của bạn cho vị trí "${application.jobSnapshot.title}" tại ${application.jobSnapshot.company} đã chuyển sang: ${newStatus}.`;
   }
@@ -871,7 +880,8 @@ export const createStatusChangeNotification = async (applicationId, newStatus) =
     metadata: {
       applicationId: applicationId.toString(),
       jobId: application.jobId.toString(),
-      status: newStatus
+      status: newStatus,
+      feedback: feedback || undefined // Include feedback in metadata if available
     }
   });
 

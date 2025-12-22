@@ -27,7 +27,7 @@ export const getAllJobs = asyncHandler(async (req, res) => {
 export const getMyJobs = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const options = req.validatedQuery || req.query;
-  
+
   const result = await jobService.getJobsByRecruiter(userId, options);
   res.status(200).json({
     success: true,
@@ -48,14 +48,14 @@ export const getJobsMiniDashboard = asyncHandler(async (req, res) => {
 });
 
 export const getJobById = asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const userId = req.user ? req.user._id : null;
-    const job = await jobService.getJobById(id, userId);
-    res.status(200).json({
-      success: true,
-      message: 'Lấy thông tin công việc thành công.',
-      data: job,
-    });
+  const { id } = req.params;
+  const userId = req.user ? req.user._id : null;
+  const job = await jobService.getJobById(id, userId);
+  res.status(200).json({
+    success: true,
+    message: 'Lấy thông tin công việc thành công.',
+    data: job,
+  });
 });
 
 export const updateJob = asyncHandler(async (req, res) => {
@@ -76,7 +76,7 @@ export const deleteJob = asyncHandler(async (req, res) => {
   await jobService.deleteJob(jobId, userId);
   res.status(200).json({
     success: true,
-    message: 'Xóa (soft-delete) công việc thành công.',
+    message: 'Xóa công việc thành công.',
   });
 });
 
@@ -184,7 +184,7 @@ export const autocompleteJobTitles = asyncHandler(async (req, res) => {
   // const suggestions = await jobService.autocompleteJobTitles(query, limit);
 
   const suggestions = await autocompleteService.autocompleteJobTitles(query, limit);
-  
+
   res.status(200).json({
     success: true,
     message: 'Lấy gợi ý tiêu đề công việc thành công.',
@@ -195,7 +195,7 @@ export const autocompleteJobTitles = asyncHandler(async (req, res) => {
 export const searchJobsOnMap = asyncHandler(async (req, res) => {
   const bounds = req.validatedQuery || req.query;
   const jobs = await jobService.findJobsInBounds(bounds);
-  
+
   res.status(200).json({
     success: true,
     message: 'Lấy danh sách công việc trên bản đồ thành công.',
@@ -206,7 +206,7 @@ export const searchJobsOnMap = asyncHandler(async (req, res) => {
 export const getJobClusters = asyncHandler(async (req, res) => {
   const { zoom, ...bounds } = req.validatedQuery || req.query;
   const clusters = await jobService.getMapClusters(bounds, parseInt(zoom));
-  
+
   res.status(200).json({
     success: true,
     message: 'Lấy cụm công việc trên bản đồ thành công.',

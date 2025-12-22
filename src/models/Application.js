@@ -15,7 +15,8 @@ const activityLogSchema = new mongoose.Schema({
       'OFFER_SENT', // khi người tuyển dụng gửi lời mời
       'OFFER_ACCEPTED', // khi người ứng tuyển chấp nhận lời mời
       'OFFER_DECLINED', // khi người ứng tuyển từ chối lời mời
-      'REJECTED' // khi người tuyển dụng từ chối ứng viên
+      'REJECTED', // khi người tuyển dụng từ chối ứng viên
+      'INTERVIEW_FAILED' // khi phỏng vấn không đạt
     ],
     required: true
   },
@@ -94,7 +95,8 @@ const applicationSchema = new mongoose.Schema({
         'OFFER_SENT', //perform by recruiter
         'ACCEPTED', //perform by candidate
         'REJECTED', //perform by recruiter
-        'OFFER_DECLINED' //perform by candidate
+        'OFFER_DECLINED', //perform by candidate
+        'INTERVIEW_FAILED' //perform by recruiter
       ],
       message: '{VALUE} is not a valid application status'
     },

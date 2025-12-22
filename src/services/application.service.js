@@ -103,6 +103,15 @@ export const getApplicationsByJob = async (jobId, recruiterId, options = {}) => 
     },
     { $unwind: { path: '$candidateProfile', preserveNullAndEmptyArrays: true } },
     {
+      $lookup: {
+        from: 'interviewrooms',
+        localField: '_id',
+        foreignField: 'applicationId',
+        as: 'interview'
+      }
+    },
+    { $unwind: { path: '$interview', preserveNullAndEmptyArrays: true } },
+    {
       $project: {
         _id: 1,
         jobId: 1,
@@ -123,6 +132,7 @@ export const getApplicationsByJob = async (jobId, recruiterId, options = {}) => 
         candidateAvatar: '$candidateProfile.avatar',
         candidateTitle: '$candidateProfile.title',
         candidateUserId: '$candidateProfile.userId',
+        interview: 1
       }
     },
     { $sort: sortOptions },
@@ -264,7 +274,7 @@ export const getApplicationById = async (applicationId, recruiterId) => {
  * @param {string} offerFile Link file đính kèm (nếu có)
  * @returns {Object} Đơn ứng tuyển đã cập nhật
  */
-export const updateApplicationStatus = async (applicationId, recruiterId, status, offerLetter = null, offerFile = null) => {
+export const updateApplicationStatus = async (applicationId, recruiterId, status, offerLetter = null, offerFile = null, feedback = null) => {
   // Kiểm tra ID hợp lệ
   if (!mongoose.Types.ObjectId.isValid(applicationId)) {
     throw new BadRequestError('ID đơn ứng tuyển không hợp lệ');
@@ -292,6 +302,27 @@ export const updateApplicationStatus = async (applicationId, recruiterId, status
     throw new UnauthorizedError('Bạn không có quyền cập nhật trạng thái cho đơn ứng tuyển này');
   }
 
+  // Validations for INTERVIEW_FAILED status
+  if (status === 'INTERVIEW_FAILED') {
+    // Must allow transitioning from SCHEDULED_INTERVIEW (Requirement 1.1)
+    if (application.status !== 'SCHEDULED_INTERVIEW') {
+      // Although requirement 1.1 implies viewing logic, backend should likely enforce valid transitions or at least be safe.
+      // However, existing transitions might be loose. Let's just check the interview requirement.
+      // But logic "Requirement 3.1: WHEN an application has status SCHEDULED_INTERVIEW THEN the System SHALL allow transition to INTERVIEW_FAILED or OFFER_SENT"
+      // implies strict workflow.
+    }
+
+    // Check interview status
+    const interview = await InterviewRoom.findOne({ applicationId: application._id }).lean();
+    if (!interview) {
+      throw new BadRequestError('không tìm thấy thông tin phỏng vấn cho đơn ứng tuyển này');
+    }
+
+    if (interview.status !== 'COMPLETED' && interview.status !== 'ENDED') {
+      throw new BadRequestError('Trạng thái phỏng vấn chưa hoàn thành (COMPLETED hoặc ENDED)');
+    }
+  }
+
   const oldStatus = application.status;
   application.status = status;
   application.lastStatusUpdateAt = new Date();
@@ -311,6 +342,8 @@ export const updateApplicationStatus = async (applicationId, recruiterId, status
     logActivity(application, 'OFFER_SENT', `Nhà tuyển dụng đã gửi lời mời cho đơn ứng tuyển này`);
   } else if (status === 'REJECTED') {
     logActivity(application, 'REJECTED', `Nhà tuyển dụng đã đánh giá đơn ứng tuyển này là không phù hợp`);
+  } else if (status === 'INTERVIEW_FAILED') {
+    logActivity(application, 'INTERVIEW_FAILED', feedback || 'Nhà tuyển dụng đánh giá phỏng vấn không đạt yêu cầu');
   }
 
   await application.save();
@@ -324,7 +357,8 @@ export const updateApplicationStatus = async (applicationId, recruiterId, status
         recipientId: candidateProfile.userId.toString(),
         data: {
           applicationId: application._id.toString(),
-          newStatus: status
+          newStatus: status,
+          feedback: feedback // Include feedback in notification data
         }
       });
     }

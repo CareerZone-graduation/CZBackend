@@ -7,6 +7,8 @@ import {
   SavedJob,
   User,
   CV,
+  InterviewRoom,
+  PendingNotification,
 } from '../models/index.js';
 import * as kafkaService from './kafka.service.js';
 import * as queueService from './queue.service.js';
@@ -392,7 +394,7 @@ export const getJobsMiniDashboard = async (userId) => {
       jobId: { $in: jobIds },
       createdAt: { $gte: today }
     }),
-    
+
     // Get jobs expiring in next 3 days (ACTIVE and APPROVED only)
     Job.find({
       recruiterProfileId,
@@ -400,11 +402,11 @@ export const getJobsMiniDashboard = async (userId) => {
       moderationStatus: 'APPROVED',
       deadline: { $gte: new Date(), $lte: threeDaysFromNow }
     })
-    .select('_id title deadline')
-    .sort({ deadline: 1 })
-    .limit(5)
-    .lean(),
-    
+      .select('_id title deadline')
+      .sort({ deadline: 1 })
+      .limit(5)
+      .lean(),
+
     // Count total pending applications across all ACTIVE jobs
     Application.countDocuments({
       jobId: { $in: await Job.find({ recruiterProfileId, status: 'ACTIVE' }).distinct('_id') },
@@ -717,9 +719,24 @@ export const deleteJob = async (jobId, userId) => {
     throw new ForbiddenError('Bạn không có quyền xóa tin tuyển dụng này.');
   }
 
-  // Soft-delete bằng cách chuyển status thành 'INACTIVE'
-  job.status = 'INACTIVE';
-  await job.save();
+  // Kiểm tra các tham chiếu: Đơn ứng tuyển, Lưu việc làm, Phòng phỏng vấn, Thông báo chờ xử lý
+  const [hasApplications, hasSaves, hasInterviews, hasPendingNotifications] = await Promise.all([
+    Application.exists({ jobId }),
+    SavedJob.exists({ jobId }),
+    InterviewRoom.exists({ jobId }),
+    PendingNotification.exists({ jobId })
+  ]);
+
+  if (hasApplications || hasSaves || hasInterviews || hasPendingNotifications) {
+    // Soft-delete: Chuyển sang trạng thái INACTIVE nếu có tham chiếu
+    job.status = 'INACTIVE';
+    await job.save();
+    logger.info(`Soft-deleted job ${jobId} (set to INACTIVE) due to existing references.`);
+  } else {
+    // Hard-delete: Xóa hoàn toàn khỏi database nếu không có tham chiếu nào
+    await Job.findByIdAndDelete(jobId);
+    logger.info(`Hard-deleted job ${jobId} as no references were found.`);
+  }
 };
 
 /**
@@ -3661,7 +3678,7 @@ export const searchJobsForCandidate = async (searchParams, userId = null) => {
           }
         };
       }
-      
+
       const skip = (page - 1) * size;
 
       let [results, totalCount] = await Promise.all([
@@ -3678,15 +3695,33 @@ export const searchJobsForCandidate = async (searchParams, userId = null) => {
         Job.countDocuments(preFilter)
       ]);
 
-      // Xử lý isSaved và format lại company (Giữ nguyên logic cũ)
+      // Xử lý isSaved và isApplied va format lại company
       if (userId) {
         const jobIds = results.map(job => job._id);
+
+        // Check saved jobs
         const savedJobs = await SavedJob.find({
           candidateId: userId,
           jobId: { $in: jobIds }
         }).select('jobId').lean();
         const savedJobIds = new Set(savedJobs.map(saved => saved.jobId.toString()));
-        results = results.map(job => ({ ...job, isSaved: savedJobIds.has(job._id.toString()) }));
+
+        // Check applied jobs
+        let appliedJobIds = new Set();
+        const candidateProfile = await CandidateProfile.findOne({ userId }).select('_id');
+        if (candidateProfile) {
+          const applications = await Application.find({
+            candidateProfileId: candidateProfile._id,
+            jobId: { $in: jobIds }
+          }).select('jobId').lean();
+          appliedJobIds = new Set(applications.map(app => app.jobId.toString()));
+        }
+
+        results = results.map(job => ({
+          ...job,
+          isSaved: savedJobIds.has(job._id.toString()),
+          isApplied: appliedJobIds.has(job._id.toString())
+        }));
       }
 
       results = results.map(job => {
@@ -3716,7 +3751,7 @@ export const searchJobsForCandidate = async (searchParams, userId = null) => {
   }
 
   // 2. TRƯỜNG HỢP CÓ QUERY: Full-text Search với Atlas Search ($search)
-  
+
   // Build common filter cho Atlas Search
   const searchFilter = buildSearchFilter(searchParams);
 
@@ -3772,10 +3807,10 @@ export const searchJobsForCandidate = async (searchParams, userId = null) => {
       }] : []),
 
       // --- Stage 3: Project Score & Fields ---
-      { 
-        $addFields: { 
+      {
+        $addFields: {
           score: { $meta: "searchScore" } // Lấy điểm BM25
-        } 
+        }
       },
 
       // --- Stage 4: Sorting ---
@@ -3783,7 +3818,7 @@ export const searchJobsForCandidate = async (searchParams, userId = null) => {
       {
         $sort: {
           score: -1,
-          createdAt: -1 
+          createdAt: -1
         }
       },
 
@@ -3808,7 +3843,7 @@ export const searchJobsForCandidate = async (searchParams, userId = null) => {
           'company.logo': '$recruiter.company.logo',
         }
       },
-      
+
       // --- Stage 6: Clean up fields ---
       {
         $project: {
@@ -3838,19 +3873,32 @@ export const searchJobsForCandidate = async (searchParams, userId = null) => {
 
     let finalResults = pageResults;
 
-    // Add isSaved status logic (Giữ nguyên)
+    // Add isSaved and isApplied status logic
     if (userId) {
       const jobIds = finalResults.map(job => job._id);
+
+      // Check saved jobs
       const savedJobs = await SavedJob.find({
         candidateId: userId,
         jobId: { $in: jobIds }
       }).select('jobId').lean();
-
       const savedJobIds = new Set(savedJobs.map(saved => saved.jobId.toString()));
+
+      // Check applied jobs
+      let appliedJobIds = new Set();
+      const candidateProfile = await CandidateProfile.findOne({ userId }).select('_id');
+      if (candidateProfile) {
+        const applications = await Application.find({
+          candidateProfileId: candidateProfile._id,
+          jobId: { $in: jobIds }
+        }).select('jobId').lean();
+        appliedJobIds = new Set(applications.map(app => app.jobId.toString()));
+      }
 
       finalResults = finalResults.map(job => ({
         ...job,
-        isSaved: savedJobIds.has(job._id.toString())
+        isSaved: savedJobIds.has(job._id.toString()),
+        isApplied: appliedJobIds.has(job._id.toString())
       }));
     }
 
