@@ -34,7 +34,12 @@ describe('Company Routes', () => {
         website: 'https://awesomeinc.com',
         location: {
           province: 'Thành phố Hà Nội',
-          ward: 'Phường Trung Hoà'
+          district: 'Quận Cầu Giấy',
+          ward: 'Phường Trung Hoà',
+          coordinates: {
+            type: 'Point',
+            coordinates: [0, 0],
+          },
         },
         address: '123 Main St',
         contactInfo: {

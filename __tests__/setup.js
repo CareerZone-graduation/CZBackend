@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import dotenv from 'dotenv';
+import cron from 'node-cron';
 
 // Tải file .env.test
 dotenv.config({ path: '.env.test' });
@@ -16,6 +17,8 @@ beforeAll(async () => {
 
 // Chạy sau tất cả các test
 afterAll(async () => {
+  // Stop all scheduled cron jobs to prevent open handles
+  cron.getTasks().forEach((task) => task.stop());
   await mongoose.disconnect();
   await mongoServer.stop();
 });

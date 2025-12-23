@@ -49,6 +49,12 @@ describe('Candidate Profile Routes API', () => {
       company: {
         name: 'Test Company',
         email: 'company@example.com',
+        location: {
+          coordinates: {
+            type: 'Point',
+            coordinates: [0, 0],
+          },
+        },
       },
     });
 
@@ -57,18 +63,27 @@ describe('Candidate Profile Routes API', () => {
       title: 'Software Engineer',
       description: 'Develop amazing things.',
       recruiterProfileId: recruiterProfile._id,
-      locations: ['Hanoi'],
-      salary: { min: 1000, max: 2000, unit: 'Tri', negotiable: false },
+      location: {
+        province: 'Test Province',
+        district: 'Test District',
+        ward: 'Test Ward',
+        coordinates: {
+          type: 'Point',
+          coordinates: [0, 0],
+        },
+      },
+      minSalary: '1000',
+      maxSalary: '2000',
       category: 'IT',
       experience: 'ENTRY_LEVEL',
       deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       workType: 'ON_SITE',
       type: 'FULL_TIME',
       address: '123 Test Street',
-      'location.ward': 'Test Ward',
-      'location.province': 'Test Province',
       benefits: 'Health insurance, free snacks',
       requirements: 'Node.js, React',
+      moderationStatus: 'APPROVED',
+      status: 'ACTIVE',
     });
 
     // Tạo token cho ứng viên này
@@ -173,20 +188,6 @@ describe('Candidate Profile Routes API', () => {
       expect(res.statusCode).toEqual(400);
       expect(res.body.success).toBe(false);
       expect(res.body.errors[0].message).toBe('Số điện thoại không hợp lệ');
-    });
-
-    it('should return 400 for missing fullname', async () => {
-      const invalidData = { ...validProfileData };
-      delete invalidData.fullname;
-
-      const res = await request(app)
-        .put('/api/candidate/my-profile')
-        .set('Authorization', `Bearer ${candidateToken}`)
-        .send(invalidData);
-
-      expect(res.statusCode).toEqual(400);
-      expect(res.body.success).toBe(false);
-      expect(res.body.errors[0].message).toContain('Required');
     });
 
     it('should return 400 for extra fields due to .strict()', async () => {

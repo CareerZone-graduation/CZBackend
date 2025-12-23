@@ -30,11 +30,21 @@ describe('Job Routes API', () => {
       password: 'password123',
       role: 'recruiter',
       isEmailVerified: true,
+      coinBalance: 1000, // Add coins to allow job posting
     });
     recruiterProfile = await RecruiterProfile.create({
       userId: recruiterUser._id,
       fullname: 'Test Recruiter',
-      company: { name: 'Test Corp' },
+      company: {
+        name: 'Test Corp',
+        location: {
+          province: 'Hồ Chí Minh',
+          coordinates: {
+            type: 'Point',
+            coordinates: [106.6297, 10.8231] // [longitude, latitude] for Ho Chi Minh City
+          }
+        }
+      },
     });
 
     // 2. Tạo JWT token cho recruiter
@@ -46,7 +56,13 @@ describe('Job Routes API', () => {
       description: 'A great job opportunity.',
       requirements: 'NodeJS, MongoDB',
       benefits: 'Good salary',
-      location: { province: 'Hồ Chí Minh', ward: 'Tân Định' },
+      location: {
+        province: 'Thành phố Hồ Chí Minh',
+        district: 'Quận 1',
+        commune: 'Phường Tân Định',
+        ward: 'Tân Định',
+        coordinates: { type: 'Point', coordinates: [106.68, 10.79] },
+      },
       address: '123 Test Street',
       type: 'FULL_TIME',
       workType: 'ON_SITE',
@@ -55,7 +71,7 @@ describe('Job Routes API', () => {
       category: 'IT',
       recruiterProfileId: recruiterProfile._id,
       status: 'ACTIVE',
-      approved: true, // Make the job visible in public listings
+      moderationStatus: 'APPROVED', // Make the job visible in public listings
     });
 
     // Setup for candidate
@@ -75,12 +91,24 @@ describe('Job Routes API', () => {
   // Test Case 1: Tạo một job mới (Endpoint được bảo vệ)
   describe('POST /api/jobs', () => {
     it('should create a new job when authenticated as a recruiter', async () => {
+      // Ensure the recruiter has coins just before the request
+      const recruiterInDb = await User.findById(recruiterUser._id);
+      recruiterInDb.coinBalance = 1000;
+      await recruiterInDb.save();
+      console.log(`Recruiter coinBalance before creating job: ${recruiterInDb.coinBalance}`);
+
       const newJobData = {
         title: 'Frontend Developer',
         description: 'A fantastic opportunity for a skilled Frontend Developer.',
         requirements: '3 years experience',
         benefits: 'Free lunch',
-        location: { province: 'Hà Nội', ward: 'Ba Đình' },
+        location: {
+          province: 'Thành phố Hà Nội',
+          district: 'Quận Ba Đình',
+          commune: 'Phường Điện Biên',
+          ward: 'Ba Đình',
+          coordinates: { type: 'Point', coordinates: [105.83, 21.03] },
+        },
         address: '456 Capital Road',
         type: 'FULL_TIME',
         workType: 'REMOTE',
@@ -193,23 +221,42 @@ describe('Job Routes API', () => {
 
     it('should return 403 if trying to update a job not owned by the recruiter', async () => {
       // Create another recruiter and their job
-      const anotherRecruiter = await User.create({fullname: 'Another Recruiter', email: 'another@test.com', password: 'password123', role: 'recruiter', isEmailVerified: true });
-      const anotherProfile = await RecruiterProfile.create({ userId: anotherRecruiter._id, fullname: 'Another Recruiter', company: { name: 'Another Corp' } });
+      const anotherRecruiter = await User.create({ fullname: 'Another Recruiter', email: 'another@test.com', password: 'password123', role: 'recruiter', isEmailVerified: true });
+      const anotherProfile = await RecruiterProfile.create({
+        userId: anotherRecruiter._id,
+        fullname: 'Another Recruiter',
+        company: {
+          name: 'Another Corp',
+          location: {
+            province: 'Hà Nội',
+            coordinates: {
+              type: 'Point',
+              coordinates: [105.8342, 21.0278] // [longitude, latitude] for Hanoi
+            }
+          }
+        }
+      });
       const anotherJob = await Job.create({
         title: 'Another Job',
         description: 'Another job description.',
         requirements: 'Some skills',
         benefits: 'Some benefits',
-        location: { province: 'Hà Nội', ward: 'Ba Đình' },
+        location: {
+          province: 'Thành phố Hà Nội',
+          district: 'Quận Ba Đình',
+          commune: 'Phường Điện Biên',
+          ward: 'Ba Đình',
+          coordinates: { type: 'Point', coordinates: [105.83, 21.03] },
+        },
         address: 'Some Address',
         type: 'FULL_TIME',
         workType: 'ON_SITE',
-        deadline: new Date(),
+        deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
         experience: 'MID_LEVEL',
         category: 'IT',
         recruiterProfileId: anotherProfile._id,
       });
-      
+
       const updateData = { title: 'Malicious Update' };
 
       const res = await request(app)
@@ -229,10 +276,10 @@ describe('Job Routes API', () => {
 
       expect(res.statusCode).toEqual(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.message).toBe('Xóa (soft-delete) công việc thành công.');
+      expect(res.body.message).toBe('Xóa công việc thành công.');
 
       const jobInDb = await Job.findById(testJob._id);
-      expect(jobInDb.status).toBe('INACTIVE');
+      expect(jobInDb).toBeNull();
     });
   });
 
@@ -352,7 +399,8 @@ describe('Job Routes API', () => {
       expect(res.body.success).toBe(true);
       expect(res.body.data).toBeInstanceOf(Array);
       expect(res.body.data.length).toBe(1);
-      expect(res.body.data[0].jobId.toString()).toBe(testJob._id.toString());
+      expect(res.body.data[0]._id.toString()).toBe(testJob._id.toString());
+      expect(res.body.data[0].title).toBe('Senior NodeJS Developer');
       expect(res.body.meta.totalItems).toBe(1);
     });
 
@@ -362,16 +410,19 @@ describe('Job Routes API', () => {
         title: 'Another Job',
         description: 'Another description.',
         recruiterProfileId: recruiterProfile._id,
-        locations: ['Hanoi'],
-        salary: { min: 1000, max: 2000, unit: 'Triệu', negotiable: false },
+        location: {
+          province: 'Thành phố Hà Nội',
+          district: 'Quận Hoàn Kiếm',
+          commune: 'Phường Hàng Bạc',
+          ward: 'Hàng Bạc',
+          coordinates: { type: 'Point', coordinates: [105.85, 21.03] },
+        },
         category: 'IT',
         experience: 'ENTRY_LEVEL',
         deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         workType: 'ON_SITE',
         type: 'FULL_TIME',
         address: '456 Test Street',
-        'location.ward': 'Another Ward',
-        'location.province': 'Another Province',
         benefits: 'Free coffee',
         requirements: 'Python',
       });

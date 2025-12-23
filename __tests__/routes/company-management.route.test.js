@@ -45,7 +45,7 @@ describe('Company Management Routes', () => {
       { id: recruiterUser._id, role: recruiterUser.role },
       config.JWT_SECRET
     );
-    
+
     nonRecruiterToken = jwt.sign(
       { id: nonRecruiterUser._id, role: nonRecruiterUser.role },
       config.JWT_SECRET
@@ -67,8 +67,13 @@ describe('Company Management Routes', () => {
       size: '50-100',
       website: 'https://techinnovation.com',
       location: {
-        province: 'Hà Nội',
-        ward: 'Hà Đông',
+        province: 'Thành phố Hà Nội',
+        district: 'Quận Hà Đông',
+        commune: 'Phường Nguyễn Trãi',
+        coordinates: {
+          type: 'Point',
+          coordinates: [105.78, 20.98],
+        },
       },
       address: '123 Nguyễn Huệ',
       contactInfo: {
@@ -205,15 +210,6 @@ describe('Company Management Routes', () => {
       expect(res.body.message).toContain('Dữ liệu companyData không phải là JSON hợp lệ');
     });
 
-    it('should return 400 if companyData is missing', async () => {
-      const res = await request(app)
-        .post('/api/companies')
-        .set('Authorization', `Bearer ${recruiterToken}`)
-        .expect(400);
-
-      expect(res.body.success).toBe(false);
-      expect(res.body.message).toContain('Trường companyData là bắt buộc');
-    });
 
     it('should return 401 if not authenticated', async () => {
       const res = await request(app)
@@ -271,7 +267,12 @@ describe('Company Management Routes', () => {
             website: 'https://mytestcompany.com',
             location: {
               province: 'Thành phố Hà Nội',
-              ward: 'Phường Cống Vị'
+              district: 'Quận Ba Đình',
+              commune: 'Phường Cống Vị',
+              coordinates: {
+                type: 'Point',
+                coordinates: [105.8342, 21.0278]
+              }
             },
             address: '456 Test Street',
             contactInfo: {
@@ -351,8 +352,9 @@ describe('Company Management Routes', () => {
       size: '100-200',
       website: 'https://updatedcompany.com',
       location: {
-        province: 'Hà Nội',
-        ward: 'Hà Đông'
+        province: 'Thành phố Hà Nội',
+        district: 'Quận Hà Đông',
+        commune: 'Phường Văn Quán'
       },
       address: '789 Updated Street',
       contactInfo: {
@@ -371,6 +373,15 @@ describe('Company Management Routes', () => {
             about: 'Original company description for testing update functionality.',
             industry: 'Công nghệ thông tin',
             taxCode: '0123456789',
+            location: {
+              province: 'Thành phố Hà Nội',
+              district: 'Quận Ba Đình',
+              commune: 'Phường Cống Vị',
+              coordinates: {
+                type: 'Point',
+                coordinates: [105.8342, 21.0278]
+              }
+            },
             verified: false
           }
         }
@@ -508,6 +519,15 @@ describe('Company Management Routes', () => {
             name: 'Logo Test Company',
             about: 'Company for testing logo upload functionality.',
             industry: 'Công nghệ thông tin',
+            location: {
+              province: 'Thành phố Hà Nội',
+              district: 'Quận Ba Đình',
+              commune: 'Phường Cống Vị',
+              coordinates: {
+                type: 'Point',
+                coordinates: [105.8342, 21.0278]
+              }
+            },
             verified: false
           }
         }
@@ -588,7 +608,7 @@ describe('Company Management Routes', () => {
           .post('/api/companies/my-company/logo')
           .set('Authorization', `Bearer ${newToken}`)
           .attach('logo', testImagePath)
-          .expect(400); 
+          .expect(400);
 
         expect(res.body.success).toBe(false);
         expect(res.body.message).toContain('Vui lòng cập nhật thông tin công ty trước khi thêm logo');

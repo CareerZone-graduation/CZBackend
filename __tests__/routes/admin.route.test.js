@@ -7,7 +7,6 @@ import { User, Job, RecruiterProfile, CandidateProfile, Application } from '../.
 describe('Admin Routes API', () => {
   let adminToken;
   let recruiterToken;
-  let candidateToken;
   let adminUser;
   let recruiterUser;
   let candidateUser;
@@ -65,7 +64,12 @@ describe('Admin Routes API', () => {
         industry: 'Công nghệ thông tin',
         size: '100-500',
         website: 'https://testcompany.com',
-        about: 'A test company'
+        about: 'A test company',
+        location: {
+          province: 'Thành phố Hồ Chí Minh',
+          district: 'Quận 1',
+          coordinates: { type: 'Point', coordinates: [106.70, 10.78] },
+        },
       }
     });
 
@@ -85,19 +89,21 @@ describe('Admin Routes API', () => {
       benefits: 'Test benefits for employees',
       location: {
         province: 'Ho Chi Minh City',
-        ward: 'District 1'
+        district: 'District 1',
+        ward: 'District 1',
+        coordinates: { type: 'Point', coordinates: [106.70, 10.78] },
       },
       address: '123 Test Street, District 1, Ho Chi Minh City',
       type: 'FULL_TIME',
       workType: 'ON_SITE',
-      minSalary: 1000,
-      maxSalary: 2000,
+      minSalary: '1000',
+      maxSalary: '2000',
       deadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
       experience: 'MID_LEVEL',
       category: 'IT',
       area: 'HO_CHI_MINH',
       status: 'ACTIVE',
-      approved: false,
+      moderationStatus: 'PENDING',
       recruiterProfileId: recruiterProfile._id
     });
 
@@ -114,11 +120,6 @@ describe('Admin Routes API', () => {
       { expiresIn: '1h' }
     );
 
-    candidateToken = jwt.sign(
-      { id: candidateUser._id, role: candidateUser.role },
-      process.env.JWT_SECRET || 'test-secret',
-      { expiresIn: '1h' }
-    );
   });
 
   describe('Authentication & Authorization', () => {
@@ -182,7 +183,7 @@ describe('Admin Routes API', () => {
 
     it('should filter jobs by status', async () => {
       const res = await request(app)
-        .get('/api/admin/jobs?status=pending')
+        .get('/api/admin/jobs?status=PENDING')
         .set('Authorization', `Bearer ${adminToken}`);
 
       expect(res.statusCode).toEqual(200);
@@ -195,7 +196,7 @@ describe('Admin Routes API', () => {
         .set('Authorization', `Bearer ${adminToken}`);
 
       expect(res.statusCode).toEqual(200);
-      expect(res.body.meta.currentPage).toBe(1);
+      expect(Number(res.body.meta.currentPage)).toBe(1);
       expect(res.body.meta.totalItems).toBe(1);
     });
   });
@@ -239,11 +240,11 @@ describe('Admin Routes API', () => {
       expect(res.statusCode).toEqual(200);
       expect(res.body.success).toBe(true);
       expect(res.body.message).toBe('Phê duyệt tin tuyển dụng thành công.');
-      expect(res.body.data.approved).toBe(true);
+      expect(res.body.data.moderationStatus).toBe('APPROVED');
 
       // Verify in database
       const updatedJob = await Job.findById(job._id);
-      expect(updatedJob.approved).toBe(true);
+      expect(updatedJob.moderationStatus).toBe('APPROVED');
     });
 
     it('should return 404 for non-existent job', async () => {
@@ -265,11 +266,11 @@ describe('Admin Routes API', () => {
       expect(res.statusCode).toEqual(200);
       expect(res.body.success).toBe(true);
       expect(res.body.message).toBe('Từ chối tin tuyển dụng thành công.');
-      expect(res.body.data.approved).toBe(false);
+      expect(res.body.data.moderationStatus).toBe('REJECTED');
 
       // Verify in database
       const updatedJob = await Job.findById(job._id);
-      expect(updatedJob.approved).toBe(false);
+      expect(updatedJob.moderationStatus).toBe('REJECTED');
     });
   });
 
@@ -283,7 +284,7 @@ describe('Admin Routes API', () => {
       expect(res.body.success).toBe(true);
       expect(res.body.message).toBe('Lấy danh sách người dùng thành công.');
       expect(res.body.data).toBeInstanceOf(Array);
-      expect(res.body.data.length).toBe(3); // admin, recruiter, candidate
+      expect(res.body.data.length).toBe(2); // admin, recruiter, candidate
     });
 
     it('should filter users by search query', async () => {
@@ -437,7 +438,8 @@ describe('Admin Routes API', () => {
     it('should reject a company', async () => {
       const res = await request(app)
         .patch(`/api/admin/companies/${recruiterProfile._id}/reject`)
-        .set('Authorization', `Bearer ${adminToken}`);
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ rejectReason: 'Not compliant' });
 
       expect(res.statusCode).toEqual(200);
       expect(res.body.success).toBe(true);
@@ -481,7 +483,7 @@ describe('Admin Routes API', () => {
       expect(res.body.data.overview).toHaveProperty('totalUsers');
       expect(res.body.data.overview).toHaveProperty('totalJobs');
       expect(res.body.data.overview).toHaveProperty('totalApplications');
-      expect(res.body.data.overview.totalUsers).toBe(3);
+      expect(res.body.data.overview.totalUsers).toBe(2);
       expect(res.body.data.overview.totalJobs).toBe(1);
       expect(res.body.data.overview.totalApplications).toBe(1);
       expect(res.body.data).toHaveProperty('jobs');

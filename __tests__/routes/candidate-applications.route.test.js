@@ -41,6 +41,12 @@ describe('Candidate Applications Routes', () => {
             company: {
                 name: 'Test Company Inc.',
                 email: 'company.app@example.com',
+                location: {
+                    coordinates: {
+                        type: 'Point',
+                        coordinates: [0, 0],
+                    },
+                },
             },
         });
 
@@ -48,19 +54,28 @@ describe('Candidate Applications Routes', () => {
         job = await Job.create({
             title: 'Software Engineer',
             description: 'Develop amazing things.',
-            recruiterProfileId: recruiterProfile._id, // Liên kết với RecruiterProfile
-            locations: ['Hanoi'],
-            salary: { min: 1000, max: 2000, unit: 'Triệu', negotiable: false },
-            category: 'IT', // Thêm trường bắt buộc
-            experience: 'ENTRY_LEVEL', // Thêm trường bắt buộc
-            deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // Thêm trường bắt buộc (1 tuần kể từ bây giờ)
-            workType: 'ON_SITE', // Thêm trường bắt buộc
-            type: 'FULL_TIME', // Thêm trường bắt buộc
-            address: '123 Test Street', // Thêm trường bắt buộc
-            'location.ward': 'Test Ward', // Thêm trường bắt buộc
-            'location.province': 'Test Province', // Thêm trường bắt buộc
-            benefits: 'Health insurance, free snacks', // Thêm trường bắt buộc
-            requirements: 'Node.js, React', // Thêm trường bắt buộc
+            recruiterProfileId: recruiterProfile._id,
+            location: {
+                province: 'Test Province',
+                district: 'Test District',
+                ward: 'Test Ward',
+                coordinates: {
+                    type: 'Point',
+                    coordinates: [0, 0],
+                },
+            },
+            minSalary: '1000',
+            maxSalary: '2000',
+            category: 'IT',
+            experience: 'ENTRY_LEVEL',
+            deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+            workType: 'ON_SITE',
+            type: 'FULL_TIME',
+            address: '123 Test Street',
+            benefits: 'Health insurance, free snacks',
+            requirements: 'Node.js, React',
+            moderationStatus: 'APPROVED',
+            status: 'ACTIVE',
         });
 
         // Create an application
@@ -84,7 +99,7 @@ describe('Candidate Applications Routes', () => {
         await Application.create({
             jobId: job._id,
             candidateProfileId: candidateProfile._id, // Sửa thành candidateProfile._id
-            status: 'REVIEWING',
+            status: 'SUITABLE',
             submittedCV: {
                 name: 'Test CV 2',
                 path: 'http://example.com/test2.pdf',
@@ -132,14 +147,14 @@ describe('Candidate Applications Routes', () => {
 
         it('should return 200 and filter applications by status', async () => {
             const res = await request(app)
-                .get('/api/candidate/my-applications?status=REVIEWING')
+                .get('/api/candidate/my-applications?status=SUITABLE')
                 .set('Authorization', `Bearer ${candidateToken}`);
 
             expect(res.statusCode).toEqual(200);
             expect(res.body.success).toBe(true);
             expect(res.body.data).toBeInstanceOf(Array);
             expect(res.body.data.length).toBe(1);
-            expect(res.body.data[0].status).toBe('REVIEWING');
+            expect(res.body.data[0].status).toBe('SUITABLE');
             expect(res.body.meta.totalItems).toBe(1); // Changed from total to totalItems
         });
 

@@ -47,8 +47,8 @@ describe('Job Alert API', () => {
     describe('POST /api/job-alerts', () => {
         it('should create a new job alert subscription', async () => {
             const newJobAlert = {
-                keyword: 'Software Engineer',
-                location: { province: 'Hồ Chí Minh' },
+                keyword: 'Software',
+                location: { province: 'Thành phố Hồ Chí Minh', district: 'Quận 1' },
                 frequency: 'daily',
                 salaryRange: 'OVER_30M',
                 type: 'FULL_TIME',
@@ -67,12 +67,12 @@ describe('Job Alert API', () => {
             expect(res.body.success).toBe(true);
             expect(res.body.message).toBe('Đăng ký nhận thông báo việc làm thành công.');
             expect(res.body.data).toHaveProperty('_id');
-            expect(res.body.data.keyword).toBe(newJobAlert.keyword);
-            expect(sAddSpy).toHaveBeenCalledWith('job_alert:keyword:software engineer', userId.toString());
+            expect(res.body.data.keyword).toBe(newJobAlert.keyword.toLowerCase());
+            expect(sAddSpy).toHaveBeenCalledWith('job_alert:keyword:software', userId.toString());
 
             const subscriptionInDb = await JobAlertSubscription.findById(res.body.data._id);
             expect(subscriptionInDb).not.toBeNull();
-            expect(subscriptionInDb.keyword).toBe(newJobAlert.keyword);
+            expect(subscriptionInDb.keyword).toBe(newJobAlert.keyword.toLowerCase());
         });
 
         it('should not create more than 3 active job alerts for a candidate', async () => {
@@ -80,8 +80,8 @@ describe('Job Alert API', () => {
             for (let i = 0; i < 3; i++) {
                 await JobAlertSubscription.create({
                     candidateId: userId,
-                    keyword: `Test Keyword ${i}`,
-                    location: { province: 'Hà Nội' },
+                    keyword: `Test${i}`,
+                    location: { province: 'Thành phố Hà Nội', district: 'Quận Ba Đình' },
                     frequency: 'weekly',
                     salaryRange: 'UNDER_10M',
                     type: 'PART_TIME',
@@ -94,8 +94,8 @@ describe('Job Alert API', () => {
             }
 
             const newJobAlert = {
-                keyword: 'Fourth Job Alert',
-                location: { province: 'Hồ Chí Minh' },
+                keyword: 'Fourth',
+                location: { province: 'Thành phố Hồ Chí Minh', district: 'Quận 1' },
                 frequency: 'daily',
                 salaryRange: 'OVER_30M',
                 type: 'FULL_TIME',
@@ -138,8 +138,8 @@ describe('Job Alert API', () => {
         it('should retrieve all job alerts for the authenticated candidate', async () => {
             const jobAlert1 = await JobAlertSubscription.create({
                 candidateId: userId,
-                keyword: 'Frontend Developer',
-                location: { province: 'Hà Nội' },
+                keyword: 'Frontend',
+                location: { province: 'Thành phố Hà Nội', district: 'Quận Hoàn Kiếm' },
                 frequency: 'weekly',
                 salaryRange: '10M_20M',
                 type: 'FULL_TIME',
@@ -151,8 +151,8 @@ describe('Job Alert API', () => {
 
             const jobAlert2 = await JobAlertSubscription.create({
                 candidateId: userId,
-                keyword: 'Backend Developer',
-                location: { province: 'Đà Nẵng' },
+                keyword: 'Backend',
+                location: { province: 'Thành phố Đà Nẵng', district: 'Quận Hải Châu' },
                 frequency: 'daily',
                 salaryRange: '20M_30M',
                 type: 'CONTRACT',
@@ -189,8 +189,8 @@ describe('Job Alert API', () => {
         it('should update an existing job alert subscription', async () => {
             const jobAlert = await JobAlertSubscription.create({
                 candidateId: userId,
-                keyword: 'Old Keyword',
-                location: { province: 'Hồ Chí Minh' },
+                keyword: 'OldKeyword',
+                location: { province: 'Thành phố Hồ Chí Minh', district: 'Quận 1' },
                 frequency: 'weekly',
                 salaryRange: 'UNDER_10M',
                 type: 'FULL_TIME',
@@ -201,7 +201,7 @@ describe('Job Alert API', () => {
             });
 
             const updatedData = {
-                keyword: 'New Keyword',
+                keyword: 'NewKeyword',
                 frequency: 'daily',
                 active: false,
             };
@@ -214,18 +214,18 @@ describe('Job Alert API', () => {
             expect(res.statusCode).toEqual(200);
             expect(res.body.success).toBe(true);
             expect(res.body.message).toBe('Cập nhật đăng ký thành công.');
-            expect(res.body.data.keyword).toBe(updatedData.keyword);
+            expect(res.body.data.keyword).toBe(updatedData.keyword.toLowerCase());
             expect(res.body.data.frequency).toBe(updatedData.frequency);
             expect(res.body.data.active).toBe(updatedData.active);
 
             // Check Redis calls for keyword change
-            expect(mockMulti.sRem).toHaveBeenCalledWith('job_alert:keyword:old keyword', userId.toString());
-            expect(mockMulti.sAdd).toHaveBeenCalledWith('job_alert:keyword:new keyword', userId.toString());
+            expect(mockMulti.sRem).toHaveBeenCalledWith('job_alert:keyword:oldkeyword', userId.toString());
+            expect(mockMulti.sAdd).not.toHaveBeenCalled(); // Should not be called when active: false
             expect(mockMulti.exec).toHaveBeenCalled();
 
             const updatedSubscriptionInDb = await JobAlertSubscription.findById(jobAlert._id);
-            expect(updatedSubscriptionInDb.keyword).toBe(updatedData.keyword);
-            expect(updatedSubscriptionInDb.active).toBe(updatedData.active);
+            expect(updatedSubscriptionInDb.keyword).toBe(updatedData.keyword.toLowerCase());
+            expect(updatedSubscriptionInDb.active).toBe(false);
         });
 
         it('should not update a job alert if it does not belong to the authenticated candidate', async () => {
@@ -237,8 +237,8 @@ describe('Job Alert API', () => {
             });
             const otherJobAlert = await JobAlertSubscription.create({
                 candidateId: otherUser._id,
-                keyword: 'Other User Keyword',
-                location: { province: 'Hà Nội' },
+                keyword: 'OtherUserKeyword',
+                location: { province: 'Thành phố Hà Nội', district: 'Quận Cầu Giấy' },
                 frequency: 'daily',
                 salaryRange: 'OVER_30M',
                 type: 'FULL_TIME',
@@ -248,7 +248,7 @@ describe('Job Alert API', () => {
                 notificationMethod: 'EMAIL',
             });
 
-            const updatedData = { keyword: 'Attempted Update' };
+            const updatedData = { keyword: 'AttemptedUpdate' };
 
             const res = await request(app)
                 .put(`/api/job-alerts/${otherJobAlert._id}`)
@@ -262,7 +262,7 @@ describe('Job Alert API', () => {
 
         it('should return 404 if the job alert to update is not found', async () => {
             const nonExistentId = new mongoose.Types.ObjectId();
-            const updatedData = { keyword: 'This will fail' };
+            const updatedData = { keyword: 'Valid' };
 
             const res = await request(app)
                 .put(`/api/job-alerts/${nonExistentId}`)
@@ -279,8 +279,8 @@ describe('Job Alert API', () => {
         it('should delete a job alert subscription', async () => {
             const jobAlert = await JobAlertSubscription.create({
                 candidateId: userId,
-                keyword: 'To Be Deleted',
-                location: { province: 'Hồ Chí Minh' },
+                keyword: 'ToBeDeleted',
+                location: { province: 'Thành phố Hồ Chí Minh', district: 'Quận 1' },
                 frequency: 'weekly',
                 salaryRange: 'UNDER_10M',
                 type: 'FULL_TIME',
@@ -290,7 +290,7 @@ describe('Job Alert API', () => {
                 notificationMethod: 'EMAIL',
             });
 
-            await redisClient.sAdd('job_alert:keyword:to be deleted', userId.toString());
+            await redisClient.sAdd('job_alert:keyword:tobedeleted', userId.toString());
 
             const res = await request(app)
                 .delete(`/api/job-alerts/${jobAlert._id}`)
@@ -300,7 +300,7 @@ describe('Job Alert API', () => {
             expect(res.body.success).toBe(true);
             expect(res.body.message).toBe('Xóa đăng ký thành công.');
 
-            expect(sRemSpy).toHaveBeenCalledWith('job_alert:keyword:to be deleted', userId.toString());
+            expect(mockMulti.sRem).toHaveBeenCalledWith('job_alert:keyword:tobedeleted', userId.toString());
 
             const deletedSubscription = await JobAlertSubscription.findById(jobAlert._id);
             expect(deletedSubscription).toBeNull();
@@ -315,8 +315,8 @@ describe('Job Alert API', () => {
             });
             const otherJobAlert = await JobAlertSubscription.create({
                 candidateId: otherUser._id,
-                keyword: 'Another User Keyword',
-                location: { province: 'Hà Nội' },
+                keyword: 'AnotherUserKeyword',
+                location: { province: 'Thành phố Hà Nội', district: 'Quận Đống Đa' },
                 frequency: 'daily',
                 salaryRange: 'OVER_30M',
                 type: 'FULL_TIME',

@@ -47,7 +47,16 @@ describe('Candidate Management Routes', () => {
       company: {
         name: 'Test Company',
         industry: 'Công nghệ thông tin',
-        logo: 'https://example.com/logo.png'
+        logo: 'https://example.com/logo.png',
+        location: {
+          province: 'Thành phố Hà Nội',
+          district: 'Quận Ba Đình',
+          commune: 'Phường Phúc Xá',
+          coordinates: {
+            type: 'Point',
+            coordinates: [105.8342, 21.0278] // Hanoi coordinates
+          }
+        }
       }
     });
     recruiterId = recruiterProfile._id;
@@ -97,8 +106,13 @@ describe('Candidate Management Routes', () => {
       requirements: 'JavaScript, Node.js experience required',
       benefits: 'Health insurance, Flexible hours',
       location: {
-        province: 'Ho Chi Minh',
-        ward: 'Ward 1'
+        province: 'Thành phố Hồ Chí Minh',
+        district: 'Quận 1',
+        commune: 'Phường Bến Nghé',
+        coordinates: {
+          type: 'Point',
+          coordinates: [106.7009, 10.7756] // [longitude, latitude] for Ho Chi Minh City
+        }
       },
       address: '123 Company Street',
       type: 'FULL_TIME',
@@ -120,7 +134,6 @@ describe('Candidate Management Routes', () => {
       jobId: jobId,
       candidateProfileId: candidateId,
       status: 'PENDING',
-      candidateRating: 'NOT_RATED',
       submittedCV: {
         name: 'test-cv.pdf',
         path: 'https://example.com/cv.pdf',
@@ -161,8 +174,7 @@ describe('Candidate Management Routes', () => {
         {
           jobId: jobId,
           candidateProfileId: candidateId,
-          status: 'REVIEWING',
-          candidateRating: 'SUITABLE',
+          status: 'SUITABLE',
           submittedCV: {
             name: 'cv2.pdf',
             path: 'https://example.com/cv2.pdf',
@@ -184,7 +196,6 @@ describe('Candidate Management Routes', () => {
           jobId: jobId,
           candidateProfileId: candidateId,
           status: 'ACCEPTED',
-          candidateRating: 'PERFECT_MATCH',
           submittedCV: {
             name: 'cv3.pdf',
             path: 'https://example.com/cv3.pdf',
@@ -224,7 +235,6 @@ describe('Candidate Management Routes', () => {
       expect(response.body.data.length).toBeGreaterThan(0);
       expect(response.body.data[0]).toHaveProperty('_id');
       expect(response.body.data[0]).toHaveProperty('status');
-      expect(response.body.data[0]).toHaveProperty('candidateRating');
       expect(response.body.data[0]).toHaveProperty('appliedAt');
     });
 
@@ -240,23 +250,12 @@ describe('Candidate Management Routes', () => {
 
     test('Thành công - Lọc theo trạng thái', async () => {
       const response = await request(app)
-        .get(`/api/applications/jobs/${jobId}/applications?status=REVIEWING`)
+        .get(`/api/applications/jobs/${jobId}/applications?status=SUITABLE`)
         .set('Authorization', `Bearer ${recruiterToken}`)
         .expect(200);
 
       response.body.data.forEach(app => {
-        expect(app.status).toBe('REVIEWING');
-      });
-    });
-
-    test('Thành công - Lọc theo đánh giá', async () => {
-      const response = await request(app)
-        .get(`/api/applications/jobs/${jobId}/applications?candidateRating=SUITABLE`)
-        .set('Authorization', `Bearer ${recruiterToken}`)
-        .expect(200);
-
-      response.body.data.forEach(app => {
-        expect(app.candidateRating).toBe('SUITABLE');
+        expect(app.status).toBe('SUITABLE');
       });
     });
 
@@ -268,7 +267,7 @@ describe('Candidate Management Routes', () => {
 
       const dates = response.body.data.map(app => new Date(app.appliedAt));
       for (let i = 1; i < dates.length; i++) {
-        expect(dates[i-1].getTime()).toBeGreaterThanOrEqual(dates[i].getTime());
+        expect(dates[i - 1].getTime()).toBeGreaterThanOrEqual(dates[i].getTime());
       }
     });
 
@@ -322,7 +321,6 @@ describe('Candidate Management Routes', () => {
         data: {
           _id: applicationId.toString(),
           status: 'PENDING',
-          candidateRating: 'NOT_RATED',
           coverLetter: 'This is my cover letter for the position.',
           submittedCV: {
             name: 'test-cv.pdf',
@@ -330,7 +328,10 @@ describe('Candidate Management Routes', () => {
             source: 'UPLOADED'
           },
           appliedAt: expect.any(String),
-          candidateProfileId: expect.any(String) // Chỉ check string ID thay vì populated object
+          candidateProfileId: expect.objectContaining({
+            _id: expect.any(String),
+            fullname: expect.any(String)
+          })
         }
       });
     });
@@ -374,83 +375,6 @@ describe('Candidate Management Routes', () => {
   });
 
 
-  describe('PATCH /api/applications/:applicationId/rating - Đánh giá ứng viên', () => {
-    test('Thành công - Đánh giá SUITABLE', async () => {
-      const response = await request(app)
-        .patch(`/api/applications/${applicationId}/rating`)
-        .set('Authorization', `Bearer ${recruiterToken}`)
-        .send({ rating: 'SUITABLE' })
-        .expect(200);
-
-      expect(response.body).toMatchObject({
-        success: true,
-        message: expect.stringContaining('thành công'),
-        data: {
-          _id: applicationId.toString(),
-          candidateRating: 'SUITABLE'
-        }
-      });
-    });
-
-    test('Thành công - Đánh giá PERFECT_MATCH', async () => {
-      const response = await request(app)
-        .patch(`/api/applications/${applicationId}/rating`)
-        .set('Authorization', `Bearer ${recruiterToken}`)
-        .send({ rating: 'PERFECT_MATCH' })
-        .expect(200);
-
-      expect(response.body.data.candidateRating).toBe('PERFECT_MATCH');
-    });
-
-    test('Thành công - Đánh giá NOT_SUITABLE', async () => {
-      const response = await request(app)
-        .patch(`/api/applications/${applicationId}/rating`)
-        .set('Authorization', `Bearer ${recruiterToken}`)
-        .send({ rating: 'NOT_SUITABLE' })
-        .expect(200);
-
-      expect(response.body.data.candidateRating).toBe('NOT_SUITABLE');
-    });
-
-    test('Lỗi - Rating không hợp lệ', async () => {
-      const response = await request(app)
-        .patch(`/api/applications/${applicationId}/rating`)
-        .set('Authorization', `Bearer ${recruiterToken}`)
-        .send({ rating: 'INVALID_RATING' })
-        .expect(400);
-
-      expect(response.body).toMatchObject({
-        success: false,
-        message: expect.stringContaining('không hợp lệ')
-      });
-    });
-
-    test('Lỗi - Thiếu trường rating', async () => {
-      const response = await request(app)
-        .patch(`/api/applications/${applicationId}/rating`)
-        .set('Authorization', `Bearer ${recruiterToken}`)
-        .send({})
-        .expect(400);
-
-      expect(response.body).toMatchObject({
-        success: false,
-        message: expect.any(String)
-      });
-    });
-
-    test('Lỗi - Không có quyền truy cập (candidate)', async () => {
-      const response = await request(app)
-        .patch(`/api/applications/${applicationId}/rating`)
-        .set('Authorization', `Bearer ${candidateToken}`)
-        .send({ rating: 'SUITABLE' })
-        .expect(403);
-
-      expect(response.body).toMatchObject({
-        success: false,
-        message: 'Access denied. Insufficient permissions.'
-      });
-    });
-  });
 
   describe('PATCH /api/applications/:applicationId/notes - Cập nhật ghi chú', () => {
     test('Thành công - Thêm ghi chú', async () => {
@@ -553,7 +477,7 @@ describe('Candidate Management Routes', () => {
   });
 
   describe('Kiểm tra tích hợp - Luồng quản lý ứng viên hoàn chỉnh', () => {
-    test('Luồng hoàn chỉnh: Xem danh sách -> Chi tiết -> Đánh giá -> Cập nhật trạng thái -> Ghi chú', async () => {
+    test('Luồng hoàn chỉnh: Xem danh sách -> Chi tiết -> Cập nhật trạng thái -> Ghi chú', async () => {
       // 1. Xem danh sách ứng viên
       const listResponse = await request(app)
         .get(`/api/applications/jobs/${jobId}/applications`)
@@ -570,23 +494,14 @@ describe('Candidate Management Routes', () => {
 
       expect(detailResponse.body.data._id).toBe(applicationId.toString());
 
-      // 3. Đánh giá ứng viên
-      const ratingResponse = await request(app)
-        .patch(`/api/applications/${applicationId}/rating`)
-        .set('Authorization', `Bearer ${recruiterToken}`)
-        .send({ rating: 'SUITABLE' })
-        .expect(200);
-
-      expect(ratingResponse.body.data.candidateRating).toBe('SUITABLE');
-
-      // 4. Cập nhật trạng thái
+      // 3. Cập nhật trạng thái
       const statusResponse = await request(app)
         .patch(`/api/applications/${applicationId}/status`)
         .set('Authorization', `Bearer ${recruiterToken}`)
-        .send({ status: 'REVIEWING' })
+        .send({ status: 'SCHEDULED_INTERVIEW' })
         .expect(200);
 
-      expect(statusResponse.body.data.status).toBe('REVIEWING');
+      expect(statusResponse.body.data.status).toBe('SCHEDULED_INTERVIEW');
 
       // 5. Thêm ghi chú
       const notesResponse = await request(app)
@@ -604,8 +519,7 @@ describe('Candidate Management Routes', () => {
         .expect(200);
 
       expect(finalDetailResponse.body.data).toMatchObject({
-        status: 'REVIEWING',
-        candidateRating: 'SUITABLE',
+        status: 'SCHEDULED_INTERVIEW',
         notes: 'Ứng viên có potential tốt, cân nhắc cho vòng phỏng vấn.'
       });
     });

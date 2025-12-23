@@ -24,14 +24,30 @@ describe('Application Routes API', () => {
     const recruiterProfile = await RecruiterProfile.create({
       userId: recruiterUser._id,
       fullname: 'Recruiter User',
-      company: { name: 'Test Corp' },
+      company: {
+        name: 'Test Corp',
+        location: {
+          coordinates: {
+            type: 'Point',
+            coordinates: [0, 0],
+          },
+        },
+      },
     });
     testJob = await Job.create({
       title: 'Software Engineer',
       description: 'A great job.',
       requirements: 'Node.js',
       benefits: 'Good pay',
-      location: { province: 'Hồ Chí Minh', ward: 'Tân Định' },
+      location: {
+        province: 'Hồ Chí Minh',
+        district: 'Quận 1',
+        ward: 'Tân Định',
+        coordinates: {
+          type: 'Point',
+          coordinates: [0, 0],
+        },
+      },
       address: '123 Test St',
       type: 'FULL_TIME',
       workType: 'ON_SITE',
@@ -40,7 +56,7 @@ describe('Application Routes API', () => {
       category: 'IT',
       recruiterProfileId: recruiterProfile._id,
       status: 'ACTIVE',
-      approved: true,
+      moderationStatus: 'APPROVED',
     });
 
     // 2. Create Candidate and their CVs
@@ -108,7 +124,7 @@ describe('Application Routes API', () => {
         .post(`/api/jobs/${testJob._id}/apply`)
         .set('Authorization', `Bearer ${candidateToken}`)
         .send(applicationData);
-      logger.info(res);
+
 
       expect(res.statusCode).toEqual(201);
       expect(res.body.success).toBe(true);
