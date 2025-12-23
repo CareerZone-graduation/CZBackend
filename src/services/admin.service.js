@@ -4,6 +4,7 @@ import { NotFoundError, BadRequestError, UnauthorizedError } from '../utils/AppE
 import mongoose from 'mongoose';
 import * as queueService from './queue.service.js';
 import { ROUTING_KEYS } from '../queues/rabbitmq.js';
+import * as emailService from './email.service.js';
 
 // === QUẢN LÝ TIN TUYỂN DỤNG ===
 
@@ -427,19 +428,42 @@ export const updateUserStatus = async (userId, statusData) => {
     throw new BadRequestError('Không thể thay đổi trạng thái của admin.');
   }
 
-  const isActive = statusData.status === 'active';
+  const { status, reason } = statusData;
+  const isActive = status === 'active';
 
-  const updatedUser = await User.findByIdAndUpdate(
-    userId,
-    { active: isActive },
-    { new: true }
-  ).select('email role active');
-
-  if (!updatedUser) {
+  const user = await User.findById(userId);
+  if (!user) {
     throw new NotFoundError('Người dùng không tồn tại.');
   }
 
-  return updatedUser;
+  // Chỉ cập nhật trạng thái hoạt động, không lưu lý do vào model User
+  user.active = isActive;
+  await user.save();
+
+  // Lấy thông tin fullname để gửi email
+  let fullname = user.email;
+  if (user.role === 'recruiter') {
+    const profile = await RecruiterProfile.findOne({ userId: user._id }).select('fullname');
+    if (profile) fullname = profile.fullname;
+  } else if (user.role === 'candidate') {
+    const profile = await CandidateProfile.findOne({ userId: user._id }).select('fullname');
+    if (profile) fullname = profile.fullname;
+  }
+
+  // Gửi email thông báo với lý do nhận được từ request
+  const emailUser = { email: user.email, fullname };
+  if (isActive) {
+    emailService.sendAccountUnblockedEmail(emailUser, reason);
+  } else {
+    emailService.sendAccountBlockedEmail(emailUser, reason);
+  }
+
+  return {
+    _id: user._id,
+    email: user.email,
+    role: user.role,
+    active: user.active
+  };
 };
 
 export const getUserDetail = async (userId) => {

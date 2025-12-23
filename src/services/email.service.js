@@ -176,3 +176,28 @@ export const sendSupportRequestConfirmationEmail = async (supportRequest) => {
         }
     });
 };
+
+export const sendAccountBlockedEmail = async (user, reason) => {
+    await sendEmail({
+        to: user.email,
+        subject: 'Thông báo: Tài khoản của bạn đã bị khóa',
+        template: 'accountBlocked',
+        data: {
+            name: user.fullname || user.email,
+            reason: reason || 'Vi phạm điều khoản cộng đồng'
+        }
+    });
+};
+
+export const sendAccountUnblockedEmail = async (user, reason) => {
+    await sendEmail({
+        to: user.email,
+        subject: 'Thông báo: Tài khoản của bạn đã được mở khóa',
+        template: 'accountUnblocked',
+        data: {
+            name: user.fullname || user.email,
+            reason: reason || 'Quá trình xem xét hoàn tất',
+            loginUrl: `${config.FRONTEND_URL}/login`
+        }
+    });
+};

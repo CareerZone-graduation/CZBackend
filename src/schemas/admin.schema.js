@@ -71,8 +71,8 @@ export const adminCompaniesQuerySchema = z.object({
   ]).optional(),
   sort: z
     .enum([
-      'name_asc', 'name_desc', 
-      'createdAt_asc', 'createdAt_desc', 
+      'name_asc', 'name_desc',
+      'createdAt_asc', 'createdAt_desc',
       'updatedAt_asc', 'updatedAt_desc',
       'jobs_desc', 'jobs_asc',
       'applications_desc', 'applications_asc'
@@ -83,6 +83,7 @@ export const adminCompaniesQuerySchema = z.object({
 
 export const userStatusSchema = z.object({
   status: z.enum(['active', 'banned']),
+  reason: z.string().min(1, 'Lý do không được để trống'),
 });
 
 export const companyJobsQuerySchema = z.object({
