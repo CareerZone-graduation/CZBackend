@@ -308,11 +308,21 @@ export const autocompleteJobSchema = z.object({
 
 // Schema for map bounding box search
 export const mapBoundsSchema = z.object({
-  sw_lat: z.coerce.number().min(-90, 'Latitude phải trong khoảng -90 đến 90').max(90, 'Latitude phải trong khoảng -90 đến 90'),
-  sw_lng: z.coerce.number().min(-180, 'Longitude phải trong khoảng -180 đến 180').max(180, 'Longitude phải trong khoảng -180 đến 180'),
-  ne_lat: z.coerce.number().min(-90, 'Latitude phải trong khoảng -90 đến 90').max(90, 'Latitude phải trong khoảng -90 đến 90'),
-  ne_lng: z.coerce.number().min(-180, 'Longitude phải trong khoảng -180 đến 180').max(180, 'Longitude phải trong khoảng -180 đến 180'),
+  sw_lat: z.coerce.number().min(-95).max(95),
+  sw_lng: z.coerce.number().min(-185).max(185),
+  ne_lat: z.coerce.number().min(-95).max(95),
+  ne_lng: z.coerce.number().min(-185).max(185),
   limit: z.coerce.number().int().min(1).max(500).default(500).optional(),
+  // Add filters
+  query: z.string().trim().max(200).optional(),
+  category: z.enum(jobCategoryEnum).optional(),
+  type: z.enum(jobTypeEnum).optional(),
+  workType: z.enum(workTypeEnum).optional(),
+  experience: z.enum(experienceEnum).optional(),
+  province: z.enum(provinceNames).optional(),
+  district: z.string().optional(),
+  minSalary: salarySchema,
+  maxSalary: salarySchema,
 });
 
 // Schema for map clustering

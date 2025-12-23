@@ -2823,18 +2823,35 @@ const buildSearchFilter = (searchParams) => {
     filter.compound.must.push({ equals: { path: 'location.district', value: searchParams.district } });
   }
 
-  // Salary range filters (Strict Containment)
-  // Job's minSalary must be >= User's minSalary
+  // Salary range filters (Overlap logic)
   if (searchParams.minSalary) {
     filter.compound.must.push({
       range: { path: 'minSalary', gte: searchParams.minSalary }
     });
   }
 
-  // Job's maxSalary must be <= User's maxSalary
   if (searchParams.maxSalary) {
     filter.compound.must.push({
       range: { path: 'maxSalary', lte: searchParams.maxSalary }
+    });
+  }
+
+  // Bounding box filter for Map
+  if (searchParams.sw_lng && searchParams.sw_lat && searchParams.ne_lng && searchParams.ne_lat) {
+    filter.compound.must.push({
+      geoWithin: {
+        box: {
+          bottomLeft: {
+            type: 'Point',
+            coordinates: [parseFloat(searchParams.sw_lng), parseFloat(searchParams.sw_lat)]
+          },
+          topRight: {
+            type: 'Point',
+            coordinates: [parseFloat(searchParams.ne_lng), parseFloat(searchParams.ne_lat)]
+          }
+        },
+        path: 'location.coordinates'
+      }
     });
   }
 
@@ -2880,7 +2897,19 @@ const buildPreFilter = (searchParams) => {
     preFilter['location.district'] = searchParams.district;
   }
 
-  // Salary range filters (Strict Containment)
+  // Bounding box filter for Map
+  if (searchParams.sw_lng && searchParams.sw_lat && searchParams.ne_lng && searchParams.ne_lat) {
+    preFilter['location.coordinates'] = {
+      $geoWithin: {
+        $box: [
+          [parseFloat(searchParams.sw_lng), parseFloat(searchParams.sw_lat)],
+          [parseFloat(searchParams.ne_lng), parseFloat(searchParams.ne_lat)]
+        ]
+      }
+    };
+  }
+
+  // Salary range filters (Strict containment logic to match user preference)
   if (searchParams.minSalary) {
     preFilter.minSalary = { $gte: searchParams.minSalary };
   }
@@ -3678,7 +3707,7 @@ export const searchJobsForCandidate = async (searchParams, userId = null) => {
           }
         };
       }
-
+      console.log('preFilter', JSON.stringify(preFilter));
       const skip = (page - 1) * size;
 
       let [results, totalCount] = await Promise.all([
@@ -4107,41 +4136,82 @@ const fallbackAutocomplete = async (query, limit = 10) => {
  * @returns {Promise<Array>} Array of jobs within the bounds
  */
 export const findJobsInBounds = async (bounds) => {
-  const { sw_lng, sw_lat, ne_lng, ne_lat, limit = 500 } = bounds;
+  const { limit = 500, query } = bounds;
 
-  const jobs = await Job.find({
-    status: 'ACTIVE',
-    moderationStatus: 'APPROVED',
-    'location.coordinates': {
-      $geoWithin: {
-        $box: [
-          [parseFloat(sw_lng), parseFloat(sw_lat)], // Southwest corner [lng, lat]
-          [parseFloat(ne_lng), parseFloat(ne_lat)]  // Northeast corner [lng, lat]
-        ]
-      }
-    }
-  })
-    .limit(parseInt(limit))
-    .select('title location.coordinates address minSalary maxSalary type workType')
-    .populate({
-      path: 'recruiterProfileId',
-      select: 'company.name company.logo'
-    })
-    .lean();
+  let jobs;
+  if (query && query.trim() !== '') {
+    // If query exists, use Atlas Search for consistency with list view
+    const searchFilter = buildSearchFilter(bounds);
+    const pipeline = [
+      {
+        $search: {
+          index: "kw",
+          compound: {
+            must: [
+              {
+                text: {
+                  query: query,
+                  path: "title",
+                  fuzzy: { maxEdits: 1, prefixLength: 2 },
+                  score: { boost: { value: 3 } }
+                }
+              }
+            ],
+            should: [
+              {
+                text: {
+                  query: query,
+                  path: ["description", "requirements"],
+                  fuzzy: { maxEdits: 1, prefixLength: 2 },
+                }
+              }
+            ],
+            filter: searchFilter.compound.must
+          }
+        }
+      },
+      { $limit: parseInt(limit) },
+      {
+        $lookup: {
+          from: 'recruiterprofiles',
+          localField: 'recruiterProfileId',
+          foreignField: '_id',
+          as: 'recruiter'
+        }
+      },
+      { $unwind: { path: '$recruiter', preserveNullAndEmptyArrays: true } }
+    ];
 
-  // Format response
+    const results = await Job.aggregate(pipeline);
+    jobs = results.map(job => ({
+      ...job,
+      recruiterProfileId: job.recruiterProfileId // Preserve original if needed by select below
+    }));
+  } else {
+    // Regular match filter
+    const preFilter = buildPreFilter(bounds);
+    jobs = await Job.find(preFilter)
+      .limit(parseInt(limit))
+      .populate({
+        path: 'recruiterProfileId',
+        select: 'company.name company.logo'
+      })
+      .lean();
+  }
+
+  // Format response (reuse formatting logic)
   return jobs.map(job => ({
     _id: job._id,
     title: job.title,
-    coordinates: job.location.coordinates.coordinates,
+    coordinates: job.location?.coordinates?.coordinates || job.coordinates,
     address: job.address,
     minSalary: job.minSalary?.toString(),
     maxSalary: job.maxSalary?.toString(),
     type: job.type,
     workType: job.workType,
     company: {
-      name: job.recruiterProfileId?.company?.name,
-      logo: job.recruiterProfileId?.company?.logo
+      name: job.recruiterProfileId?.company?.name || job.recruiter?.company?.name,
+      logo: job.recruiterProfileId?.company?.logo || job.recruiter?.company?.logo
     }
   }));
 };
@@ -4335,7 +4405,13 @@ const getBucketCount = (zoom) => {
  * @param {object} filters - Các bộ lọc bổ sung (category, type, workType, etc.)
  * @returns {Promise<Array>} Danh sách CHỈ GỒM clusters (type: 'cluster', count > 1)
  */
-export const getMapClusters = async (bounds, zoom, filters = {}) => {
+export const getMapClusters = async (bounds, zoom) => { // Removed third argument filters
+  const {
+    sw_lat, sw_lng, ne_lat, ne_lng,
+    query, category, type, workType, experience,
+    province, district, minSalary, maxSalary
+  } = bounds; // filters is now part of bounds
+
   // Determine grid size (in degrees) based on zoom level
   // This controls the clustering radius
   const getGridSize = (z) => {
@@ -4358,79 +4434,94 @@ export const getMapClusters = async (bounds, zoom, filters = {}) => {
   logger.info(`[MAP CLUSTERS] Bounds:`, bounds);
 
   // 1. Xây dựng điều kiện match cơ bản
-  const baseMatch = {
-    status: 'ACTIVE',
-    moderationStatus: 'APPROVED',
-    'location.coordinates.coordinates': {
-      $geoWithin: {
-        $box: [
-          [parseFloat(bounds.sw_lng), parseFloat(bounds.sw_lat)],
-          [parseFloat(bounds.ne_lng), parseFloat(bounds.ne_lat)],
-        ],
-      },
-    },
-  };
+  // 1. Xây dựng điều kiện match cơ bản (Sử dụng builder trung tâm)
+  const baseMatch = buildPreFilter(bounds);
 
-  // Áp dụng các bộ lọc bổ sung
-  if (filters.category) baseMatch.category = filters.category;
-  if (filters.type) baseMatch.type = filters.type;
-  if (filters.workType) baseMatch.workType = filters.workType;
-  if (filters.experience) baseMatch.experience = filters.experience;
-  if (filters.province) baseMatch['location.province'] = filters.province;
-  if (filters.district) baseMatch['location.district'] = filters.district;
 
   // 2. Xây dựng Aggregation Pipeline với Grid Clustering (No $function)
-  const pipeline = [
-    // Giai đoạn 1: Lọc các công việc trong khung nhìn và theo bộ lọc
-    { $match: baseMatch },
+  const pipeline = [];
 
-    // Giai đoạn 2: Calculate Grid Coordinates
-    {
-      $project: {
-        _id: 1,
-        // Calculate grid bucket indices
-        gridX: {
-          $floor: {
-            $divide: [
-              { $arrayElemAt: ["$location.coordinates.coordinates", 0] },
-              gridSize
-            ]
-          }
-        },
-        gridY: {
-          $floor: {
-            $divide: [
-              { $arrayElemAt: ["$location.coordinates.coordinates", 1] },
-              gridSize
-            ]
-          }
-        },
-        coords: "$location.coordinates.coordinates"
+  if (query && query.trim() !== '') {
+    // Sử dụng Atlas Search để đồng bộ với danh sách khi có từ khóa
+    const searchFilter = buildSearchFilter(bounds);
+    pipeline.push({
+      $search: {
+        index: "kw",
+        compound: {
+          must: [
+            {
+              text: {
+                query: query,
+                path: "title",
+                fuzzy: { maxEdits: 1, prefixLength: 2 },
+                score: { boost: { value: 3 } }
+              }
+            }
+          ],
+          should: [
+            {
+              text: {
+                query: query,
+                path: ["description", "requirements"],
+                fuzzy: { maxEdits: 1, prefixLength: 2 },
+              }
+            }
+          ],
+          filter: searchFilter.compound.must
+        }
       }
-    },
+    });
+  } else {
+    // Tìm kiếm thường bằng match
+    pipeline.push({ $match: baseMatch });
+  }
 
-    // Giai đoạn 3: Group by Grid Coordinates
-    {
-      $group: {
-        _id: { x: "$gridX", y: "$gridY" },
-        count: { $sum: 1 },
-        // Calculate average center for the cluster
-        avgLng: { $avg: { $arrayElemAt: ["$coords", 0] } },
-        avgLat: { $avg: { $arrayElemAt: ["$coords", 1] } },
-        jobIds: { $push: "$_id" }
-      }
-    },
-
-    // Giai đoạn 4: Format Output
-    {
-      $project: {
-        _id: 0,
-        count: 1,
-        coordinates: ["$avgLng", "$avgLat"],
-        jobIds: 1
-      }
+  // Giai đoạn 2: Calculate Grid Coordinates
+  pipeline.push({
+    $project: {
+      _id: 1,
+      // Calculate grid bucket indices
+      gridX: {
+        $floor: {
+          $divide: [
+            { $arrayElemAt: ["$location.coordinates.coordinates", 0] },
+            gridSize
+          ]
+        }
+      },
+      gridY: {
+        $floor: {
+          $divide: [
+            { $arrayElemAt: ["$location.coordinates.coordinates", 1] },
+            gridSize
+          ]
+        }
+      },
+      coords: "$location.coordinates.coordinates"
     }
-  ];
+  });
+
+  // Giai đoạn 3: Group by Grid Coordinates
+  pipeline.push({
+    $group: {
+      _id: { x: "$gridX", y: "$gridY" },
+      count: { $sum: 1 },
+      // Calculate average center for the cluster
+      avgLng: { $avg: { $arrayElemAt: ["$coords", 0] } },
+      avgLat: { $avg: { $arrayElemAt: ["$coords", 1] } },
+      jobIds: { $push: "$_id" }
+    }
+  });
+
+  // Giai đoạn 4: Format Output
+  pipeline.push({
+    $project: {
+      _id: 0,
+      count: 1,
+      coordinates: ["$avgLng", "$avgLat"],
+      jobIds: 1
+    }
+  });
 
   try {
     const results = await Job.aggregate(pipeline);
