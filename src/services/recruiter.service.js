@@ -52,10 +52,11 @@ const maskPhone = (phone) => {
  * Get candidate profile with masking if not unlocked
  * @param {string} userId - Candidate user ID
  * @param {string} recruiterId - Recruiter user ID
+ * @param {string} jobId - Job ID
  * @returns {Promise<Object>} Candidate profile
  */
-export const getCandidateProfile = async (userId, recruiterId) => {
-  logger.info(`Fetching candidate profile for userId: ${userId} by recruiter: ${recruiterId}`);
+export const getCandidateProfile = async (userId, recruiterId, jobId) => {
+  logger.info(`Fetching candidate profile for userId: ${userId} by recruiter: ${recruiterId} for jobId: ${jobId}`);
 
   // Check if user exists and is a candidate
   const user = await User.findById(userId).select('email phone role allowSearch selectedCvIds selectedCvId').lean();
@@ -74,13 +75,16 @@ export const getCandidateProfile = async (userId, recruiterId) => {
     throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
   }
 
-  // Check if profile is unlocked
-  const unlock = await ProfileUnlock.findOne({
-    recruiterId,
-    candidateId: userId,
-  }).lean();
-
-  const isUnlocked = !!unlock;
+  // Check if profile is unlocked for this specific job
+  let isUnlocked = false;
+  if (jobId) {
+    const unlock = await ProfileUnlock.findOne({
+      recruiterId,
+      candidateId: userId,
+      jobId,
+    }).lean();
+    isUnlocked = !!unlock;
+  }
 
   // Prepare response with masking if needed
   const response = {
@@ -119,12 +123,23 @@ export const getCandidateProfile = async (userId, recruiterId) => {
 
 /**
  * Unlock candidate profile (purchase access)
- * @param {string} candidateId - Candidate user ID
- * @param {string} recruiterId - Recruiter user ID
- * @returns {Promise<Object>} Unlock result with transaction details
+ * @param {string} candidateId - The ID of the candidate user.
+ * @param {string} recruiterId - The ID of the recruiter user.
+ * @param {string} jobId - The ID of the job.
+ * @returns {Promise<Object>} Result of the unlock operation.
  */
-export const unlockCandidateProfile = async (candidateId, recruiterId) => {
-  logger.info(`Unlocking candidate profile candidateId: ${candidateId} by recruiter: ${recruiterId}`);
+export const unlockCandidateProfile = async (candidateId, recruiterId, jobId) => {
+  logger.info(`Unlocking candidateId: ${candidateId} for recruiterId: ${recruiterId} for jobId: ${jobId}`);
+
+  if (!jobId) {
+    throw new BadRequestError('Cần cung cấp ID công việc để mở khóa hồ sơ.');
+  }
+
+  // Check if job exists
+  const job = await Job.findById(jobId).lean();
+  if (!job) {
+    throw new NotFoundError('Không tìm thấy tin tuyển dụng.');
+  }
 
   // Check if user exists and is a candidate
   const candidateUser = await User.findById(candidateId).select('role').lean();
@@ -140,20 +155,22 @@ export const unlockCandidateProfile = async (candidateId, recruiterId) => {
 
   const candidateName = candidateProfile.fullname;
 
-  // Check if already unlocked by looking for existing ProfileUnlock record
+  // Check if already unlocked for this job
   const existingUnlock = await ProfileUnlock.findOne({
+    candidateId,
     recruiterId,
-    candidateId
-  }).lean();
+    jobId,
+  });
 
   if (existingUnlock) {
-    logger.info(`Profile already unlocked for candidateId: ${candidateId} by recruiter: ${recruiterId}`);
+    logger.info(`Profile candidateId: ${candidateId} already unlocked for recruiterId: ${recruiterId} for jobId: ${jobId}`);
 
     // Get the transaction for this unlock
     const existingTransaction = await CreditTransaction.findOne({
       userId: recruiterId,
       category: TRANSACTION_CATEGORIES.PROFILE_UNLOCK,
-      'metadata.candidateId': candidateId
+      'metadata.candidateId': candidateId,
+      'metadata.jobId': jobId
     }).lean();
 
     return {
@@ -190,22 +207,26 @@ export const unlockCandidateProfile = async (candidateId, recruiterId) => {
     category: TRANSACTION_CATEGORIES.PROFILE_UNLOCK,
     amount: -UNLOCK_COST,
     balanceAfter: balanceAfter,
-    description: `Mở khóa hồ sơ ứng viên: ${candidateName}`,
+    description: `Mở khóa hồ sơ ứng viên: ${candidateName} cho tin tuyển dụng: ${job.title}`,
     metadata: {
       candidateId: candidateId,
-      candidateName: candidateName
+      candidateName: candidateName,
+      jobId: jobId,
+      jobTitle: job.title
     }
   });
 
   // Create ProfileUnlock record to mark this profile as unlocked
-  await ProfileUnlock.create({
+  const unlock = new ProfileUnlock({
     recruiterId,
     candidateId,
+    jobId,
     cost: UNLOCK_COST,
     unlockedAt: new Date()
   });
+  await unlock.save();
 
-  logger.info(`Successfully unlocked candidate profile candidateId: ${candidateId} by recruiter: ${recruiterId}`);
+  logger.info(`Successfully unlocked candidate profile candidateId: ${candidateId} by recruiter: ${recruiterId} for jobId: ${jobId}`);
 
   return {
     unlocked: true,

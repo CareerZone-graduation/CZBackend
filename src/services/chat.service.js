@@ -6,6 +6,7 @@ import CandidateProfile from '../models/CandidateProfile.js';
 import RecruiterProfile from '../models/RecruiterProfile.js';
 import Application from '../models/Application.js';
 import CreditTransaction from '../models/CreditTransaction.js';
+import ProfileUnlock from '../models/ProfileUnlock.js';
 import Job from '../models/Job.js';
 import { NotFoundError, BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
@@ -16,9 +17,10 @@ import mongoose from 'mongoose';
  * Prioritizes Application over Profile Unlock.
  * @param {string} recruiterId
  * @param {string} candidateId
+ * @param {string} jobId
  * @returns {Promise<Object|null>} Context object or null
  */
-export const determineConversationContext = async (recruiterId, candidateId) => {
+export const determineConversationContext = async (recruiterId, candidateId, jobId) => {
   try {
     const recruiterProfile = await RecruiterProfile.findOne({ userId: recruiterId }).select('_id');
     const candidateProfile = await CandidateProfile.findOne({ userId: candidateId }).select('_id');
@@ -53,11 +55,17 @@ export const determineConversationContext = async (recruiterId, candidateId) => 
     }
 
     // 2. Check for Profile Unlock
-    const unlockTransaction = await CreditTransaction.findOne({
+    const unlockQuery = {
       userId: recruiterId,
       category: 'PROFILE_UNLOCK',
       'metadata.candidateId': candidateId
-    }).sort({ createdAt: -1 }).lean();
+    };
+
+    if (jobId) {
+      unlockQuery['metadata.jobId'] = jobId;
+    }
+
+    const unlockTransaction = await CreditTransaction.findOne(unlockQuery).sort({ createdAt: -1 }).lean();
 
     if (unlockTransaction) {
       return {
@@ -98,9 +106,10 @@ export const findPrivateConversation = async (userId1, userId2) => {
  * Check if recruiter can message a candidate
  * @param {string} recruiterId - Recruiter user ID
  * @param {string} candidateId - Candidate user ID
+ * @param {string} jobId - Optional job ID to check specific unlock
  * @returns {Promise<{canMessage: boolean, reason: string}>}
  */
-export const checkMessagingAccess = async (recruiterId, candidateId) => {
+export const checkMessagingAccess = async (recruiterId, candidateId, jobId) => {
   // 1. Get recruiter's profile to find their profile ID
   const recruiterProfile = await RecruiterProfile.findOne({ userId: recruiterId })
     .select('_id')
@@ -143,12 +152,32 @@ export const checkMessagingAccess = async (recruiterId, candidateId) => {
     }
   }
 
-  // 5. Check if recruiter has unlocked the profile
-  const unlockTransaction = await CreditTransaction.findOne({
+  // 5. Check if recruiter has unlocked the profile (for ANY job)
+  // We check ProfileUnlock model first as it's the source of truth for unlocks
+  const unlockRecord = await ProfileUnlock.findOne({
+    recruiterId: recruiterId,
+    candidateId: candidateId
+    // Note: We intentionally do NOT filter by jobId here.
+    // If a recruiter has unlocked a candidate for ANY job, they should be able to message them.
+  }).lean();
+
+  if (unlockRecord) {
+    return { canMessage: true, reason: 'PROFILE_UNLOCKED' };
+  }
+
+  // Fallback to CreditTransaction check (legacy support or if ProfileUnlock is missing)
+  const unlockQuery = {
     userId: recruiterId,
     category: 'PROFILE_UNLOCK',
     'metadata.candidateId': candidateId
-  }).lean();
+  };
+
+  // Note: Also removing jobId check here to match the logic above
+  // if (jobId) {
+  //   unlockQuery['metadata.jobId'] = jobId;
+  // }
+
+  const unlockTransaction = await CreditTransaction.findOne(unlockQuery).lean();
 
   if (unlockTransaction) {
     return { canMessage: true, reason: 'PROFILE_UNLOCKED' };
@@ -646,9 +675,10 @@ export const getLatestConversations = async (userId, { search, page = 1, limit =
  * Chỉ tạo một cuộc trò chuyện mới nếu nó chưa tồn tại.
  * @param {string} currentUserId - ID của người dùng hiện tại.
  * @param {string} otherUserId - ID của người dùng khác.
+ * @param {string} jobId - ID của công việc để xác định ngữ cảnh.
  * @returns {Promise<Object>} Conversation document mới được tạo.
  */
-export const createConversation = async (currentUserId, otherUserId) => {
+export const createConversation = async (currentUserId, otherUserId, jobId, skipContext = false) => {
   if (currentUserId === otherUserId) {
     throw new BadRequestError('Bạn không thể tạo cuộc trò chuyện với chính mình.');
   }
@@ -670,26 +700,29 @@ export const createConversation = async (currentUserId, otherUserId) => {
 
   // Determine context
   let context = null;
-  // Identify roles to call determineConversationContext correctly
-  // We need to know who is recruiter and who is candidate
-  // This is a bit tricky without fetching user roles, but we can try to fetch profiles
-  // Or we can rely on the caller to provide roles, but createConversation signature is fixed.
-  // Let's try to fetch users to be sure.
-  const user1 = await User.findById(currentUserId);
-  const user2 = await User.findById(otherUserId);
+  // Only process context if skipContext is false
+  if (!skipContext) {
+    // Identify roles to call determineConversationContext correctly
+    // We need to know who is recruiter and who is candidate
+    // This is a bit tricky without fetching user roles, but we can try to fetch profiles
+    // Or we can rely on the caller to provide roles, but createConversation signature is fixed.
+    // Let's try to fetch users to be sure.
+    const user1 = await User.findById(currentUserId);
+    const user2 = await User.findById(otherUserId);
 
-  if (user1 && user2) {
-    let recruiterId, candidateId;
-    if (user1.role === 'recruiter' && user2.role === 'candidate') {
-      recruiterId = currentUserId;
-      candidateId = otherUserId;
-    } else if (user1.role === 'candidate' && user2.role === 'recruiter') {
-      recruiterId = otherUserId;
-      candidateId = currentUserId;
-    }
+    if (user1 && user2) {
+      let recruiterId, candidateId;
+      if (user1.role === 'recruiter' && user2.role === 'candidate') {
+        recruiterId = currentUserId;
+        candidateId = otherUserId;
+      } else if (user1.role === 'candidate' && user2.role === 'recruiter') {
+        recruiterId = otherUserId;
+        candidateId = currentUserId;
+      }
 
-    if (recruiterId && candidateId) {
-      context = await determineConversationContext(recruiterId, candidateId);
+      if (recruiterId && candidateId) {
+        context = await determineConversationContext(recruiterId, candidateId, jobId);
+      }
     }
   }
 

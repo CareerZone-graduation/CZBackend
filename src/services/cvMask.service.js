@@ -9,11 +9,11 @@ import logger from '../utils/logger.js';
 /**
  * Lấy CV (đã che hoặc gốc) dựa trên quyền truy cập của recruiter
  */
-export const getMaskedCv = async (recruiterId, candidateId, cvId) => {
+export const getMaskedCv = async (recruiterId, candidateId, cvId, jobId) => {
 
   // 1. Kiểm tra ứng viên có tồn tại và cho phép tìm kiếm không
   const candidateUser = await User.findById(candidateId).select('role allowSearch selectedCvId').lean();
-  
+
   if (!candidateUser || candidateUser.role !== 'candidate') {
     throw new NotFoundError('Không tìm thấy ứng viên.');
   }
@@ -23,10 +23,14 @@ export const getMaskedCv = async (recruiterId, candidateId, cvId) => {
   }
 
   // 2. Kiểm tra xem CV được yêu cầu có phải là CV được chọn không (nếu chưa unlock)
-  const hasAccess = await ProfileUnlock.findOne({
-    recruiterId,
-    candidateId,
-  });
+  let hasAccess = false;
+  if (jobId) {
+    hasAccess = await ProfileUnlock.findOne({
+      recruiterId,
+      candidateId,
+      jobId,
+    });
+  }
 
   // Nếu chưa unlock, chỉ cho phép xem CV được chọn
   if (!hasAccess && candidateUser.selectedCvId) {
@@ -37,13 +41,13 @@ export const getMaskedCv = async (recruiterId, candidateId, cvId) => {
 
   // 3. Tìm CV trong hồ sơ ứng viên
   const profile = await CandidateProfile.findOne({ userId: candidateId }).select('cvs');
-  
+
   if (!profile) {
     throw new NotFoundError('Không tìm thấy hồ sơ ứng viên.');
   }
 
   const cv = profile.cvs.find(c => c._id.toString() === cvId);
-  
+
   if (!cv || !cv.path) {
     throw new NotFoundError('Không tìm thấy file CV.');
   }
@@ -51,7 +55,7 @@ export const getMaskedCv = async (recruiterId, candidateId, cvId) => {
   // 4. Tải file CV gốc từ Cloudinary
   let originalBuffer;
   try {
-    const response = await axios.get(cv.path, { 
+    const response = await axios.get(cv.path, {
       responseType: 'arraybuffer',
       timeout: 30000 // 30 seconds timeout
     });
@@ -66,7 +70,7 @@ export const getMaskedCv = async (recruiterId, candidateId, cvId) => {
 
   // 5. Quyết định che file hay không
   let finalBuffer = originalBuffer;
-  
+
   if (!hasAccess) {
     logger.info(`Recruiter ${recruiterId} has not unlocked profile, masking CV...`);
     try {

@@ -77,12 +77,15 @@ export const createConversationSchema = z.object({
 export const createOrGetConversationSchema = z.object({
   candidateId: z.string()
     .regex(/^[0-9a-fA-F]{24}$/, 'ID ứng viên không hợp lệ')
+    .nullable()
     .optional(),
   recipientId: z.string()
     .regex(/^[0-9a-fA-F]{24}$/, 'ID người nhận không hợp lệ')
+    .nullable()
     .optional(),
   jobId: z.string()
     .regex(/^[0-9a-fA-F]{24}$/, 'ID công việc không hợp lệ')
+    .nullable()
     .optional()
 }).refine(data => data.candidateId || data.recipientId, {
   message: "Phải cung cấp candidateId hoặc recipientId"

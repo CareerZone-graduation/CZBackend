@@ -240,25 +240,51 @@ export const getApplicationById = async (applicationId, recruiterId) => {
   };
 
   // Kiểm tra xem đã log APPLICATION_VIEWED chưa
-  const hasViewed = application.activityHistory.some(activity => activity.action === 'APPLICATION_VIEWED');
+  // Sử dụng in-memory check để tối ưu performance (tránh gọi DB update nếu đã có)
+  const hasViewedInMemory = application.activityHistory.some(activity => activity.action === 'APPLICATION_VIEWED');
 
-  if (!hasViewed) {
-    // Log activity
-    logActivity(application, 'APPLICATION_VIEWED', 'Nhà tuyển dụng đã xem hồ sơ ứng tuyển');
-    await application.save();
-
-    // Gửi thông báo cho ứng viên
-    const candidateProfile = await CandidateProfile.findById(application.candidateProfileId);
-    if (candidateProfile) {
-      queueService.publishNotification(rabbitmq.ROUTING_KEYS.STATUS_UPDATE, {
-        type: 'APPLICATION_VIEWED',
-        recipientId: candidateProfile.userId.toString(),
-        data: {
-          applicationId: application._id.toString(),
-          jobTitle: job.title,
-          companyName: recruiterProfile.company.name
+  if (!hasViewedInMemory) {
+    // Sử dụng updateOne với điều kiện query để đảm bảo ATOMICITY, tránh race condition (2 requests cùng lúc)
+    const updateResult = await Application.updateOne(
+      {
+        _id: application._id,
+        'activityHistory.action': { $ne: 'APPLICATION_VIEWED' }
+      },
+      {
+        $push: {
+          activityHistory: {
+            action: 'APPLICATION_VIEWED',
+            detail: 'Nhà tuyển dụng đã xem hồ sơ ứng tuyển',
+            timestamp: new Date()
+          }
         }
+      }
+    );
+
+    // Chỉ xử lý tiếp nếu update thành công (modifiedCount > 0)
+    // Điều này đồng nghĩa server này là request ĐẦU TIÊN và DUY NHẤT thực hiện log view
+    if (updateResult.modifiedCount > 0) {
+      // Cập nhật lại object in-memory để trả về client đúng dữ liệu
+      application.activityHistory.push({
+        action: 'APPLICATION_VIEWED',
+        detail: 'Nhà tuyển dụng đã xem hồ sơ ứng tuyển',
+        timestamp: new Date()
       });
+
+      // Gửi thông báo cho ứng viên
+      // candidateProfileId đã được populate ở trên (lines 186-190), có thể dùng trực tiếp
+      const candidateProfile = application.candidateProfileId;
+      if (candidateProfile && candidateProfile.userId) {
+        queueService.publishNotification(rabbitmq.ROUTING_KEYS.STATUS_UPDATE, {
+          type: 'APPLICATION_VIEWED',
+          recipientId: candidateProfile.userId.toString(),
+          data: {
+            applicationId: application._id.toString(),
+            jobTitle: job.title,
+            companyName: recruiterProfile.company.name
+          }
+        });
+      }
     }
   }
 

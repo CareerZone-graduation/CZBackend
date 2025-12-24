@@ -24,9 +24,10 @@ export const getRecruiterProfile = asyncHandler(async (req, res) => {
  */
 export const getCandidateProfile = asyncHandler(async (req, res) => {
   const { userId } = req.params;
+  const { jobId } = req.query;
   const recruiterId = req.user._id;
 
-  const profile = await recruiterService.getCandidateProfile(userId, recruiterId);
+  const profile = await recruiterService.getCandidateProfile(userId, recruiterId, jobId);
 
   res.status(200).json({
     success: true,
@@ -41,11 +42,11 @@ export const getCandidateProfile = asyncHandler(async (req, res) => {
  * @param {import('express').Response} res
  */
 export const unlockProfile = asyncHandler(async (req, res) => {
-  const { candidateId } = req.body;
+  const { candidateId, jobId } = req.body;
   const recruiterId = req.user._id;
 
   try {
-    const result = await recruiterService.unlockCandidateProfile(candidateId, recruiterId);
+    const result = await recruiterService.unlockCandidateProfile(candidateId, recruiterId, jobId);
 
     res.status(200).json({
       success: true,

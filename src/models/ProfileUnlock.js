@@ -14,6 +14,12 @@ const profileUnlockSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    jobId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Job',
+      required: true,
+      index: true,
+    },
     cost: {
       type: Number,
       required: true,
@@ -29,8 +35,8 @@ const profileUnlockSchema = new mongoose.Schema(
   }
 );
 
-// Compound index to ensure unique unlock per recruiter-candidate pair
-profileUnlockSchema.index({ recruiterId: 1, candidateId: 1 }, { unique: true });
+// Compound index to ensure unique unlock per recruiter-candidate-job trio
+profileUnlockSchema.index({ recruiterId: 1, candidateId: 1, jobId: 1 }, { unique: true });
 
 const ProfileUnlock = mongoose.model('ProfileUnlock', profileUnlockSchema);
 

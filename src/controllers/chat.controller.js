@@ -148,7 +148,8 @@ export const checkMessagingAccess = asyncHandler(async (req, res) => {
 
   // If current user is a recruiter, check access rules
   if (currentUserRole === 'recruiter') {
-    const accessResult = await chatService.checkMessagingAccess(currentUserId, candidateId);
+    const { jobId } = req.query;
+    const accessResult = await chatService.checkMessagingAccess(currentUserId, candidateId, jobId);
 
     return res.status(200).json({
       success: true,
@@ -169,7 +170,7 @@ export const checkMessagingAccess = asyncHandler(async (req, res) => {
  * @access  Private (Recruiter only)
  */
 export const createOrGetConversation = asyncHandler(async (req, res) => {
-  const { candidateId, recipientId } = req.body;
+  const { candidateId, recipientId, jobId, skipContext } = req.body;
   const currentUserId = req.user._id;
   const currentUserRole = req.user.role;
 
@@ -188,7 +189,7 @@ export const createOrGetConversation = asyncHandler(async (req, res) => {
   // Specific logic for Recruiter -> Candidate
   if (currentUserRole === 'recruiter') {
     // Check messaging access
-    const accessResult = await chatService.checkMessagingAccess(currentUserId, targetUserId);
+    const accessResult = await chatService.checkMessagingAccess(currentUserId, targetUserId, jobId);
 
     if (!accessResult.canMessage) {
       return res.status(403).json({
@@ -209,15 +210,23 @@ export const createOrGetConversation = asyncHandler(async (req, res) => {
   // Context handling logic
   let contextToUpdate = null;
 
-  // If jobId is provided (usually by Candidate), try to find the specific application context
+  // If jobId is provided AND skipContext is not true, try to find the specific application context
   // We use determineConversationContext to get the full context including all applications
-  if (req.body.jobId && currentUserRole === 'candidate') {
-    // We need the recruiter's ID. We have recipientId (targetUserId).
-    // determineConversationContext expects (recruiterId, candidateId)
-    const newContext = await chatService.determineConversationContext(targetUserId, currentUserId);
+  if (jobId && !skipContext) {
+    let recruiterId, candidateId;
+    if (currentUserRole === 'recruiter') {
+      recruiterId = currentUserId;
+      candidateId = targetUserId;
+    } else if (currentUserRole === 'candidate') {
+      recruiterId = targetUserId;
+      candidateId = currentUserId;
+    }
 
-    if (newContext) {
-      contextToUpdate = newContext;
+    if (recruiterId && candidateId) {
+      const newContext = await chatService.determineConversationContext(recruiterId, candidateId, jobId);
+      if (newContext) {
+        contextToUpdate = newContext;
+      }
     }
   }
 
@@ -245,14 +254,12 @@ export const createOrGetConversation = asyncHandler(async (req, res) => {
 
   // Create new conversation
   // If we have a specific context, we should pass it to createConversation
-  // But createConversation currently calls determineConversationContext internally.
-  // We might need to update createConversation to accept an override context, OR update it after creation.
-
-  const newConversation = await chatService.createConversation(currentUserId, targetUserId);
+  const newConversation = await chatService.createConversation(currentUserId, targetUserId, jobId, skipContext);
 
   if (contextToUpdate) {
     newConversation.context = contextToUpdate;
-    await newConversation.save();
+    // Update db directly since newConversation might be a POJO from populate
+    await Conversation.findByIdAndUpdate(newConversation._id, { $set: { context: contextToUpdate } });
   }
 
   res.status(201).json({

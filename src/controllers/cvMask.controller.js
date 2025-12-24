@@ -8,10 +8,11 @@ import logger from '../utils/logger.js';
  */
 export const maskPdfController = asyncHandler(async (req, res) => {
   const { candidateId, cvId } = req.params;
+  const { jobId } = req.query;
   const recruiterId = req.user._id;
 
 
-  const { buffer, fileName, contentType } = await getMaskedCv(recruiterId, candidateId, cvId);
+  const { buffer, fileName, contentType } = await getMaskedCv(recruiterId, candidateId, cvId, jobId);
   res.setHeader('Content-Type', contentType);
   res.send(buffer);
 });
