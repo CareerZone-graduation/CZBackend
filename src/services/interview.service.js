@@ -220,7 +220,7 @@ export const getInterviewsByCandidate = async (candidateId, filters = {}) => {
       path: 'applicationId',
       select: 'jobSnapshot appliedAt status'
     })
-    .sort({ scheduledTime: -1 })
+    .sort({ scheduledTime: -1, _id: -1 })
     .skip(skip)
     .limit(Number(limit))
     .lean();
@@ -1032,7 +1032,7 @@ export const getRecruiterInterviews = async (recruiterId, options = {}) => {
       path: 'applicationId',
       select: 'jobSnapshot candidateProfileId appliedAt status candidateName candidateEmail candidatePhone'
     })
-    .sort({ scheduledTime: 1 })
+    .sort({ scheduledTime: 1, _id: 1 })
     .skip(skip)
     .limit(Number(limit))
     .lean();
@@ -1111,7 +1111,7 @@ export const getCandidateInterviews = async (candidateId, options = {}) => {
     .populate({
       path: 'applicationId'
     })
-    .sort({ scheduledTime: 1 })
+    .sort({ scheduledTime: 1, _id: 1 })
     .skip(skip)
     .limit(Number(limit))
     .lean();

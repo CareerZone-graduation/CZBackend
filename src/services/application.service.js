@@ -77,7 +77,7 @@ export const getApplicationsByJob = async (jobId, recruiterId, options = {}) => 
     filter.isReapplied = options.isReapplied === true || options.isReapplied === 'true';
   }
 
-  //   Xây dựng sort options
+  // Building sort options
   let sortOptions = {};
   if (options.sort) {
     if (options.sort.startsWith('-')) {
@@ -89,7 +89,6 @@ export const getApplicationsByJob = async (jobId, recruiterId, options = {}) => 
     // Mặc định sắp xếp theo thời gian ứng tuyển giảm dần
     sortOptions = { appliedAt: -1 };
   }
-
   // Tạo pipeline aggregate để lấy thông tin chi tiết
   const pipeline = [
     { $match: filter },
@@ -105,8 +104,12 @@ export const getApplicationsByJob = async (jobId, recruiterId, options = {}) => 
     {
       $lookup: {
         from: 'interviewrooms',
-        localField: '_id',
-        foreignField: 'applicationId',
+        let: { appId: '$_id' },
+        pipeline: [
+          { $match: { $expr: { $eq: ['$applicationId', '$$appId'] } } },
+          { $sort: { createdAt: -1 } },
+          { $limit: 1 }
+        ],
         as: 'interview'
       }
     },
