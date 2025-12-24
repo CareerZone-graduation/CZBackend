@@ -2837,18 +2837,64 @@ const buildSearchFilter = (searchParams) => {
   }
 
   // Bounding box filter for Map
+  // Bounding box filter for Map (Handles Anti-meridian wrap-around)
   if (searchParams.sw_lng && searchParams.sw_lat && searchParams.ne_lng && searchParams.ne_lat) {
+    const sw_lng = parseFloat(searchParams.sw_lng);
+    const sw_lat = parseFloat(searchParams.sw_lat);
+    const ne_lng = parseFloat(searchParams.ne_lng);
+    const ne_lat = parseFloat(searchParams.ne_lat);
+
+    if (sw_lng <= ne_lng) {
+      // Normal bounding box
+      filter.compound.must.push({
+        geoWithin: {
+          box: {
+            bottomLeft: { type: 'Point', coordinates: [sw_lng, sw_lat] },
+            topRight: { type: 'Point', coordinates: [ne_lng, ne_lat] }
+          },
+          path: 'location.coordinates'
+        }
+      });
+    } else {
+      // Box wraps around the 180/-180 meridian
+      filter.compound.must.push({
+        compound: {
+          should: [
+            {
+              geoWithin: {
+                box: {
+                  bottomLeft: { type: 'Point', coordinates: [sw_lng, sw_lat] },
+                  topRight: { type: 'Point', coordinates: [180, ne_lat] }
+                },
+                path: 'location.coordinates'
+              }
+            },
+            {
+              geoWithin: {
+                box: {
+                  bottomLeft: { type: 'Point', coordinates: [-180, sw_lat] },
+                  topRight: { type: 'Point', coordinates: [ne_lng, ne_lat] }
+                },
+                path: 'location.coordinates'
+              }
+            }
+          ],
+          minimumShouldMatch: 1
+        }
+      });
+    }
+  }
+
+  // Distance/Radius filter for Atlas Search
+  if (searchParams.latitude && searchParams.longitude && searchParams.distance) {
     filter.compound.must.push({
       geoWithin: {
-        box: {
-          bottomLeft: {
+        circle: {
+          center: {
             type: 'Point',
-            coordinates: [parseFloat(searchParams.sw_lng), parseFloat(searchParams.sw_lat)]
+            coordinates: [parseFloat(searchParams.longitude), parseFloat(searchParams.latitude)]
           },
-          topRight: {
-            type: 'Point',
-            coordinates: [parseFloat(searchParams.ne_lng), parseFloat(searchParams.ne_lat)]
-          }
+          radius: parseFloat(searchParams.distance) * 1000 // Convert km to meters
         },
         path: 'location.coordinates'
       }
@@ -2897,17 +2943,68 @@ const buildPreFilter = (searchParams) => {
     preFilter['location.district'] = searchParams.district;
   }
 
-  // Bounding box filter for Map
+  // Geospatial filtering logic
+  const geoFilters = [];
+
+  // Bounding box filter for Map (Handles Anti-meridian wrap-around)
   if (searchParams.sw_lng && searchParams.sw_lat && searchParams.ne_lng && searchParams.ne_lat) {
-    preFilter['location.coordinates'] = {
-      $geoWithin: {
-        $box: [
-          [parseFloat(searchParams.sw_lng), parseFloat(searchParams.sw_lat)],
-          [parseFloat(searchParams.ne_lng), parseFloat(searchParams.ne_lat)]
+    const sw_lng = parseFloat(searchParams.sw_lng);
+    const sw_lat = parseFloat(searchParams.sw_lat);
+    const ne_lng = parseFloat(searchParams.ne_lng);
+    const ne_lat = parseFloat(searchParams.ne_lat);
+
+    if (sw_lng <= ne_lng) {
+      geoFilters.push({
+        'location.coordinates': {
+          $geoWithin: {
+            $box: [[sw_lng, sw_lat], [ne_lng, ne_lat]]
+          }
+        }
+      });
+    } else {
+      // Box wraps around the 180/-180 meridian
+      geoFilters.push({
+        $or: [
+          {
+            'location.coordinates': {
+              $geoWithin: { $box: [[sw_lng, sw_lat], [180, ne_lat]] }
+            }
+          },
+          {
+            'location.coordinates': {
+              $geoWithin: { $box: [[-180, sw_lat], [ne_lng, ne_lat]] }
+            }
+          }
         ]
-      }
-    };
+      });
+    }
   }
+
+  // Distance/Radius filter
+  if (searchParams.latitude && searchParams.longitude && searchParams.distance) {
+    console.log(`[buildPreFilter] Adding distance filter: radius ${searchParams.distance}km around [${searchParams.longitude}, ${searchParams.latitude}]`);
+    geoFilters.push({
+      'location.coordinates': {
+        $geoWithin: {
+          $centerSphere: [
+            [parseFloat(searchParams.longitude), parseFloat(searchParams.latitude)],
+            parseFloat(searchParams.distance) / 6378.1
+          ]
+        }
+      }
+    });
+  }
+
+  if (geoFilters.length === 1) {
+    const key = Object.keys(geoFilters[0])[0];
+    preFilter[key] = geoFilters[0][key];
+  } else if (geoFilters.length > 1) {
+    preFilter.$and = preFilter.$and || [];
+    preFilter.$and.push(...geoFilters);
+  }
+
+  console.log(`[buildPreFilter] Final filter keys:`, Object.keys(preFilter));
+  if (preFilter.$and) console.log(`[buildPreFilter] $and length:`, preFilter.$and.length);
 
   // Salary range filters (Strict containment logic to match user preference)
   if (searchParams.minSalary) {
@@ -3695,18 +3792,6 @@ export const searchJobsForCandidate = async (searchParams, userId = null) => {
     console.log('No query provided, performing regular search with filters.');
     try {
       const preFilter = buildPreFilter(searchParams);
-
-      // Add distance filter if coordinates and distance are provided
-      if (searchParams.latitude && searchParams.longitude && searchParams.distance) {
-        preFilter['location.coordinates'] = {
-          $geoWithin: {
-            $centerSphere: [
-              [searchParams.longitude, searchParams.latitude],
-              searchParams.distance / 6378.1
-            ]
-          }
-        };
-      }
       console.log('preFilter', JSON.stringify(preFilter));
       const skip = (page - 1) * size;
 
@@ -3800,9 +3885,10 @@ export const searchJobsForCandidate = async (searchParams, userId = null) => {
                     maxEdits: 1,
                     prefixLength: 2
                   },
-                  score: { boost: { value: 3 } } // Tăng boost cho title
+                  score: { boost: { value: 3 } }
                 }
-              }
+              },
+              ...searchFilter.compound.must // Spread all filters (including geoWithin) here
             ],
             should: [
               {
@@ -3812,28 +3898,13 @@ export const searchJobsForCandidate = async (searchParams, userId = null) => {
                   fuzzy: { maxEdits: 1, prefixLength: 2 },
                 }
               }
-            ],
-            // Áp dụng các filter cứng (Category, Type...) ngay trong Search để tối ưu
-            filter: searchFilter.compound.must
+            ]
           }
         }
       },
 
-      // --- Stage 2: Filter Location (Nếu có) ---
-      // Lưu ý: Atlas Search có thể handle geo, nhưng để đơn giản ta dùng $match sau search 
-      // nếu logic buildSearchFilter chưa bao gồm geo.
-      ...(searchParams.latitude && searchParams.longitude && searchParams.distance ? [{
-        $match: {
-          'location.coordinates': {
-            $geoWithin: {
-              $centerSphere: [
-                [searchParams.longitude, searchParams.latitude],
-                searchParams.distance / 6378.1
-              ]
-            }
-          }
-        }
-      }] : []),
+      // --- Stage 2: Filter Location (Handle via buildSearchFilter) ---
+      // Distace filtering is now part of searchFilter.compound.must
 
       // --- Stage 3: Project Score & Fields ---
       {
@@ -4409,7 +4480,8 @@ export const getMapClusters = async (bounds, zoom) => { // Removed third argumen
   const {
     sw_lat, sw_lng, ne_lat, ne_lng,
     query, category, type, workType, experience,
-    province, district, minSalary, maxSalary
+    province, district, minSalary, maxSalary,
+    latitude, longitude, distance
   } = bounds; // filters is now part of bounds
 
   // Determine grid size (in degrees) based on zoom level
@@ -4432,10 +4504,19 @@ export const getMapClusters = async (bounds, zoom) => { // Removed third argumen
   // ✅ DEBUG: Log input parameters
   logger.info(`[MAP CLUSTERS] Zoom: ${zoom}, GridSize: ${gridSize}`);
   logger.info(`[MAP CLUSTERS] Bounds:`, bounds);
+  if (latitude || longitude || distance) {
+    logger.info(`[MAP CLUSTERS] Radius filter detected: ${distance}km around [${longitude}, ${latitude}]`);
+  }
 
-  // 1. Xây dựng điều kiện match cơ bản
   // 1. Xây dựng điều kiện match cơ bản (Sử dụng builder trung tâm)
   const baseMatch = buildPreFilter(bounds);
+
+  // ✅ DEBUG log
+  console.log(`[MAP CLUSTERS] Zoom: ${zoom}, Query: "${query || ''}"`);
+  console.log(`[MAP CLUSTERS] Bounds filter:`, JSON.stringify(baseMatch));
+  if (baseMatch.$and) {
+    console.log(`[MAP CLUSTERS] AND filters found:`, baseMatch.$and.length);
+  }
 
 
   // 2. Xây dựng Aggregation Pipeline với Grid Clustering (No $function)
@@ -4456,7 +4537,8 @@ export const getMapClusters = async (bounds, zoom) => { // Removed third argumen
                 fuzzy: { maxEdits: 1, prefixLength: 2 },
                 score: { boost: { value: 3 } }
               }
-            }
+            },
+            ...searchFilter.compound.must // Spread filters here
           ],
           should: [
             {
@@ -4466,8 +4548,7 @@ export const getMapClusters = async (bounds, zoom) => { // Removed third argumen
                 fuzzy: { maxEdits: 1, prefixLength: 2 },
               }
             }
-          ],
-          filter: searchFilter.compound.must
+          ]
         }
       }
     });

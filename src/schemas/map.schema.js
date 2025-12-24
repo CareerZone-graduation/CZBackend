@@ -19,8 +19,8 @@ export const getMapClustersSchema = z.object({
   ne_lat: z.coerce.number().min(-95).max(95),
   ne_lng: z.coerce.number().min(-185).max(185),
 
-  // Zoom là bắt buộc và là số nguyên
-  zoom: z.coerce.number().int().min(1).max(20),
+  // Zoom là bắt buộc và là số nguyên (cho phép từ 0 - thế giới đến 20 - chi tiết)
+  zoom: z.coerce.number().int().min(0).max(20),
 
   // Các bộ lọc khác là tùy chọn
   query: z.string().trim().max(200).optional(),
@@ -32,4 +32,7 @@ export const getMapClustersSchema = z.object({
   district: z.string().optional(),
   minSalary: z.coerce.number().optional(),
   maxSalary: z.coerce.number().optional(),
+  latitude: z.coerce.number().min(-90).max(90).optional(),
+  longitude: z.coerce.number().min(-180).max(180).optional(),
+  distance: z.coerce.number().min(0).optional(),
 });
