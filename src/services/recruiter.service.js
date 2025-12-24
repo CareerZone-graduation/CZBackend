@@ -331,7 +331,7 @@ export const getDashboardStats = async (userId, query) => {
         _id: null,
         total: { $sum: 1 },
         underReview: {
-          $sum: { $cond: [{ $in: ['$status', ['PENDING']] }, 1, 0] }
+          $sum: { $cond: [{ $in: ['$status', ['PENDING', 'SUITABLE']] }, 1, 0] }
         },
         interview: {
           $sum: { $cond: [{ $in: ['$status', ['SCHEDULED_INTERVIEW']] }, 1, 0] }
@@ -341,6 +341,9 @@ export const getDashboardStats = async (userId, query) => {
         },
         hired: {
           $sum: { $cond: [{ $eq: ['$status', 'ACCEPTED'] }, 1, 0] }
+        },
+        rejected: {
+          $sum: { $cond: [{ $in: ['$status', ['REJECTED', 'OFFER_DECLINED', 'INTERVIEW_FAILED']] }, 1, 0] }
         }
       }
     }
@@ -433,7 +436,7 @@ export const getDashboardStats = async (userId, query) => {
       pendingReview: { value: pendingApplications, change: 0 },
       interviews: { value: scheduledInterviews, change: scheduledInterviews - prevScheduledInterviews }
     },
-    funnel: funnelStats[0] || { total: 0, underReview: 0, interview: 0, offer: 0, hired: 0 },
+    funnel: funnelStats[0] || { total: 0, underReview: 0, interview: 0, offer: 0, hired: 0, rejected: 0 },
     chart: chartData.map(d => ({ date: d._id, value: d.count })),
     topJobs,
     upcomingInterviews
