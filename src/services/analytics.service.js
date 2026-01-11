@@ -765,12 +765,13 @@ export const getTopCompanies = async (limit = 6) => {
 /**
  * GET /api/analytics/company-stats
  * Thống kê các công ty theo trạng thái
+ * Logic khớp với getAdminStats: chỉ đếm RecruiterProfile có company.name không rỗng
  */
 export const getCompanyStats = async () => {
   const stats = await RecruiterProfile.aggregate([
     {
       $match: {
-        'company.name': { $exists: true },
+        'company.name': { $exists: true, $ne: null, $ne: '' },
       },
     },
     {

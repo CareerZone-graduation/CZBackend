@@ -36,7 +36,8 @@ export const getJobsForAdmin = async (queryParams) => {
   // Filter by a specific company
   if (company) {
     if (mongoose.Types.ObjectId.isValid(company)) {
-      filter.recruiterProfileId = company;
+      // Convert string to ObjectId for proper matching
+      filter.recruiterProfileId = new mongoose.Types.ObjectId(company);
     } else {
       const companyProfiles = await RecruiterProfile.find({
         'company.name': { $regex: company, $options: 'i' }
@@ -1247,29 +1248,53 @@ export const getAdminStats = async () => {
     pendingJobs,
     approvedJobs,
     totalApplications,
-    verifiedCompanies,
-    unverifiedCompanies,
+    // Đếm công ty đã đăng ký (có company.name)
+    totalRegisteredCompanies,
     pendingCompanies,
-    // --- BỔ SUNG CÁC TRUY VẤN MỚI ---
-    recruitersWithoutCompany, // Đếm NTD chưa có thông tin công ty
-    bannedUsers             // Đếm tài khoản bị khóa
+    approvedCompanies,
+    rejectedCompanies,
+    verifiedCompanies,
+    // Đếm NTD chưa đăng ký công ty (bao gồm cả chưa có profile và có profile nhưng chưa có company.name)
+    recruiterUserIds,
+    recruiterProfileUserIds,
+    bannedUsers
   ] = await Promise.all([
-    User.countDocuments({ role: { $ne: 'admin' } }), // Loại bỏ admin
+    User.countDocuments({ role: { $ne: 'admin' } }),
     User.countDocuments({ role: 'candidate' }),
     User.countDocuments({ role: 'recruiter' }),
     Job.countDocuments(),
     Job.countDocuments({ approved: false }),
     Job.countDocuments({ approved: true }),
     Application.countDocuments(),
-    RecruiterProfile.countDocuments({ 'company.verified': true }),
-    RecruiterProfile.countDocuments({ 'company.verified': false }),
+    // Đếm công ty đã đăng ký (có company.name)
+    RecruiterProfile.countDocuments({ 
+      'company.name': { $exists: true, $ne: null, $ne: '' } 
+    }),
+    // Đếm theo status
     RecruiterProfile.countDocuments({
+      'company.name': { $exists: true, $ne: null, $ne: '' },
       'company.status': 'pending'
     }),
-    // --- LOGIC MỚI ---
-    RecruiterProfile.countDocuments({ 'company.name': { $exists: false } }),
-    User.countDocuments({ active: false, role: { $ne: 'admin' } }) // Loại bỏ admin trong banned users
+    RecruiterProfile.countDocuments({
+      'company.name': { $exists: true, $ne: null, $ne: '' },
+      'company.status': 'approved'
+    }),
+    RecruiterProfile.countDocuments({
+      'company.name': { $exists: true, $ne: null, $ne: '' },
+      'company.status': 'rejected'
+    }),
+    RecruiterProfile.countDocuments({ 'company.verified': true }),
+    // Lấy danh sách userId của tất cả recruiter
+    User.find({ role: 'recruiter' }).distinct('_id'),
+    // Lấy danh sách userId của recruiter đã có company.name
+    RecruiterProfile.find({ 
+      'company.name': { $exists: true, $ne: null, $ne: '' } 
+    }).distinct('userId'),
+    User.countDocuments({ active: false, role: { $ne: 'admin' } })
   ]);
+
+  // Tính số NTD chưa đăng ký công ty = Tổng recruiter - Recruiter đã có công ty
+  const recruitersWithoutCompany = totalRecruiters - recruiterProfileUserIds.length;
 
   return {
     overview: {
@@ -1281,7 +1306,6 @@ export const getAdminStats = async () => {
       candidates: totalCandidates,
       recruiters: totalRecruiters,
       total: totalUsers,
-      // --- DỮ LIỆU MỚI ---
       banned: bannedUsers
     },
     jobs: {
@@ -1290,11 +1314,13 @@ export const getAdminStats = async () => {
       total: totalJobs
     },
     companies: {
-      verified: verifiedCompanies,
-      unverified: unverifiedCompanies,
+      // Tổng công ty = số RecruiterProfile có company.name (khớp với trang quản lý công ty)
+      total: totalRegisteredCompanies,
       pending: pendingCompanies,
-      total: verifiedCompanies + unverifiedCompanies,
-      // --- DỮ LIỆU MỚI ---
+      approved: approvedCompanies,
+      rejected: rejectedCompanies,
+      verified: verifiedCompanies,
+      // NTD chưa đăng ký = Tổng NTD - Số đã có công ty
       recruitersWithoutCompany: recruitersWithoutCompany
     }
   };
