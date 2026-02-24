@@ -49,56 +49,56 @@ const checkDataIntegrity = async () => {
 
   try {
     // 1. Kiểm tra CandidateProfile.userId
-    // console.log('📋 Kiểm tra CandidateProfile...');
-    // const candidateProfiles = await CandidateProfile.find({}).lean();
-    // for (const profile of candidateProfiles) {
-    //   const userExists = await User.findById(profile.userId);
-    //   if (!userExists) {
-    //     issues.candidateProfiles.push({
-    //       _id: profile._id,
-    //       userId: profile.userId,
-    //       fullname: profile.fullname,
-    //       issue: 'userId không tồn tại trong collection User'
-    //     });
-    //   }
-    // }
-    // console.log(`   ✓ Đã kiểm tra ${candidateProfiles.length} CandidateProfile`);
-    // console.log(`   ⚠️  Tìm thấy ${issues.candidateProfiles.length} vấn đề\n`);
+    console.log('📋 Kiểm tra CandidateProfile...');
+    const candidateProfiles = await CandidateProfile.find({}).lean();
+    for (const profile of candidateProfiles) {
+      const userExists = await User.findById(profile.userId);
+      if (!userExists) {
+        issues.candidateProfiles.push({
+          _id: profile._id,
+          userId: profile.userId,
+          fullname: profile.fullname,
+          issue: 'userId không tồn tại trong collection User'
+        });
+      }
+    }
+    console.log(`   ✓ Đã kiểm tra ${candidateProfiles.length} CandidateProfile`);
+    console.log(`   ⚠️  Tìm thấy ${issues.candidateProfiles.length} vấn đề\n`);
 
-    // // 2. Kiểm tra RecruiterProfile.userId
-    // console.log('📋 Kiểm tra RecruiterProfile...');
-    // const recruiterProfiles = await RecruiterProfile.find({}).lean();
-    // for (const profile of recruiterProfiles) {
-    //   const userExists = await User.findById(profile.userId);
-    //   if (!userExists) {
-    //     issues.recruiterProfiles.push({
-    //       _id: profile._id,
-    //       userId: profile.userId,
-    //       fullname: profile.fullname,
-    //       companyName: profile.company?.name,
-    //       issue: 'userId không tồn tại trong collection User'
-    //     });
-    //   }
-    // }
-    // console.log(`   ✓ Đã kiểm tra ${recruiterProfiles.length} RecruiterProfile`);
-    // console.log(`   ⚠️  Tìm thấy ${issues.recruiterProfiles.length} vấn đề\n`);
+    // 2. Kiểm tra RecruiterProfile.userId
+    console.log('📋 Kiểm tra RecruiterProfile...');
+    const recruiterProfiles = await RecruiterProfile.find({}).lean();
+    for (const profile of recruiterProfiles) {
+      const userExists = await User.findById(profile.userId);
+      if (!userExists) {
+        issues.recruiterProfiles.push({
+          _id: profile._id,
+          userId: profile.userId,
+          fullname: profile.fullname,
+          companyName: profile.company?.name,
+          issue: 'userId không tồn tại trong collection User'
+        });
+      }
+    }
+    console.log(`   ✓ Đã kiểm tra ${recruiterProfiles.length} RecruiterProfile`);
+    console.log(`   ⚠️  Tìm thấy ${issues.recruiterProfiles.length} vấn đề\n`);
 
-    // // 3. Kiểm tra Job.recruiterProfileId
-    // console.log('📋 Kiểm tra Job...');
-    // const jobs = await Job.find({}).lean();
-    // for (const job of jobs) {
-    //   const recruiterExists = await RecruiterProfile.findById(job.recruiterProfileId);
-    //   if (!recruiterExists) {
-    //     issues.jobs.push({
-    //       _id: job._id,
-    //       title: job.title,
-    //       recruiterProfileId: job.recruiterProfileId,
-    //       issue: 'recruiterProfileId không tồn tại trong collection RecruiterProfile'
-    //     });
-    //   }
-    // }
-    // console.log(`   ✓ Đã kiểm tra ${jobs.length} Job`);
-    // console.log(`   ⚠️  Tìm thấy ${issues.jobs.length} vấn đề\n`);
+    // 3. Kiểm tra Job.recruiterProfileId
+    console.log('📋 Kiểm tra Job...');
+    const jobs = await Job.find({}).lean();
+    for (const job of jobs) {
+      const recruiterExists = await RecruiterProfile.findById(job.recruiterProfileId);
+      if (!recruiterExists) {
+        issues.jobs.push({
+          _id: job._id,
+          title: job.title,
+          recruiterProfileId: job.recruiterProfileId,
+          issue: 'recruiterProfileId không tồn tại trong collection RecruiterProfile'
+        });
+      }
+    }
+    console.log(`   ✓ Đã kiểm tra ${jobs.length} Job`);
+    console.log(`   ⚠️  Tìm thấy ${issues.jobs.length} vấn đề\n`);
 
     // 4. Kiểm tra Application
     console.log('📋 Kiểm tra Application...');
@@ -154,22 +154,22 @@ const checkDataIntegrity = async () => {
     console.log(`   ✓ Đã kiểm tra ${savedJobs.length} SavedJob`);
     console.log(`   ⚠️  Tìm thấy ${issues.savedJobs.length} vấn đề\n`);
 
-    // // 6. Kiểm tra SearchHistory
-    // console.log('📋 Kiểm tra SearchHistory...');
-    // const searchHistory = await SearchHistory.find({}).lean();
-    // for (const search of searchHistory) {
-    //   const userExists = await User.findById(search.userId);
-    //   if (!userExists) {
-    //     issues.searchHistory.push({
-    //       _id: search._id,
-    //       userId: search.userId,
-    //       query: search.query,
-    //       issue: 'userId không tồn tại trong collection User'
-    //     });
-    //   }
-    // }
-    // console.log(`   ✓ Đã kiểm tra ${searchHistory.length} SearchHistory`);
-    // console.log(`   ⚠️  Tìm thấy ${issues.searchHistory.length} vấn đề\n`);
+    // 6. Kiểm tra SearchHistory
+    console.log('📋 Kiểm tra SearchHistory...');
+    const searchHistory = await SearchHistory.find({}).lean();
+    for (const search of searchHistory) {
+      const userExists = await User.findById(search.userId);
+      if (!userExists) {
+        issues.searchHistory.push({
+          _id: search._id,
+          userId: search.userId,
+          query: search.query,
+          issue: 'userId không tồn tại trong collection User'
+        });
+      }
+    }
+    console.log(`   ✓ Đã kiểm tra ${searchHistory.length} SearchHistory`);
+    console.log(`   ⚠️  Tìm thấy ${issues.searchHistory.length} vấn đề\n`);
 
     // 7. Kiểm tra Notification
     console.log('📋 Kiểm tra Notification...');

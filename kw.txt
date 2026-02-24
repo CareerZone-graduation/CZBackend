@@ -1,0 +1,99 @@
+{
+  "mappings": {
+    "dynamic": false,
+    "fields": {
+      "area": {
+        "type": "token",
+        "normalizer": "lowercase"
+      },
+      "requirements": {
+        "type": "string",
+        "analyzer": "vi_fold_lc",
+        "indexOptions": "offsets",
+        "store": true,
+        "norms": "include"
+      },
+      "maxSalary": {
+        "type": "number",
+        "representation": "double",
+        "indexDoubles": true,
+        "indexIntegers": true
+      },
+      "workType": {
+        "type": "token",
+        "normalizer": "lowercase"
+      },
+      "description": {
+        "type": "string",
+        "analyzer": "vi_fold_lc",
+        "indexOptions": "offsets",
+        "store": true,
+        "norms": "include"
+      },
+      "location": {
+        "type": "document",
+        "dynamic": false,
+        "fields": {
+          "province": {
+            "type": "token"
+          },
+          "district": {
+            "type": "token"
+          },
+          "coordinates": {
+            "type": "geo",
+            "indexShapes": false
+          }
+        }
+      },
+      "minSalary": {
+        "type": "number",
+        "representation": "double",
+        "indexDoubles": true,
+        "indexIntegers": true
+      },
+      "title": {
+        "type": "string",
+        "analyzer": "vi_fold_lc",
+        "indexOptions": "offsets",
+        "store": true,
+        "norms": "include"
+      },
+      "category": {
+        "type": "token",
+        "normalizer": "lowercase"
+      },
+      "type": {
+        "type": "token",
+        "normalizer": "lowercase"
+      },
+      "deadline": {
+        "type": "date"
+      },
+      "status": {
+        "type": "token",
+        "normalizer": "lowercase"
+      },
+      "moderationStatus": {
+        "type": "token",
+        "normalizer": "lowercase"
+      }
+    }
+  },
+  "analyzers": [
+    {
+      "name": "vi_fold_lc",
+      "tokenizer": {
+        "type": "standard"
+      },
+      "tokenFilters": [
+        {
+          "type": "icuFolding"
+        },
+        {
+          "type": "lowercase"
+        }
+      ]
+    }
+  ]
+}

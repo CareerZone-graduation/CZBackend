@@ -119,37 +119,37 @@ const cleanupOrphanedData = async (dryRun = true) => {
     }
     console.log(`   ${dryRun ? 'Sẽ xóa' : 'Đã xóa'} ${deletionStats.applications} Application\n`);
 
-    // // 5. Xóa SavedJob không hợp lệ
-    // console.log('📋 Xử lý SavedJob...');
-    // const savedJobs = await SavedJob.find({}).lean();
-    // for (const saved of savedJobs) {
-    //   const userExists = await User.findById(saved.candidateId);
-    //   const jobExists = await Job.findById(saved.jobId);
+    // 5. Xóa SavedJob không hợp lệ
+    console.log('📋 Xử lý SavedJob...');
+    const savedJobs = await SavedJob.find({}).lean();
+    for (const saved of savedJobs) {
+      const userExists = await User.findById(saved.candidateId);
+      const jobExists = await Job.findById(saved.jobId);
       
-    //   if (!userExists || !jobExists) {
-    //     console.log(`   ⚠️  Tìm thấy orphaned SavedJob: ${saved._id}`);
-    //     if (!dryRun) {
-    //       await SavedJob.deleteOne({ _id: saved._id });
-    //       deletionStats.savedJobs++;
-    //     }
-    //   }
-    // }
-    // console.log(`   ${dryRun ? 'Sẽ xóa' : 'Đã xóa'} ${deletionStats.savedJobs} SavedJob\n`);
+      if (!userExists || !jobExists) {
+        console.log(`   ⚠️  Tìm thấy orphaned SavedJob: ${saved._id}`);
+        if (!dryRun) {
+          await SavedJob.deleteOne({ _id: saved._id });
+          deletionStats.savedJobs++;
+        }
+      }
+    }
+    console.log(`   ${dryRun ? 'Sẽ xóa' : 'Đã xóa'} ${deletionStats.savedJobs} SavedJob\n`);
 
-    // // 6. Xóa SearchHistory không hợp lệ
-    // console.log('📋 Xử lý SearchHistory...');
-    // const searchHistory = await SearchHistory.find({}).lean();
-    // for (const search of searchHistory) {
-    //   const userExists = await User.findById(search.userId);
-    //   if (!userExists) {
-    //     console.log(`   ⚠️  Tìm thấy orphaned SearchHistory: ${search._id}`);
-    //     if (!dryRun) {
-    //       await SearchHistory.deleteOne({ _id: search._id });
-    //       deletionStats.searchHistory++;
-    //     }
-    //   }
-    // }
-    // console.log(`   ${dryRun ? 'Sẽ xóa' : 'Đã xóa'} ${deletionStats.searchHistory} SearchHistory\n`);
+    // 6. Xóa SearchHistory không hợp lệ
+    console.log('📋 Xử lý SearchHistory...');
+    const searchHistory = await SearchHistory.find({}).lean();
+    for (const search of searchHistory) {
+      const userExists = await User.findById(search.userId);
+      if (!userExists) {
+        console.log(`   ⚠️  Tìm thấy orphaned SearchHistory: ${search._id}`);
+        if (!dryRun) {
+          await SearchHistory.deleteOne({ _id: search._id });
+          deletionStats.searchHistory++;
+        }
+      }
+    }
+    console.log(`   ${dryRun ? 'Sẽ xóa' : 'Đã xóa'} ${deletionStats.searchHistory} SearchHistory\n`);
 
     // 7. Xóa Notification không hợp lệ
     console.log('📋 Xử lý Notification...');
@@ -166,40 +166,40 @@ const cleanupOrphanedData = async (dryRun = true) => {
     }
     console.log(`   ${dryRun ? 'Sẽ xóa' : 'Đã xóa'} ${deletionStats.notifications} Notification\n`);
 
-    // // 8. Xóa ChatMessage không hợp lệ
-    // console.log('📋 Xử lý ChatMessage...');
-    // const chatMessages = await ChatMessage.find({}).lean();
-    // for (const msg of chatMessages) {
-    //   const senderExists = await User.findById(msg.senderId);
-    //   const recipientExists = await User.findById(msg.recipientId);
-    //   const conversationExists = await Conversation.findById(msg.conversationId);
+    // 8. Xóa ChatMessage không hợp lệ
+    console.log('📋 Xử lý ChatMessage...');
+    const chatMessages = await ChatMessage.find({}).lean();
+    for (const msg of chatMessages) {
+      const senderExists = await User.findById(msg.senderId);
+      const recipientExists = await User.findById(msg.recipientId);
+      const conversationExists = await Conversation.findById(msg.conversationId);
       
-    //   if (!senderExists || !recipientExists || !conversationExists) {
-    //     console.log(`   ⚠️  Tìm thấy orphaned ChatMessage: ${msg._id}`);
-    //     if (!dryRun) {
-    //       await ChatMessage.deleteOne({ _id: msg._id });
-    //       deletionStats.chatMessages++;
-    //     }
-    //   }
-    // }
-    // console.log(`   ${dryRun ? 'Sẽ xóa' : 'Đã xóa'} ${deletionStats.chatMessages} ChatMessage\n`);
+      if (!senderExists || !recipientExists || !conversationExists) {
+        console.log(`   ⚠️  Tìm thấy orphaned ChatMessage: ${msg._id}`);
+        if (!dryRun) {
+          await ChatMessage.deleteOne({ _id: msg._id });
+          deletionStats.chatMessages++;
+        }
+      }
+    }
+    console.log(`   ${dryRun ? 'Sẽ xóa' : 'Đã xóa'} ${deletionStats.chatMessages} ChatMessage\n`);
 
-    // // 9. Xóa Conversation không hợp lệ
-    // console.log('📋 Xử lý Conversation...');
-    // const conversations = await Conversation.find({}).lean();
-    // for (const conv of conversations) {
-    //   const participant1Exists = await User.findById(conv.participant1);
-    //   const participant2Exists = await User.findById(conv.participant2);
+    // 9. Xóa Conversation không hợp lệ
+    console.log('📋 Xử lý Conversation...');
+    const conversations = await Conversation.find({}).lean();
+    for (const conv of conversations) {
+      const participant1Exists = await User.findById(conv.participant1);
+      const participant2Exists = await User.findById(conv.participant2);
       
-    //   if (!participant1Exists || !participant2Exists) {
-    //     console.log(`   ⚠️  Tìm thấy orphaned Conversation: ${conv._id}`);
-    //     if (!dryRun) {
-    //       await Conversation.deleteOne({ _id: conv._id });
-    //       deletionStats.conversations++;
-    //     }
-    //   }
-    // }
-    // console.log(`   ${dryRun ? 'Sẽ xóa' : 'Đã xóa'} ${deletionStats.conversations} Conversation\n`);
+      if (!participant1Exists || !participant2Exists) {
+        console.log(`   ⚠️  Tìm thấy orphaned Conversation: ${conv._id}`);
+        if (!dryRun) {
+          await Conversation.deleteOne({ _id: conv._id });
+          deletionStats.conversations++;
+        }
+      }
+    }
+    console.log(`   ${dryRun ? 'Sẽ xóa' : 'Đã xóa'} ${deletionStats.conversations} Conversation\n`);
 
   } catch (error) {
     console.error('❌ Lỗi khi xử lý:', error);

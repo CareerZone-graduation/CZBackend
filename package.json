@@ -15,6 +15,7 @@
     "worker:candidate-embedding": "node workers/candidate-embedding.worker.js",
     "backfill": "node scripts/update-job-embeddings.js",
     "start:all": "npm-run-all --parallel dev worker:notification worker:matching worker:embedding worker:candidate-embedding",
+    "start:all2": "npm-run-all --parallel dev worker:notification worker:matching ",
     "deploy": "npm-run-all --parallel prod worker:notification worker:matching worker:embedding worker:candidate-embedding",
     "test": "cross-env NODE_ENV=test node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --detectOpenHandles --forceExit --no-cache",
     "normalize:locations": "node scripts/chuan-hoa-location-data.js",

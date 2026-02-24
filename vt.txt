@@ -1,0 +1,54 @@
+{
+  "fields": [
+    {
+      "type": "vector",
+      "path": "chunks.embedding",
+      "numDimensions": 3072,
+      "similarity": "cosine"
+    },
+    {
+      "type": "filter",
+      "path": "status"
+    },
+    {
+      "type": "filter",
+      "path": "deadline"
+    },
+    {
+      "type": "filter",
+      "path": "category"
+    },
+    {
+      "type": "filter",
+      "path": "type"
+    },
+    {
+      "type": "filter",
+      "path": "workType"
+    },
+    {
+      "type": "filter",
+      "path": "experience"
+    },
+    {
+      "type": "filter",
+      "path": "location.province"
+    },
+    {
+      "type": "filter",
+      "path": "minSalary"
+    },
+    {
+      "type": "filter",
+      "path": "maxSalary"
+    },
+    {
+      "type": "filter",
+      "path": "location.district"
+    },
+    {
+      "type": "filter",
+      "path": "moderationStatus"
+    }
+  ]
+}

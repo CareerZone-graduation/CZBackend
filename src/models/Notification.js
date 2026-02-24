@@ -85,7 +85,7 @@ notificationSchema.index({ type: 1 });
 notificationSchema.index({ createdAt: -1 });
 notificationSchema.index({ userId: 1, isRead: 1, createdAt: -1 });
 
-// Tự động xóa thông báo sau 30 ngày (2592000 giây)
-notificationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 2592000 });
+// Tự động xóa thông báo sau 300 ngày (25920000 giây)
+notificationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 25920000 });
 
 export default mongoose.model("Notification", notificationSchema);
