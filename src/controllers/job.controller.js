@@ -169,13 +169,19 @@ export const getJobDetailsForRecruiter = asyncHandler(async (req, res) => {
 });
 
 export const hybridSearchJobs = asyncHandler(async (req, res) => {
-  const searchParams = { ...req.validatedQuery || req.query };
+  const { aiSearch, ...searchParams } = { ...req.validatedQuery || req.query };
   const userId = req.user ? req.user._id : null;
-  // const result = await jobService.searchJobsForCandidate(searchParams, userId);
-  const result = await jobService.hybridSearchJobs(searchParams, userId);
+  let result;
+  // If aiSearch is 'true', use the AI hybrid search, otherwise use standard search
+  if (aiSearch === 'true') {
+    result = await jobService.hybridSearchJobs(searchParams, userId);
+  } else {
+    result = await jobService.searchJobsForCandidate(searchParams, userId);
+  }
+
   res.status(200).json({
     success: true,
-    message: 'Tìm kiếm hybrid công việc thành công.',
+    message: aiSearch === 'true' ? 'Tìm kiếm AI công việc thành công.' : 'Tìm kiếm công việc thành công.',
     meta: result.meta,
     data: result.data,
   });

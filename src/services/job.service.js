@@ -1607,6 +1607,17 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
 
   const preFilter = buildPreFilter(searchParams);
 
+  // vectorSearch filter doesn't support $geoWithin, so we build one without geo params
+  const vectorSearchParams = { ...searchParams };
+  delete vectorSearchParams.latitude;
+  delete vectorSearchParams.longitude;
+  delete vectorSearchParams.distance;
+  delete vectorSearchParams.sw_lng;
+  delete vectorSearchParams.sw_lat;
+  delete vectorSearchParams.ne_lng;
+  delete vectorSearchParams.ne_lat;
+  const vectorFilter = buildPreFilter(vectorSearchParams);
+
 
   // Generate query embedding for vector search
   const queryVector = await generateQueryEmbedding(query);
@@ -1690,7 +1701,7 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
                 queryVector: queryVector,
                 numCandidates: numCandidates,
                 limit: branchLimit,
-                filter: preFilter
+                filter: vectorFilter
               }
             },
             { $set: { vectorScore: { $meta: "vectorSearchScore" } } },
@@ -1728,7 +1739,7 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
         }
       },
       // --- Merge and rank fusion ---
-      // Apply distance filter if provided (strict radius filtering)
+            // Apply distance filter if provided (strict radius filtering)
       ...(searchParams.latitude && searchParams.longitude && searchParams.distance ? [{
         $match: {
           'location.coordinates': {
