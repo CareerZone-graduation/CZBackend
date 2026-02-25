@@ -171,7 +171,8 @@ export const getJobDetailsForRecruiter = asyncHandler(async (req, res) => {
 export const hybridSearchJobs = asyncHandler(async (req, res) => {
   const searchParams = { ...req.validatedQuery || req.query };
   const userId = req.user ? req.user._id : null;
-  const result = await jobService.searchJobsForCandidate(searchParams, userId);
+  // const result = await jobService.searchJobsForCandidate(searchParams, userId);
+  const result = await jobService.hybridSearchJobs(searchParams, userId);
   res.status(200).json({
     success: true,
     message: 'Tìm kiếm hybrid công việc thành công.',
