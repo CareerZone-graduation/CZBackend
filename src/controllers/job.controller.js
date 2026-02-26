@@ -251,3 +251,18 @@ export const searchExternalJobs = asyncHandler(async (req, res) => {
     data: result.data,
   });
 });
+
+export const getSimilarJobs = asyncHandler(async (req, res) => {
+  const { id: jobId } = req.params;
+  const userId = req.user ? req.user._id : null;
+  const options = req.validatedQuery || req.query;
+
+  const result = await jobService.getSimilarJobs(jobId, options, userId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy danh sách việc làm tương tự thành công.',
+    meta: result.meta,
+    data: result.data,
+  });
+});

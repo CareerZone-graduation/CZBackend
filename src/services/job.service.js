@@ -1739,7 +1739,7 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
         }
       },
       // --- Merge and rank fusion ---
-            // Apply distance filter if provided (strict radius filtering)
+      // Apply distance filter if provided (strict radius filtering)
       ...(searchParams.latitude && searchParams.longitude && searchParams.distance ? [{
         $match: {
           'location.coordinates': {
@@ -2934,4 +2934,101 @@ export const reapplyToJob = async (userId, jobId, applicationData) => {
     }
     throw new BadRequestError('Có lỗi xảy ra khi nộp đơn ứng tuyển lại.');
   }
+};
+
+/**
+ * Get similar jobs via AI Python service (vector search)
+ * BE only sends jobId → FastAPI fetches embedding, does vector search, returns job IDs
+ */
+export const getSimilarJobs = async (jobId, options = {}, userId = null) => {
+  const { limit = 6 } = options;
+
+  // 1. Call FastAPI AI service — it handles embedding + vector search internally
+  const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
+  const aiServiceSecret = process.env.AI_INTERNAL_SECRET || 'careerzone_internal_secret_key';
+
+  let similarJobIds;
+  try {
+    const response = await axios.post(
+      `${aiServiceUrl}/api/embeddings/similar-jobs`,
+      { job_id: jobId, limit },
+      { headers: { 'x-internal-secret': aiServiceSecret }, timeout: 15000 }
+    );
+    similarJobIds = response.data.data; // [{ job_id, similarity_score }]
+  } catch (error) {
+    // If 404, job not found or no embeddings
+    if (error.response?.status === 404) {
+      throw new NotFoundError('Không tìm thấy tin tuyển dụng.');
+    }
+    logger.error('Failed to call AI similar-jobs service:', {
+      message: error.message, jobId
+    });
+    throw new BadRequestError('Lỗi khi tìm kiếm việc làm tương tự.');
+  }
+
+  if (!similarJobIds || similarJobIds.length === 0) {
+    return { data: [], meta: { jobId, total: 0 } };
+  }
+
+  // 2. Fetch full job details from DB
+  const scoreMap = new Map(similarJobIds.map(r => [r.job_id, r.similarity_score]));
+  const objectIds = similarJobIds.map(r => new mongoose.Types.ObjectId(r.job_id));
+
+  const pipeline = [
+    { $match: { _id: { $in: objectIds } } },
+    {
+      $lookup: {
+        from: 'recruiterprofiles',
+        localField: 'recruiterProfileId',
+        foreignField: '_id',
+        as: 'recruiter'
+      }
+    },
+    { $unwind: { path: '$recruiter', preserveNullAndEmptyArrays: true } },
+    {
+      $addFields: {
+        'company.name': '$recruiter.company.name',
+        'company.logo': '$recruiter.company.logo',
+      }
+    },
+    {
+      $project: {
+        description: 0, requirements: 0, benefits: 0, address: 0,
+        embeddingsUpdatedAt: 0, chunks: 0, recruiter: 0, moderationHistory: 0,
+      }
+    },
+  ];
+
+  let results = await Job.aggregate(pipeline);
+
+  // Attach similarity scores and sort descending
+  results = results.map(j => ({
+    ...j,
+    similarityScore: scoreMap.get(j._id.toString()) || 0,
+  }));
+  results.sort((a, b) => b.similarityScore - a.similarityScore);
+
+  // Add isSaved status if authenticated
+  if (userId && results.length > 0) {
+    const jobIds = results.map(j => j._id);
+    const savedJobs = await SavedJob.find({
+      candidateId: userId,
+      jobId: { $in: jobIds }
+    }).select('jobId').lean();
+
+    const savedJobIds = new Set(savedJobs.map(s => s.jobId.toString()));
+    results = results.map(j => ({
+      ...j,
+      isSaved: savedJobIds.has(j._id.toString())
+    }));
+  }
+
+  logger.info('Similar jobs search completed', {
+    sourceJobId: jobId, resultsCount: results.length
+  });
+
+  return {
+    data: results,
+    meta: { jobId, total: results.length }
+  };
 };

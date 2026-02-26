@@ -368,3 +368,8 @@ export const externalJobSearchSchema = z.object({
   date_posted: z.enum(['all', 'today', '3days', 'week', 'month']).default('all').optional(),
   remote_jobs_only: z.coerce.boolean().optional(),
 });
+
+// Schema for similar jobs query parameters
+export const similarJobsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1, 'Limit phải lớn hơn 0').max(20, 'Limit không được vượt quá 20').default(6),
+});

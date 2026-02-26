@@ -97,6 +97,21 @@ router.get(
   recommendationController.getSuggestions
 );
 
+// Similar jobs endpoint (public, optional auth for isSaved status)
+router.get(
+  '/:id/similar',
+  (req, res, next) => {
+    if (req.headers.authorization) {
+      passport.authenticate('jwt', { session: false })(req, res, next);
+    } else {
+      next();
+    }
+  },
+  validationMiddleware.validateParams(commonSchema.idParamSchema),
+  validationMiddleware.validateQuery(jobSchema.similarJobsQuerySchema),
+  jobController.getSimilarJobs
+);
+
 router.get(
   '/:id',
   (req, res, next) => {
