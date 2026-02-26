@@ -234,3 +234,20 @@ export const getJobsByIds = asyncHandler(async (req, res) => {
     data: jobs,
   });
 });
+
+/**
+ * Search external jobs via OpenWebNinja JSearch API
+ */
+import * as externalJobService from '../services/externalJob.service.js';
+
+export const searchExternalJobs = asyncHandler(async (req, res) => {
+  const searchParams = req.validatedQuery || req.query;
+  const result = await externalJobService.searchExternalJobs(searchParams);
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy kết quả việc làm bên ngoài thành công.',
+    meta: result.meta,
+    data: result.data,
+  });
+});

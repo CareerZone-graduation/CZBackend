@@ -80,6 +80,13 @@ router.get(
   jobController.getJobDetailsForRecruiter
 );
 
+// External job search from JSearch (Public endpoint)
+router.get(
+  '/external/search',
+  validationMiddleware.validateQuery(jobSchema.externalJobSearchSchema),
+  jobController.searchExternalJobs
+);
+
 // Candidate suggestions endpoint (AI-powered recommendations)
 router.get(
   '/:id/suggestions',

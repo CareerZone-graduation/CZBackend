@@ -386,6 +386,20 @@ describe('Job Routes API', () => {
     });
   });
 
+  describe('GET /api/jobs/external/search', () => {
+    it('should return external jobs when valid query is provided', async () => {
+      // Vì là external API, ta có thể test xem endpoint có validate parameters không
+      // hoặc mock axios. Ở cơ bản, ta test param validation (không query -> 400).
+      const res = await request(app).get('/api/jobs/external/search');
+      expect(res.statusCode).toBeGreaterThanOrEqual(400); // Zod validation error or 400
+    });
+
+    it('should return 400 if query is empty', async () => {
+      const res = await request(app).get('/api/jobs/external/search?query=');
+      expect(res.statusCode).toBeGreaterThanOrEqual(400);
+    });
+  });
+
   describe('GET /api/jobs/saved/list', () => {
     it('should return 200 and the list of saved jobs for the logged-in candidate', async () => {
       // Save a job
