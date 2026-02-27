@@ -1243,7 +1243,7 @@ const generateQueryEmbedding = async (query) => {
     const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
     const aiServiceSecret = process.env.AI_INTERNAL_SECRET || 'careerzone_internal_secret_key';
     const response = await axios.post(
-      `${aiServiceUrl}/api/embeddings/query-embedding`,
+      `${aiServiceUrl}/api/v1/embeddings/query-embedding`,
       { query },
       { headers: { 'x-internal-secret': aiServiceSecret } }
     );
