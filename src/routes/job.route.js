@@ -7,8 +7,13 @@ import { getMapClustersSchema } from '../schemas/map.schema.js';
 import * as commonSchema from '../schemas/common.schema.js';
 import * as jobController from '../controllers/job.controller.js';
 import * as recommendationController from '../controllers/recommendation.controller.js';
+import * as jobSuggestionController from '../controllers/jobSuggestion.controller.js';
 
 const router = express.Router();
+
+// Job title suggestions (public - for autocomplete)
+router.get('/suggestions/titles', jobSuggestionController.searchJobTitles);
+router.get('/suggestions/popular', jobSuggestionController.getPopularJobTitles);
 
 router.post(
   '/',
