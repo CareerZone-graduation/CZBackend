@@ -158,8 +158,16 @@ Trả về JSON với cấu trúc:
       throw new Error('AI response is missing expected fields');
     }
     
+    // Ensure all fields are strings, not objects
+    const cleanedData = {
+      title: typeof enhancedData.title === 'string' ? enhancedData.title : '',
+      description: typeof enhancedData.description === 'string' ? enhancedData.description : '',
+      requirements: typeof enhancedData.requirements === 'string' ? enhancedData.requirements : '',
+      benefits: typeof enhancedData.benefits === 'string' ? enhancedData.benefits : '',
+    };
+    
     logger.info('Job content enhanced successfully');
-    return enhancedData;
+    return cleanedData;
   } catch (error) {
     logger.error('Error enhancing job content:', error.response?.data || error.message);
     
