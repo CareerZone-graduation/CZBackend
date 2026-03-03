@@ -55,11 +55,11 @@ import talentPoolRoutes from './routes/talentPool.route.js'; // Talent pool mana
 import supportRequestRoutes from './routes/supportRequest.route.js'; // Support request system
 import contactRoutes from './routes/contact.route.js'; // Public contact form
 import aiInterviewRoutes from './routes/aiInterview.route.js'; // MỚI: Route orchestration API sang FastAPI
-
-// � Python Proxy (for Development - WebRTC, Streaming, AI Gateway)
+import interactionRoutes from './routes/interaction.route.js';
+//  Python Proxy (for Development - WebRTC, Streaming, AI Gateway)
 import { pythonProxyMiddleware, getPythonProxyInstance } from './middleware/pythonProxy.middleware.js';
 
-// �🚧 Middlewares
+// 🚧 Middlewares
 import * as errorMiddleware from './middleware/error.middleware.js';
 import * as notFoundMiddleware from './middleware/notFound.middleware.js';
 
@@ -186,7 +186,7 @@ app.use('/api/support-requests', supportRequestRoutes);
 app.use('/api/contact', contactRoutes);
 
 app.use('/api/ai-interview', aiInterviewRoutes); // MỚI: Route orchestration API sang FastAPI
-
+app.use('/api/interactions', interactionRoutes);
 // 404 & error
 app.use(notFoundMiddleware.notFound);
 app.use(errorMiddleware.errorHandler);

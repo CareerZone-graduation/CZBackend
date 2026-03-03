@@ -3,6 +3,7 @@ import {
   getCandidateSuggestions,
   generateRecommendations as generateRecommendationsService,
   getRecommendations as getRecommendationsService,
+  getAIRecommendations as getAIRecommendationsService,
 } from '../services/recommendation.service.js';
 import { Job } from '../models/index.js';
 import { NotFoundError, ForbiddenError, UnprocessableEntityError } from '../utils/AppError.js';
@@ -17,26 +18,26 @@ export const getSuggestions = asyncHandler(async (req, res) => {
   const { id: jobId } = req.params;
   const { page = 1, limit = 10, minScore = 0.5 } = req.validatedQuery || req.query;
   const userId = req.user._id;
-  
+
   logger.info('Fetching candidate suggestions', { jobId, userId, page, limit, minScore });
-  
+
   // Verify job exists and populate recruiter profile to check ownership
   const job = await Job.findById(jobId).populate('recruiterProfileId');
-  
+
   if (!job) {
     throw new NotFoundError('Không tìm thấy tin tuyển dụng');
   }
-  
+
   // Verify authenticated user owns the job
   if (job.recruiterProfileId.userId.toString() !== userId.toString()) {
-    logger.warn('Unauthorized access attempt to job suggestions', { 
-      jobId, 
-      userId, 
-      jobOwnerId: job.recruiterProfileId.userId.toString() 
+    logger.warn('Unauthorized access attempt to job suggestions', {
+      jobId,
+      userId,
+      jobOwnerId: job.recruiterProfileId.userId.toString()
     });
     throw new ForbiddenError('Bạn không có quyền xem gợi ý cho tin tuyển dụng này');
   }
-  
+
   // NOTE: Embedding check removed - now using manual matching
   // If switching back to AI matching, uncomment this check:
   /*
@@ -48,14 +49,14 @@ export const getSuggestions = asyncHandler(async (req, res) => {
     );
   }
   */
-  
+
   // Get suggestions from service (using manual matching)
   const results = await getCandidateSuggestions(jobId, {
     page: parseInt(page),
     limit: Math.min(parseInt(limit), 50),
     minScore: parseFloat(minScore)
   });
-  
+
   logger.info('Suggestions retrieved successfully', {
     jobId,
     userId,
@@ -63,7 +64,7 @@ export const getSuggestions = asyncHandler(async (req, res) => {
     page,
     totalItems: results.data.pagination.totalItems
   });
-  
+
   res.json({
     success: true,
     data: results.data,
@@ -103,11 +104,34 @@ export const getRecommendations = asyncHandler(async (req, res) => {
 
   const result = await getRecommendationsService(userId, options);
 
-   res.status(200).json({
+  res.status(200).json({
     success: true,
     message: 'Lấy danh sách gợi ý việc làm thành công.',
     data: result.jobs,
     pagination: result.pagination,
     lastUpdated: result.lastUpdated
+  });
+});
+
+/**
+ * Get AI-powered job recommendations from FastAPI service
+ * @route GET /api/v1/candidate/recommendations/ai
+ * @access Private (Candidate only)
+ */
+export const getAIRecommendations = asyncHandler(async (req, res) => {
+  const userId = req.user._id.toString();
+  const { page = 1, limit = 20 } = req.query;
+
+  const result = await getAIRecommendationsService(userId, {
+    page: parseInt(page),
+    limit: Math.min(parseInt(limit), 50),
+  });
+
+  res.json({
+    success: true,
+    message: 'Lấy danh sách gợi ý việc làm AI thành công.',
+    data: result.jobs,
+    source: result.source,
+    pagination: result.pagination,
   });
 });

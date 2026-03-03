@@ -1,6 +1,7 @@
 import { CandidateProfile, Job, JobRecommendation, User } from '../models/index.js';
 import { NotFoundError, BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
+import config from '../config/index.js';
 import ngeohash from 'ngeohash';
 import { RECOMMENDATION_SCORING, CATEGORY_LABELS } from '../constants/jobCategories.js';
 
@@ -935,7 +936,7 @@ export const getCandidateSuggestions = async (jobId, options = {}) => {
     if (job.skills && job.skills.length > 0 && profile.skills && profile.skills.length > 0) {
       const jobSkillsLower = job.skills.map(s => s.toLowerCase().trim());
       const candidateSkillsLower = profile.skills.map(s => s.name.toLowerCase().trim());
-      
+
       let exactMatches = 0;
       let partialMatches = 0;
       const matchedSkillNames = [];
@@ -946,7 +947,7 @@ export const getCandidateSuggestions = async (jobId, options = {}) => {
           matchedSkillNames.push(candidateSkill);
         } else {
           // Check partial match
-          const hasPartial = jobSkillsLower.some(jobSkill => 
+          const hasPartial = jobSkillsLower.some(jobSkill =>
             jobSkill.includes(candidateSkill) || candidateSkill.includes(jobSkill)
           );
           if (hasPartial) {
@@ -979,14 +980,14 @@ export const getCandidateSuggestions = async (jobId, options = {}) => {
 
     // 3. Location matching (max 20 points)
     if (job.location?.province && profile.preferredLocations?.length > 0) {
-      const locationMatch = profile.preferredLocations.find(loc => 
+      const locationMatch = profile.preferredLocations.find(loc =>
         loc.province === job.location.province
       );
       if (locationMatch) {
         let locationScore = 15;
         // Bonus for district match
-        if (locationMatch.district && job.location.district && 
-            locationMatch.district === job.location.district) {
+        if (locationMatch.district && job.location.district &&
+          locationMatch.district === job.location.district) {
           locationScore = 20;
         }
         score += locationScore;
@@ -1274,3 +1275,125 @@ export const getCandidateSuggestionsAI = async (jobId, options = {}) => {
 };
 */
 // ======== END OF AI VECTOR SEARCH IMPLEMENTATION ========
+
+// ============================================================================
+// AI-POWERED RECOMMENDATIONS VIA FASTAPI (LightFM / Collaborative Filtering)
+// ============================================================================
+
+/**
+ * Lấy job recommendations từ FastAPI AI service (LightFM model)
+ * FastAPI trả về { userId, recommendations: [{ jobId, score }], source }
+ * source có thể là: "model" | "cold_start" | "popular"
+ *
+ * @param {string} userId - User ID (MongoDB ObjectId string)
+ * @param {Object} options - { page, limit }
+ * @returns {Promise<Object>} - { jobs, source, pagination }
+ */
+export const getAIRecommendations = async (userId, options = {}) => {
+  const { page = 1, limit = 20 } = options;
+
+  logger.info('Fetching AI recommendations from FastAPI', { userId });
+
+  // 1. Gọi FastAPI
+  const aiUrl = `${config.PYTHON_SERVICE_URL}/api/v1/recommendations/${userId}`;
+
+  let aiResponse;
+  try {
+    const response = await fetch(aiUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        // 'X-Internal-Secret': config.INTERNAL_API_KEY || '',
+      },
+      signal: AbortSignal.timeout(10000), // 10s timeout
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      logger.error('FastAPI recommendation error', {
+        status: response.status,
+        body: errorBody,
+      });
+
+      if (response.status === 503) {
+        throw new BadRequestError('Hệ thống gợi ý AI chưa sẵn sàng. Vui lòng thử lại sau.');
+      }
+      throw new BadRequestError('Không thể lấy gợi ý việc làm từ AI.');
+    }
+
+    aiResponse = await response.json();
+  } catch (error) {
+    if (error instanceof BadRequestError) throw error;
+    logger.error('Failed to connect to FastAPI service', { error: error.message });
+    throw new BadRequestError('Không thể kết nối đến dịch vụ AI. Vui lòng thử lại sau.');
+  }
+
+  const { recommendations = [], source = 'unknown' } = aiResponse;
+
+  if (recommendations.length === 0) {
+    return {
+      jobs: [],
+      source,
+      pagination: {
+        currentPage: page,
+        totalPages: 0,
+        totalItems: 0,
+        limit,
+        hasMore: false,
+      },
+    };
+  }
+
+  // 2. Lấy danh sách jobIds từ AI response
+  const allJobIds = recommendations.map(r => r.jobId);
+  const totalItems = allJobIds.length;
+
+  // 3. Phân trang
+  const skip = (page - 1) * limit;
+  const paginatedJobIds = allJobIds.slice(skip, skip + limit);
+  const paginatedScores = recommendations.slice(skip, skip + limit);
+
+  // 4. Lấy chi tiết job từ MongoDB (chỉ lấy jobs active + chưa hết hạn)
+  const jobs = await Job.find({
+    _id: { $in: paginatedJobIds },
+    status: 'ACTIVE',
+    deadline: { $gte: new Date() },
+  })
+    .select('title description location address type workType minSalary maxSalary experience category skills deadline recruiterProfileId createdAt')
+    .populate('recruiterProfileId', 'fullname company')
+    .lean();
+
+  // 5. Ghép score từ AI vào job data (giữ thứ tự từ AI)
+  const jobMap = new Map(jobs.map(j => [j._id.toString(), j]));
+
+  const enrichedJobs = paginatedScores
+    .map(rec => {
+      const job = jobMap.get(rec.jobId);
+      if (!job) return null; // job đã bị xóa / hết hạn
+      return {
+        ...job,
+        aiScore: rec.score,
+        company: job.recruiterProfileId?.company || null,
+      };
+    })
+    .filter(Boolean);
+
+  logger.info('AI recommendations enriched', {
+    userId,
+    source,
+    totalFromAI: recommendations.length,
+    returnedCount: enrichedJobs.length,
+  });
+
+  return {
+    jobs: enrichedJobs,
+    source,
+    pagination: {
+      currentPage: page,
+      totalPages: Math.ceil(totalItems / limit),
+      totalItems,
+      limit,
+      hasMore: page * limit < totalItems,
+    },
+  };
+};

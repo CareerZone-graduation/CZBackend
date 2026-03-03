@@ -41,11 +41,6 @@ const config = {
   // KAFKA_SSL_ENABLED: process.env.KAFKA_SSL_ENABLED || 'false', // 'true' or 'false'
   // RabbitMQ Configuration
   RABBITMQ_URL: process.env.RABBITMQ_URL,
-  RABBITMQ_HOST: process.env.RABBITMQ_HOST,
-  RABBITMQ_PORT: parseInt(process.env.RABBITMQ_PORT) || 5672,
-  RABBITMQ_USERNAME: process.env.RABBITMQ_USERNAME,
-  RABBITMQ_PASSWORD: process.env.RABBITMQ_PASSWORD,
-  RABBITMQ_VIRTUAL_HOST: process.env.RABBITMQ_VIRTUAL_HOST || '/',
 
   // Cloudinary Configuration
   CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME,

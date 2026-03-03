@@ -2950,7 +2950,7 @@ export const getSimilarJobs = async (jobId, options = {}, userId = null) => {
   let similarJobIds;
   try {
     const response = await axios.post(
-      `${aiServiceUrl}/api/embeddings/similar-jobs`,
+      `${aiServiceUrl}/api/v1/embeddings/similar-jobs`,
       { job_id: jobId, limit },
       { headers: { 'x-internal-secret': aiServiceSecret }, timeout: 15000 }
     );
