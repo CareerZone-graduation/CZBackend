@@ -56,8 +56,6 @@ import supportRequestRoutes from './routes/supportRequest.route.js'; // Support 
 import contactRoutes from './routes/contact.route.js'; // Public contact form
 import aiInterviewRoutes from './routes/aiInterview.route.js'; // MỚI: Route orchestration API sang FastAPI
 import interactionRoutes from './routes/interaction.route.js';
-//  Python Proxy (for Development - WebRTC, Streaming, AI Gateway)
-import { pythonProxyMiddleware, getPythonProxyInstance } from './middleware/pythonProxy.middleware.js';
 
 // 🚧 Middlewares
 import * as errorMiddleware from './middleware/error.middleware.js';
@@ -111,27 +109,10 @@ app.use(cors({
 
 // app.options("*", cors()); // xử lý preflight
 
-// === KHỞI TẠO PASSPORT (CẦN TRƯỚC PROXY ĐỂ VERIFY JWT) ===
+// === KHỞI TẠO PASSPORT ===
 app.use(passport.initialize());
 
-// === PYTHON PROXY (ĐẶT TRƯỚC BODY PARSER ĐỂ TRÁNH BUFFER STREAMING/UPLOAD) ===
-// Route: /api/python/* -> Python FastAPI service
-// Chỉ hoạt động trong development hoặc khi ENABLE_PYTHON_PROXY=true
-// Yêu cầu JWT authentication và role = 'candidate'
-if (config.NODE_ENV === 'development' || process.env.ENABLE_PYTHON_PROXY === 'true') {
-  // Authenticated proxy cho candidate (WebRTC, AI features)
-  app.use('/api/python', pythonProxyMiddleware({
-    requireAuth: true,
-    allowedRole: 'candidate'
-  }));
 
-  // Nếu cần thêm route public (không cần auth), có thể thêm:
-  // app.use('/api/python-public', pythonProxyMiddleware({ requireAuth: false }));
-
-  console.log('[Python Proxy] ✅ Enabled - proxying /api/python/* (candidate auth required)');
-}
-
-// Khác - ĐẶT SAU PROXY ĐỂ KHÔNG CONSUME BODY CỦA PROXY REQUESTS
 const shouldCompress = (req, res) => {
   if (req.noCompression) {
     // don't compress responses with this request header
@@ -147,7 +128,7 @@ app.use(cookieParser());
 
 // welcome
 app.get('/', (_, res) => res.status(200).json(
-  { message: 'Welcome to CareerZone API"!' }
+  { message: 'Welcome to CareerZone API!' }
 ))
 // Health check
 app.get('/health', (_, res) =>

@@ -32,10 +32,7 @@ const connectDB = async () => {
 
   } catch (error) {
     logger.error('Database connection failed:', error);
-    logger.warn('⚠️  Server will continue running without database connection');
-    logger.warn('⚠️  Some features may not work properly');
-    // Don't exit - allow server to run for testing AI features
-    // process.exit(1);
+    process.exit(1);
   }
 };
 

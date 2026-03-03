@@ -114,8 +114,6 @@ const config = {
   ADMIN_FE_URL: process.env.ADMIN_FE_URL || 'http://localhost:3200',
   // Python Proxy Configuration (for Development Gateway)
   PYTHON_SERVICE_URL: process.env.PYTHON_SERVICE_URL || process.env.AI_SERVICE_URL || 'http://localhost:8000',
-  PYTHON_PROXY_TIMEOUT: parseInt(process.env.PYTHON_PROXY_TIMEOUT) || 300000, // 5 minutes for streaming
-  ENABLE_PYTHON_PROXY: process.env.ENABLE_PYTHON_PROXY === 'true',
 
   // OpenWebNinja API Key
   OPENWEBNINJA_API_KEY: process.env.OPENWEBNINJA_API_KEY,
