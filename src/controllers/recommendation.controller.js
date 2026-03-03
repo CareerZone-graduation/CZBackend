@@ -1,6 +1,6 @@
 import asyncHandler from 'express-async-handler';
 import {
-  getCandidateSuggestions,
+  getCandidateSuggestionsAI,
   generateRecommendations as generateRecommendationsService,
   getRecommendations as getRecommendationsService,
   getAIRecommendations as getAIRecommendationsService,
@@ -38,20 +38,8 @@ export const getSuggestions = asyncHandler(async (req, res) => {
     throw new ForbiddenError('Bạn không có quyền xem gợi ý cho tin tuyển dụng này');
   }
 
-  // NOTE: Embedding check removed - now using manual matching
-  // If switching back to AI matching, uncomment this check:
-  /*
-  // Check if job has embeddings
-  if (!job.chunks || job.chunks.length === 0) {
-    logger.warn('Job has no embeddings', { jobId });
-    throw new UnprocessableEntityError(
-      'Tin tuyển dụng chưa được xử lý. Vui lòng thử lại sau vài phút.'
-    );
-  }
-  */
-
-  // Get suggestions from service (using manual matching)
-  const results = await getCandidateSuggestions(jobId, {
+  // Get suggestions from service (using AI matching)
+  const results = await getCandidateSuggestionsAI(jobId, {
     page: parseInt(page),
     limit: Math.min(parseInt(limit), 50),
     minScore: parseFloat(minScore)

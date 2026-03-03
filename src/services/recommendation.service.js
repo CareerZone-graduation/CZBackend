@@ -1092,188 +1092,132 @@ export const getCandidateSuggestions = async (jobId, options = {}) => {
  * ========================================
  * Uncomment this function and rename to getCandidateSuggestions to use AI-powered matching
  */
-/*
 export const getCandidateSuggestionsAI = async (jobId, options = {}) => {
   const { page = 1, limit = 10, minScore = 0.5 } = options;
-  const skip = (page - 1) * limit;
 
-  logger.info('Getting candidate suggestions via vector search', {
+  logger.info('Getting candidate suggestions via AI service', {
     jobId,
     page,
     limit,
     minScore
   });
 
-  // Fetch job and validate it has embeddings
+  // Fetch job
   const job = await Job.findById(jobId).lean();
   if (!job) {
     throw new NotFoundError('Không tìm thấy tin tuyển dụng');
   }
 
-  if (!job.chunks || job.chunks.length === 0) {
-    throw new BadRequestError('Tin tuyển dụng chưa được xử lý. Vui lòng thử lại sau vài phút.');
-  }
+  // 1. Gọi FastAPI AI Service để lấy danh sách ứng viên (đã được score & paginate bằng Python)
+  const aiUrl = `${config.PYTHON_SERVICE_URL}/api/v1/recommendations/candidates/${jobId}?page=${page}&limit=${limit}&minScore=${minScore}`;
 
-  // Calculate average embedding vector from job chunks
-  const jobEmbeddings = job.chunks
-    .filter(chunk => chunk.embedding && chunk.embedding.length > 0)
-    .map(chunk => chunk.embedding);
-
-  if (jobEmbeddings.length === 0) {
-    throw new BadRequestError('Tin tuyển dụng không có embedding hợp lệ');
-  }
-  // có thể không cần vì hiện quy định job chỉ có 1 chunk, nên avgEmbedding = jobEmbeddings[0] lun, nhưng dòng này để cho trường hợp job có nhiều chunk (nếu có chỉnh sửa trong tương lai)
-  const avgEmbedding = calculateAverageEmbedding(jobEmbeddings);
-
-  logger.info('Calculated average embedding for job', {
-    jobId,
-    chunkCount: jobEmbeddings.length,
-    embeddingDimension: avgEmbedding.length
-  });
-
-  // Build and execute MongoDB Atlas Vector Search pipeline
-  const pipeline = buildVectorSearchPipeline(avgEmbedding, {
-    numCandidates: 200,
-    limit: 100,
-    minScore: minScore,
-    skip: skip
-  });
-
-  const matchedUsers = await User.aggregate(pipeline);
-
-  // Giai đoạn 2: tinh chỉnh
-  // Re-rank based on best chunk match
-  if (matchedUsers.length > 0) {
-    matchedUsers.forEach(user => {
-      // Default to the vector search score (based on average)
-      let bestScore = user.similarityScore;
-
-      // If user has chunks, see if any single chunk matches better than the average
-      if (user.chunks && user.chunks.length > 0) {
-        let maxChunkScore = -1;
-
-        for (const chunk of user.chunks) {
-          if (chunk.embedding && chunk.embedding.length > 0) {
-            // Calculate cosine similarity between Job Average and Candidate Chunk
-            const score = cosineSimilarity(avgEmbedding, chunk.embedding);
-            if (score > maxChunkScore) {
-              maxChunkScore = score;
-            }
-          }
-        }
-
-        // If a specific chunk is a better match, upgrade the score
-        if (maxChunkScore > bestScore) {
-          bestScore = maxChunkScore;
-        }
-      }
-
-      user.similarityScore = bestScore;
+  let aiResponse;
+  try {
+    const response = await fetch(aiUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      signal: AbortSignal.timeout(15000), // 15s timeout
     });
 
-    // Sort by new refined score
-    matchedUsers.sort((a, b) => b.similarityScore - a.similarityScore);
+    if (!response.ok) {
+      const errorBody = await response.text();
+      logger.error('FastAPI candidate recommendation error', {
+        status: response.status,
+        body: errorBody,
+      });
+
+      if (response.status === 503 || response.status === 400 || response.status === 404) {
+        throw new BadRequestError('Hệ thống AI hiện không thể xử lý yêu cầu hoặc tin tuyển dụng chưa đủ dữ liệu (embeddings). Vui lòng thử lại sau.');
+      }
+      throw new BadRequestError('Không thể lấy danh sách ứng viên gợi ý từ AI.');
+    }
+
+    aiResponse = await response.json();
+  } catch (error) {
+    if (error instanceof BadRequestError) throw error;
+    logger.error('Failed to connect to FastAPI service', { error: error.message });
+    throw new BadRequestError('Không thể kết nối đến dịch vụ AI. Vui lòng thử lại sau.');
   }
 
-  logger.info('Vector search completed and re-ranked', {
-    jobId,
-    matchedCount: matchedUsers.length
-  });
+  const aiCandidates = aiResponse.recommendations || [];
+  const paginationData = aiResponse.pagination || {
+    currentPage: page, totalPages: 0, totalItems: 0, limit, hasNextPage: false, hasPrevPage: false
+  };
 
-  if (matchedUsers.length === 0) {
+  if (aiCandidates.length === 0) {
     return {
       data: {
         candidates: [],
-        pagination: {
-          currentPage: page,
-          totalPages: 0,
-          totalItems: 0,
-          limit,
-          hasNextPage: false,
-          hasPrevPage: false
-        },
+        pagination: paginationData,
         jobInfo: {
           jobId,
           title: job.title,
-          hasEmbeddings: true
+          hasEmbeddings: true,
+          matchingMethod: 'ai'
         }
       }
     };
   }
 
-  // Fetch candidate profiles for matched users
-  const userIds = matchedUsers.map(u => u._id);
-  const profiles = await CandidateProfile.find({ userId: { $in: userIds } })
-    .select('userId fullname avatar bio skills experiences preferredCategories')
+  // 2. Fetch minimal CandidateProfile fields to render UI for the returned paginated candidates
+  const profileIds = aiCandidates.map(u => u.candidateProfileId).filter(Boolean);
+  const profiles = await CandidateProfile.find({ _id: { $in: profileIds } })
+    .select('userId fullname avatar bio skills experiences')
     .lean();
 
-  logger.info('Fetched candidate profiles', {
+  logger.info('Fetched basic candidate UI profiles', {
     jobId,
     profileCount: profiles.length
   });
 
-  // Create lookup maps for efficient data access
-  const profileMap = new Map(profiles.map(p => [p.userId.toString(), p]));
-  const scoreMap = new Map(matchedUsers.map(u => [u._id.toString(), u.similarityScore]));
+  // Create lookup map
+  const profileMap = new Map(profiles.map(p => [p._id.toString(), p]));
 
-  // Enrich results with profile data and calculated fields
-  const candidates = matchedUsers
-    .map(user => {
-      const profile = profileMap.get(user._id.toString());
-      if (!profile) {
-        logger.warn('Profile not found for matched user', { userId: user._id.toString() });
-        return null;
-      }
+  // Merge Python AI data with Node.js UI data
+  const candidates = aiCandidates
+    .map(aiUser => {
+      const profile = profileMap.get(aiUser.candidateProfileId);
+      if (!profile) return null;
 
       const currentPosition = getCurrentPosition(profile.experiences || []);
-      const experienceYears = calculateExperienceYears(profile.experiences || []);
-      const matchedSkills = extractMatchedSkills(job.skills || [], profile.skills || []);
-      const similarityScore = scoreMap.get(user._id.toString());
 
       return {
-        userId: user._id.toString(),
-        candidateProfileId: profile._id.toString(),
+        userId: aiUser.userId,
+        candidateProfileId: aiUser.candidateProfileId,
         fullname: profile.fullname,
         avatar: profile.avatar,
         bio: profile.bio,
         currentPosition,
         skills: profile.skills?.slice(0, 5) || [],
-        similarityScore: similarityScore,
-        similarityPercentage: Math.round(similarityScore * 100),
-        matchedSkills,
-        experienceYears
+        similarityScore: aiUser.score,
+        similarityPercentage: aiUser.similarityPercentage,
+        matchedSkills: aiUser.matchedSkills,
+        experienceYears: aiUser.experienceYears,
+        matchReasons: aiUser.matchReasons
       };
     })
-    .filter(Boolean); // Remove null entries
+    .filter(Boolean); // Lọc null
 
-  // Calculate total count for pagination
-  const totalCount = candidates.length;
-
-  logger.info('Enriched candidate suggestions', {
+  logger.info('AI Refactored Match completed', {
     jobId,
-    candidateCount: candidates.length
+    returnedCount: candidates.length
   });
 
   return {
     data: {
       candidates,
-      pagination: {
-        currentPage: page,
-        totalPages: Math.ceil(totalCount / limit),
-        totalItems: totalCount,
-        limit,
-        hasNextPage: page * limit < totalCount,
-        hasPrevPage: page > 1
-      },
+      pagination: paginationData,
       jobInfo: {
         jobId,
         title: job.title,
-        hasEmbeddings: true
+        hasEmbeddings: true,
+        matchingMethod: 'ai-python-scored'
       }
     }
   };
 };
-*/
 // ======== END OF AI VECTOR SEARCH IMPLEMENTATION ========
 
 // ============================================================================
