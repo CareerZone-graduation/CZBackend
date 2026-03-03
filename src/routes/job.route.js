@@ -112,6 +112,21 @@ router.get(
   jobController.getSimilarJobs
 );
 
+// Also liked jobs endpoint (public, optional auth for isSaved status)
+router.get(
+  '/:id/also-liked',
+  (req, res, next) => {
+    if (req.headers.authorization) {
+      passport.authenticate('jwt', { session: false })(req, res, next);
+    } else {
+      next();
+    }
+  },
+  validationMiddleware.validateParams(commonSchema.idParamSchema),
+  validationMiddleware.validateQuery(jobSchema.similarJobsQuerySchema),
+  jobController.getAlsoLikedJobs
+);
+
 router.get(
   '/:id',
   (req, res, next) => {

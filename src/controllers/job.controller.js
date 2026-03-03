@@ -266,3 +266,18 @@ export const getSimilarJobs = asyncHandler(async (req, res) => {
     data: result.data,
   });
 });
+
+export const getAlsoLikedJobs = asyncHandler(async (req, res) => {
+  const { id: jobId } = req.params;
+  const userId = req.user ? req.user._id : null;
+  const options = req.validatedQuery || req.query;
+
+  const result = await jobService.getAlsoLikedJobs(jobId, options, userId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy danh sách việc làm người khác cũng quan tâm thành công.',
+    meta: result.meta,
+    data: result.data,
+  });
+});

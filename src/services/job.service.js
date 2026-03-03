@@ -3032,3 +3032,101 @@ export const getSimilarJobs = async (jobId, options = {}, userId = null) => {
     meta: { jobId, total: results.length }
   };
 };
+
+/**
+ * Get jobs that users with similar preferences also liked via AI Python service (Item-Item CF)
+ */
+export const getAlsoLikedJobs = async (jobId, options = {}, userId = null) => {
+  const { limit = 6 } = options;
+
+  // 1. Call FastAPI AI service — it handles LightFM item-item CF internally
+  const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
+  const aiServiceSecret = process.env.AI_INTERNAL_SECRET || 'careerzone_internal_secret_key';
+
+  let similarJobIds;
+  try {
+    const response = await axios.get(
+      `${aiServiceUrl}/api/v1/recommendation/similar-jobs-cf/${jobId}?limit=${limit}`,
+      { headers: { 'x-internal-secret': aiServiceSecret }, timeout: 15000 }
+    );
+    similarJobIds = response.data.data; // [{ jobId, score }]
+  } catch (error) {
+    if (error.response?.status === 404) {
+      throw new NotFoundError('Không tìm thấy tin tuyển dụng.');
+    }
+    logger.error('Failed to call AI similar-jobs-cf service:', {
+      message: error.message, jobId
+    });
+    // Fallback if AI fails:
+    similarJobIds = [];
+  }
+
+  if (!similarJobIds || similarJobIds.length === 0) {
+    return { data: [], meta: { jobId, total: 0 } };
+  }
+
+  // 2. Fetch full job details from DB
+  const scoreMap = new Map(similarJobIds.map(r => [r.jobId, r.score]));
+  // Filter out invalid object IDs just in case
+  const objectIds = similarJobIds
+    .filter(r => mongoose.Types.ObjectId.isValid(r.jobId))
+    .map(r => new mongoose.Types.ObjectId(r.jobId));
+
+  const pipeline = [
+    { $match: { _id: { $in: objectIds } } },
+    {
+      $lookup: {
+        from: 'recruiterprofiles',
+        localField: 'recruiterProfileId',
+        foreignField: '_id',
+        as: 'recruiter'
+      }
+    },
+    { $unwind: { path: '$recruiter', preserveNullAndEmptyArrays: true } },
+    {
+      $addFields: {
+        'company.name': '$recruiter.company.name',
+        'company.logo': '$recruiter.company.logo',
+      }
+    },
+    {
+      $project: {
+        description: 0, requirements: 0, benefits: 0, address: 0,
+        embeddingsUpdatedAt: 0, chunks: 0, recruiter: 0, moderationHistory: 0,
+      }
+    },
+  ];
+
+  let results = await Job.aggregate(pipeline);
+
+  // Attach similarity scores and sort descending
+  results = results.map(j => ({
+    ...j,
+    similarityScore: scoreMap.get(j._id.toString()) || 0,
+  }));
+  results.sort((a, b) => b.similarityScore - a.similarityScore);
+
+  // Add isSaved status if authenticated
+  if (userId && results.length > 0) {
+    const jobIds = results.map(j => j._id);
+    const savedJobs = await SavedJob.find({
+      candidateId: userId,
+      jobId: { $in: jobIds }
+    }).select('jobId').lean();
+
+    const savedJobIds = new Set(savedJobs.map(s => s.jobId.toString()));
+    results = results.map(j => ({
+      ...j,
+      isSaved: savedJobIds.has(j._id.toString())
+    }));
+  }
+
+  logger.info('Also Liked jobs search completed', {
+    sourceJobId: jobId, resultsCount: results.length
+  });
+
+  return {
+    data: results,
+    meta: { jobId, total: results.length }
+  };
+};
