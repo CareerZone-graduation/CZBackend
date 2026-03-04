@@ -21,3 +21,4 @@ export { default as TalentPool } from './TalentPool.js';
 export { default as ProfileUnlock } from './ProfileUnlock.js';
 export { default as SupportRequest } from './SupportRequest.js';
 export { default as Interaction } from './Interaction.js';
+export { default as CopilotSession } from './CopilotSession.js';

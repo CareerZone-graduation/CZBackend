@@ -56,6 +56,7 @@ import supportRequestRoutes from './routes/supportRequest.route.js'; // Support 
 import contactRoutes from './routes/contact.route.js'; // Public contact form
 import aiInterviewRoutes from './routes/aiInterview.route.js'; // MỚI: Route orchestration API sang FastAPI
 import interactionRoutes from './routes/interaction.route.js';
+import copilotRoutes from './routes/copilot.route.js'; // Copilot API
 
 // 🚧 Middlewares
 import * as errorMiddleware from './middleware/error.middleware.js';
@@ -168,6 +169,8 @@ app.use('/api/contact', contactRoutes);
 
 app.use('/api/ai-interview', aiInterviewRoutes); // MỚI: Route orchestration API sang FastAPI
 app.use('/api/interactions', interactionRoutes);
+app.use('/api/copilot', copilotRoutes);
+
 // 404 & error
 app.use(notFoundMiddleware.notFound);
 app.use(errorMiddleware.errorHandler);
