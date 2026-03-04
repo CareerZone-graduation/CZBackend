@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { Job, InterviewRoom, Application, SavedJob, RecruiterProfile } from '../models/index.js';
+import { Job, InterviewRoom, Application, SavedJob, RecruiterProfile, CandidateProfile } from '../models/index.js';
 import config from '../config/index.js';
 
 /**
@@ -16,6 +16,8 @@ export const get_job_detail = async (args) => {
     const job = await Job.findById(jobId).populate('recruiterProfileId').lean();
     return job;
 };
+
+//TODO: bổ sung top_n bên fastapi
 
 /**
  * Tool 3: get_recommendations
@@ -38,7 +40,75 @@ export const get_recommendations = async (userId, args = {}) => {
         }
 
         const data = await response.json();
-        return data;
+        console.log('Recommendations from FastAPI:', data);
+
+        if (!data.recommendations || data.recommendations.length === 0) {
+            return { data: [], totalCount: 0 };
+        }
+
+        const jobIds = data.recommendations.map(r => new mongoose.Types.ObjectId(r.jobId));
+
+        const jobs = await Job.aggregate([
+            { $match: { _id: { $in: jobIds } } },
+            {
+                $lookup: {
+                    from: 'recruiterprofiles',
+                    localField: 'recruiterProfileId',
+                    foreignField: '_id',
+                    as: 'recruiter',
+                    pipeline: [
+                        { $project: { 'company.name': 1, 'company.logo': 1 } }
+                    ]
+                }
+            },
+            { $unwind: { path: '$recruiter', preserveNullAndEmptyArrays: true } },
+            {
+                $project: {
+                    _id: 1,
+                    title: 1,
+                    province: '$location.province',
+                    district: '$location.district',
+                    minSalary: 1,
+                    maxSalary: 1,
+                    type: 1,
+                    workType: 1,
+                    experience: 1,
+                    category: 1,
+                    skills: 1,
+                    deadline: 1,
+                    createdAt: 1,
+                    company: '$recruiter.company.name',
+                    logo: '$recruiter.company.logo'
+                }
+            }
+        ]);
+
+        // Map back to preserve order from recommendations and format salary
+        const jobMap = jobs.reduce((acc, job) => {
+            acc[job._id.toString()] = job;
+            return acc;
+        }, {});
+
+        const formattedJobs = data.recommendations
+            .map(r => {
+                const job = jobMap[r.jobId];
+                if (!job) return null;
+                return {
+                    ...job,
+                    minSalary: job.minSalary?.toString() || null,
+                    maxSalary: job.maxSalary?.toString() || null,
+                    // LightFM scores are complex (logits), we don't display them as % unless normalized
+                    matchScore: 0
+                };
+            })
+            .filter(j => j !== null);
+
+        return {
+            data: formattedJobs,
+            totalCount: formattedJobs.length,
+            userId: data.userId,
+            source: data.source
+        };
     } catch (error) {
         console.error('Error calling get_recommendations from FastAPI:', error);
         throw error;
@@ -380,24 +450,30 @@ export const getSavedJobsExpiringSoon = async (userId, withinDays = 7) => {
 /**
  * 5.7 get_my_applications (danh sách công việc đã ứng tuyển của Candidate)
  */
-export const get_my_applications = async (candidateProfileId, args = {}) => {
-    const { status, limit = 10 } = args;
-    const filter = { candidateProfileId: new mongoose.Types.ObjectId(candidateProfileId) };
+export const get_my_applications = async (userId, args = {}) => {
+    const { status, limit = 5 } = args;
+    const candidate = await CandidateProfile.findOne({ userId: new mongoose.Types.ObjectId(userId) }).select('_id');
+    if (!candidate) return [];
+
+    const filter = { candidateProfileId: candidate._id };
 
     if (status) {
         filter.status = status;
     }
 
-    return Application.find(filter)
-        .populate({
-            path: 'jobId',
-            select: 'title location.province type company category deadline',
-            populate: {
-                path: 'recruiterProfileId',
-                select: 'company.name company.logo'
-            }
-        })
+    const applications = await Application.find(filter)
+        .select('status appliedAt lastStatusUpdateAt activityHistory offerLetter offerFile isDeclineByCandidate jobSnapshot')
         .sort({ appliedAt: -1 })
         .limit(limit)
         .lean();
+
+    return applications.map(app => ({
+        ...app,
+        latestActivity: app.activityHistory?.length > 0 ? app.activityHistory[app.activityHistory.length - 1] : null,
+        // Remove full history if not needed by LLM to save tokens, 
+        // but user asked for "đối tượng cuối cùng" so providing it explicitly is good.
+        hasOffer: !!(app.offerLetter || app.offerFile || app.status === 'OFFER_SENT' || app.status === 'ACCEPTED'),
+        isRejected: app.status === 'REJECTED' || app.status === 'INTERVIEW_FAILED',
+        isDeclined: app.status === 'OFFER_DECLINED' || app.isDeclineByCandidate
+    }));
 };
