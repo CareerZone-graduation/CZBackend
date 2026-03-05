@@ -1488,7 +1488,7 @@ const buildPreFilter = (searchParams) => {
   if (searchParams.maxSalary) {
     preFilter.maxSalary = { $lte: searchParams.maxSalary };
   }
-
+  logger.info(`[buildPreFilter] Final filter keys:`, preFilter);
   return preFilter;
 
 };
@@ -1605,7 +1605,6 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
   // Build common filter
   const searchFilter = buildSearchFilter(searchParams);
 
-  const preFilter = buildPreFilter(searchParams);
 
   // vectorSearch filter doesn't support $geoWithin, so we build one without geo params
   const vectorSearchParams = { ...searchParams };

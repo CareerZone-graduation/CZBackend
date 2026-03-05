@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { Job, InterviewRoom, Application, SavedJob, RecruiterProfile, CandidateProfile } from '../models/index.js';
 import config from '../config/index.js';
+import { normalizeLocation } from '../utils/locationUtils.js';
 
 /**
  * Tool 2: get_job_detail
@@ -13,7 +14,14 @@ export const get_job_detail = async (args) => {
         throw new Error('jobId is required');
     }
 
-    const job = await Job.findById(jobId).populate('recruiterProfileId').lean();
+    const job = await Job.findById(jobId)
+        .select('-chunks -moderationHistory -moderationStatus -embeddingsUpdatedAt')
+        .populate({
+            path: 'recruiterProfileId',
+            select: 'fullname company.name company.about company.logo company.industry company.website'
+        })
+        .lean();
+
     return job;
 };
 
@@ -175,8 +183,11 @@ export const hybridSearchJobs = async (args = {}) => {
             const url = `${config.PYTHON_SERVICE_URL}/api/v1/embeddings/query-embedding`;
             const response = await fetch(url, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: query.trim(), model: 'models/text-embedding-004' })
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Internal-Secret': config.INTERNAL_API_KEY || '',
+                },
+                body: JSON.stringify({ query: query.trim(), model: 'models/gemini-embedding-001' })
             });
 
             if (!response.ok) {
@@ -187,21 +198,28 @@ export const hybridSearchJobs = async (args = {}) => {
                 const queryVector = data.embedding;
 
                 const vectorFilter = {
-                    compound: {
-                        must: [
-                            { equals: { path: 'status', value: 'ACTIVE' } },
-                            { equals: { path: 'moderationStatus', value: 'APPROVED' } }
-                        ],
-                        filter: []
-                    }
+                    status: 'ACTIVE',
+                    moderationStatus: 'APPROVED',
+                    deadline: { $gte: new Date() }
                 };
 
-                // Hard filters vào vectorSearch pre-filter
-                if (province) vectorFilter.compound.must.push({ equals: { path: 'location.province', value: province } });
-                if (category) vectorFilter.compound.must.push({ equals: { path: 'category', value: category } });
-                if (type) vectorFilter.compound.must.push({ equals: { path: 'type', value: type } });
-                if (workType) vectorFilter.compound.must.push({ equals: { path: 'workType', value: workType } });
-                if (experience) vectorFilter.compound.must.push({ equals: { path: 'experience', value: experience } });
+                // Normalize location if provided
+                let normalizedProvince = province;
+                let normalizedDistrict = district;
+                if (province || district) {
+                    const normalized = normalizeLocation({ province, district });
+                    normalizedProvince = normalized.province;
+                    normalizedDistrict = normalized.district;
+                }
+
+                // Hard filters vào vectorSearch pre-filter (MQL style)
+                if (normalizedProvince) vectorFilter['location.province'] = normalizedProvince;
+                if (normalizedDistrict) vectorFilter['location.district'] = normalizedDistrict;
+                console.log(normalizedProvince, normalizedDistrict);
+                if (category) vectorFilter.category = category;
+                if (type) vectorFilter.type = type;
+                if (workType) vectorFilter.workType = workType;
+                if (experience) vectorFilter.experience = experience;
 
                 pipeline.push({
                     $vectorSearch: {
@@ -209,16 +227,34 @@ export const hybridSearchJobs = async (args = {}) => {
                         path: 'chunks.embedding',
                         queryVector: queryVector,
                         numCandidates: 150,
-                        limit: parseInt(limit, 10) * 3,
+                        limit: parseInt(limit, 10) * 5, // Tăng limit để group lại 
                         filter: vectorFilter
                     }
                 });
 
                 pipeline.push({
                     $addFields: {
-                        searchScore: { $meta: 'vectorSearchScore' }
+                        vectorScore: { $meta: 'vectorSearchScore' }
                     }
                 });
+
+                // Xử lý multi-chunk (Max Score): Nếu 1 chunk của Job cực khớp, nó sẽ kéo cả Job lên
+                pipeline.push(
+                    { $unwind: '$chunks' },
+                    {
+                        $addFields: {
+                            chunkSimilarity: { $meta: 'vectorSearchScore' }
+                        }
+                    },
+                    {
+                        $group: {
+                            _id: '$_id',
+                            doc: { $first: '$$ROOT' },
+                            searchScore: { $max: '$chunkSimilarity' }
+                        }
+                    },
+                    { $replaceRoot: { newRoot: { $mergeObjects: ['$doc', { searchScore: '$searchScore' }] } } }
+                );
             }
         } catch (error) {
             console.error('Error fetching embedding for search_jobs:', error);
@@ -327,10 +363,20 @@ function buildMatchFallback(pipeline, options) {
     const { province, district, category, type, workType, experience } = options;
     const matchFilter = {
         status: 'ACTIVE',
-        moderationStatus: 'APPROVED'
+        moderationStatus: 'APPROVED',
+        deadline: { $gte: new Date() }
     };
-    if (province) matchFilter['location.province'] = province;
-    if (district) matchFilter['location.district'] = district;
+    // Normalize location if provided
+    let normalizedProvince = province;
+    let normalizedDistrict = district;
+    if (province || district) {
+        const normalized = normalizeLocation({ province, district });
+        normalizedProvince = normalized.province;
+        normalizedDistrict = normalized.district;
+    }
+
+    if (normalizedProvince) matchFilter['location.province'] = normalizedProvince;
+    if (normalizedDistrict) matchFilter['location.district'] = normalizedDistrict;
     if (category) matchFilter.category = category;
     if (type) matchFilter.type = type;
     if (workType) matchFilter.workType = workType;

@@ -117,6 +117,8 @@ const config = {
 
   // OpenWebNinja API Key
   OPENWEBNINJA_API_KEY: process.env.OPENWEBNINJA_API_KEY,
+
+  INTERNAL_API_KEY: process.env.INTERNAL_API_KEY || 'careerzone_internal_secret_key',
 };
 
 // Validate required environment variables
