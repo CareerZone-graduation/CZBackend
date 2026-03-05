@@ -275,6 +275,9 @@ export const chat = asyncHandler(async (req, res) => {
                                     pendingTotalCount = resultData.length;
                                 }
                                 break;
+                            case 'search_knowledge_base':
+                                resultData = await copilotService.search_knowledge_base(args);
+                                break;
                             default:
                                 resultData = { error: `Tool ${tc.function} not implemented.` };
                         }

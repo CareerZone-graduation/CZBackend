@@ -342,8 +342,9 @@ export const hybridSearchJobs = async (args = {}) => {
             logo: '$recruiter.company.logo'
         }
     });
-
+    console.log(pipeline);
     const results = await Job.aggregate(pipeline);
+    console.log(results);
 
     // Xử lý type minSalary, maxSalary
     const formattedResults = results.map(job => ({
@@ -522,4 +523,100 @@ export const get_my_applications = async (userId, args = {}) => {
         isRejected: app.status === 'REJECTED' || app.status === 'INTERVIEW_FAILED',
         isDeclined: app.status === 'OFFER_DECLINED' || app.isDeclineByCandidate
     }));
+};
+
+/**
+ * Tool 10: search_knowledge_base (RAG Queries)
+ * Lấy top 5 đoạn văn bản liên quan nhất từ CSR Knowledge Base để AI trả lời.
+ */
+export const search_knowledge_base = async (args = {}) => {
+    const { query, limit = 5 } = args;
+
+    if (!query) {
+        return { error: 'Query is required for knowledge base search' };
+    }
+
+    try {
+        // 1. Get embedding for the user's query
+        const url = `${config.PYTHON_SERVICE_URL}/api/v1/embeddings/query-embedding`;
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Internal-Secret': config.INTERNAL_API_KEY || process.env.INTERNAL_API_SECRET || 'careerzone_internal_secret_2024',
+            },
+            body: JSON.stringify({ query: query.trim(), model: 'models/gemini-embedding-001' })
+        });
+
+        if (!response.ok) {
+            console.warn(`FastAPI embedding error: ${response.status}`);
+            return { error: 'Failed to generate embedding for the query' };
+        }
+
+        const data = await response.json();
+        const queryVector = data.embedding || data; // Handle different return shapes
+
+        // 2. Perform Vector Search on the knowledge base using the separate connection
+        const { getKnowledgeBaseModel } = await import('../config/knowledgeDb.js');
+        const KnowledgeBaseModel = await getKnowledgeBaseModel();
+
+        const pipeline = [
+            {
+                $vectorSearch: {
+                    index: 'kb_vector_index',
+                    path: 'chunks.embedding',
+                    queryVector: Array.isArray(queryVector) ? queryVector : queryVector.embedding,
+                    numCandidates: 100,
+                    limit: parseInt(limit, 10) * 3 // Get more to group
+                }
+            },
+            {
+                $addFields: {
+                    score: { $meta: 'vectorSearchScore' }
+                }
+            },
+            {
+                $unwind: '$chunks'
+            },
+            {
+                $addFields: {
+                    chunkSimilarity: { $meta: 'vectorSearchScore' }
+                }
+            },
+            {
+                $sort: { chunkSimilarity: -1 }
+            },
+            {
+                $group: {
+                    _id: '$_id',
+                    doc: { $first: '$$ROOT' },
+                    searchScore: { $max: '$chunkSimilarity' },
+                    bestChunk: { $first: '$chunks.chunkText' }
+                }
+            },
+            {
+                $project: {
+                    _id: 1,
+                    title: '$doc.title',
+                    category: '$doc.sourceInfo.category',
+                    tags: '$doc.sourceInfo.tags',
+                    url: '$doc.sourceInfo.url',
+                    content: '$bestChunk',
+                    score: '$searchScore'
+                }
+            },
+            { $sort: { score: -1 } },
+            { $limit: parseInt(limit, 10) }
+        ];
+
+        const results = await KnowledgeBaseModel.aggregate(pipeline);
+
+        return {
+            results: results,
+            query: query
+        };
+    } catch (error) {
+        console.error('Error executing search_knowledge_base:', error);
+        return { error: 'Internal error during knowledge base search: ' + error.message };
+    }
 };
