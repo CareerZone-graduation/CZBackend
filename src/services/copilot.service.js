@@ -500,7 +500,7 @@ export const getSavedJobsExpiringSoon = async (userId, withinDays = 7) => {
 export const get_my_applications = async (userId, args = {}) => {
     const { status, limit = 5 } = args;
     const candidate = await CandidateProfile.findOne({ userId: new mongoose.Types.ObjectId(userId) }).select('_id');
-    if (!candidate) return [];
+    if (!candidate) return { applications: [] };
 
     const filter = { candidateProfileId: candidate._id };
 
@@ -509,20 +509,24 @@ export const get_my_applications = async (userId, args = {}) => {
     }
 
     const applications = await Application.find(filter)
-        .select('status appliedAt lastStatusUpdateAt activityHistory offerLetter offerFile isDeclineByCandidate jobSnapshot')
+        .select('status appliedAt lastStatusUpdateAt activityHistory offerLetter offerFile isDeclineByCandidate jobId')
+        .populate('jobId', 'title company logo')
         .sort({ appliedAt: -1 })
         .limit(limit)
         .lean();
 
-    return applications.map(app => ({
-        ...app,
-        latestActivity: app.activityHistory?.length > 0 ? app.activityHistory[app.activityHistory.length - 1] : null,
-        // Remove full history if not needed by LLM to save tokens, 
-        // but user asked for "đối tượng cuối cùng" so providing it explicitly is good.
-        hasOffer: !!(app.offerLetter || app.offerFile || app.status === 'OFFER_SENT' || app.status === 'ACCEPTED'),
-        isRejected: app.status === 'REJECTED' || app.status === 'INTERVIEW_FAILED',
-        isDeclined: app.status === 'OFFER_DECLINED' || app.isDeclineByCandidate
-    }));
+    return {
+        applications: applications.map(app => ({
+            _id: app._id,
+            status: app.status,
+            appliedAt: app.appliedAt,
+            jobId: app.jobId,
+            latestActivity: app.activityHistory?.length > 0 ? app.activityHistory[app.activityHistory.length - 1] : null,
+            hasOffer: !!(app.offerLetter || app.offerFile || app.status === 'OFFER_SENT' || app.status === 'ACCEPTED'),
+            isRejected: app.status === 'REJECTED' || app.status === 'INTERVIEW_FAILED',
+            isDeclined: app.status === 'OFFER_DECLINED' || app.isDeclineByCandidate
+        }))
+    };
 };
 
 /**
