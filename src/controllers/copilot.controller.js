@@ -316,7 +316,12 @@ export const chat = asyncHandler(async (req, res) => {
                     const applicationTools = ['get_my_applications'];
 
                     if (jobTools.includes(tc.function) || interviewTools.includes(tc.function) || applicationTools.includes(tc.function)) {
-                        promptModifier = "\n\n[SYSTEM INSTRUCTION: Bạn đã lấy dữ liệu thành công, và DỮ LIỆU NÀY (NẾU KHÁC RỖNG) SẼ ĐƯỢC FRONTEND TỰ ĐỘNG VẼ THÀNH UI CARDS. Do đó, bạn CHỈ CẦN trả lời BẰNG MỘT CÂU NGẮN GỌN (Ví dụ: 'Dưới đây là danh sách các công việc phù hợp với yêu cầu, Dưới đây là danh sách lịch phỏng vấn thỏa mãn tiêu chí của bạn, hoặc thông báo không tìm thấy nếu không có dữ liệu trả về từ tool...'). TUYỆT ĐỐI KHÔNG sinh ra bảng (markdown table) hoặc liệt kê lại các công việc này bằng chữ dưới bất kỳ hình thức nào.]";
+                        const hasPreviousIntro = currentAssistantMessage && currentAssistantMessage.trim().length > 5;
+                        const introInstruction = hasPreviousIntro 
+                            ? "Vì bạn đã có câu giới thiệu ở trên, KHÔNG LẶP LẠI câu giới thiệu (như 'Dưới đây là...'). Chỉ cần trả lời thật ngắn gọn hoặc không nói thêm gì nếu không cần thiết." 
+                            : "Do đó, bạn CHỈ CẦN trả lời BẰNG MỘT CÂU NGẮN GỌN (Ví dụ: 'Dưới đây là danh sách...' hoặc thông báo không tìm thấy).";
+                            
+                        promptModifier = `\n\n[SYSTEM INSTRUCTION: Bạn đã lấy dữ liệu thành công, và DỮ LIỆU NÀY (NẾU KHÁC RỖNG) SẼ ĐƯỢC FRONTEND TỰ ĐỘNG VẼ THÀNH UI CARDS. TUYỆT ĐỐI KHÔNG sinh ra bảng (markdown table) hoặc liệt kê lại các thông tin này bằng chữ dưới bất kỳ hình thức nào. ${introInstruction}]`;
                     }
 
                     toolResultsMessages.push({
@@ -328,7 +333,7 @@ export const chat = asyncHandler(async (req, res) => {
 
                 // Append tool results and loop to let LLM generate text
                 currentMessages.push(...toolResultsMessages);
-                console.log("currentMessages", currentMessages);
+                console.log("currentMessages", JSON.stringify(currentMessages, null, 2));
             }
         } // End of Agent Loop
 
