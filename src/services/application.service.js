@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import {
   Application,
   Job,
@@ -13,6 +14,27 @@ import logger from '../utils/logger.js';
 import * as queueService from './queue.service.js';
 import * as rabbitmq from '../queues/rabbitmq.js';
 import { pushNotification } from './notification.service.js';
+
+// Helper function to extract text from PDF buffer using pdfjs-dist
+async function extractTextFromPDF(buffer) {
+  try {
+    const loadingTask = pdfjsLib.getDocument({ data: buffer });
+    const pdf = await loadingTask.promise;
+    let fullText = '';
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items.map(item => item.str).join(' ');
+      fullText += pageText + '\n';
+    }
+
+    return fullText;
+  } catch (error) {
+    logger.error('Error extracting text from PDF with pdfjs-dist', error);
+    throw error;
+  }
+}
 
 // ==========================================================
 // === HELPER FUNCTIONS FOR AUTOMATION & LOGGING (NEW) ====
@@ -520,5 +542,121 @@ export const getApplicationCVData = async (applicationId, recruiterId = null) =>
     cvData: submittedCV.templateSnapshot,
     jobSnapshot: application.jobSnapshot,
     appliedAt: application.appliedAt,
+  };
+};
+
+/**
+ * Lấy dữ liệu gộp của nhiều đơn ứng tuyển để AI so sánh
+ * @param {Array<string>} applicationIds - Danh sách ID đơn ứng tuyển
+ * @param {string} recruiterId - ID nhà tuyển dụng
+ * @returns {Promise<Object>} Object chứa thông tin job và mảng ứng viên
+ */
+export const gatherComparisonData = async (applicationIds, recruiterId) => {
+  // 1. Verify recruiter
+  const recruiterProfile = await RecruiterProfile.findOne({ userId: recruiterId });
+  if (!recruiterProfile) {
+    throw new UnauthorizedError('Bạn không phải là nhà tuyển dụng');
+  }
+
+  // 2. Fetch applications
+  const applications = await Application.find({ _id: { $in: applicationIds } })
+    .populate({
+      path: 'candidateProfileId',
+      select: 'userId fullname avatar bio phone email address skills experiences educations certificates projects expectedSalary workPreferences preferredLocations'
+    })
+    .populate({
+      path: 'jobId',
+      select: 'title company location salary experience type workType description requirements benefits category skills minSalary maxSalary recruiterProfileId'
+    });
+
+  if (!applications || applications.length === 0) {
+    throw new NotFoundError('Không tìm thấy đơn ứng tuyển nào');
+  }
+
+  // 3. Verify ownership based on jobId.recruiterProfileId
+  const job = applications[0].jobId;
+  if (!job || job.recruiterProfileId.toString() !== recruiterProfile._id.toString()) {
+    throw new UnauthorizedError('Bạn không có quyền truy cập các đơn ứng tuyển này');
+  }
+
+  // Ensure all applications belong to the same job
+  const jobIdStr = job._id.toString();
+  for (const app of applications) {
+    if (app.jobId._id.toString() !== jobIdStr) {
+      throw new BadRequestError('Các đơn ứng tuyển phải thuộc cùng một vị trí công việc');
+    }
+  }
+
+  // 4. Process candidates and extract CV text
+  const candidatesData = [];
+
+  for (const app of applications) {
+    let cvText = '';
+
+    // Extract CV
+    if (app.submittedCV) {
+      if (app.submittedCV.source === 'TEMPLATE' && app.submittedCV.templateSnapshot) {
+        try {
+          const snapshot = app.submittedCV.templateSnapshot;
+          if (typeof snapshot === 'object') {
+            cvText = JSON.stringify(snapshot);
+          } else {
+            cvText = String(snapshot);
+          }
+          console.log('cvTextTemplate', cvText)
+
+        } catch (e) {
+          logger.error('Error parsing templateSnapshot', e);
+        }
+      } else if (app.submittedCV.source === 'UPLOADED' && app.submittedCV.path) {
+        try {
+          const response = await fetch(app.submittedCV.path);
+          if (response.ok) {
+            const arrayBuffer = await response.arrayBuffer();
+            const uint8Array = new Uint8Array(arrayBuffer);
+            const pdfText = await extractTextFromPDF(uint8Array);
+            if (pdfText) {
+              cvText = pdfText;
+              console.log('cvText', cvText)
+            }
+          }
+        } catch (err) {
+          logger.error(`Error extracting text from PDF ${app.submittedCV.path}`, err);
+        }
+      }
+    }
+
+    // truncate CV text
+    if (cvText && cvText.length > 3000) {
+      cvText = cvText.substring(0, 3000) + '... [Nội dung đã được cắt bớt]';
+    }
+
+    candidatesData.push({
+      applicationId: app._id,
+      name: app.candidateProfileId?.fullname || 'Unknown',
+      status: app.status,
+      coverLetter: app.coverLetter,
+      appliedAt: app.appliedAt,
+      notes: app.notes,
+      cvText: cvText,
+      profile: app.candidateProfileId ? app.candidateProfileId.toObject() : null
+    });
+  }
+
+  return {
+    job: {
+      title: job.title,
+      description: job.description,
+      requirements: job.requirements,
+      skills: job.skills,
+      experience: job.experience,
+      type: job.type,
+      workType: job.workType,
+      minSalary: job.minSalary,
+      maxSalary: job.maxSalary,
+      category: job.category,
+      location: job.location
+    },
+    candidates: candidatesData
   };
 };
