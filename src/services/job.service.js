@@ -1973,6 +1973,9 @@ export const searchJobsForCandidate = async (searchParams, userId = null) => {
   // Build common filter cho Atlas Search
   const searchFilter = buildSearchFilter(searchParams);
 
+  // Build salary filter for post-filtering after $search
+  const { postFilter: salaryFilter } = buildPreFilter(searchParams);
+
   try {
     const pipeline = [
       // --- Stage 1: Full-text Search (BM25) ---

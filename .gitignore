@@ -55,3 +55,4 @@ serviceAccountKey.json
 pnpm-lock.yaml
 package-lock.json
 scripts/chuan-hoa-location-data.js
+.claude/settings.local.json
