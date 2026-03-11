@@ -1,7 +1,7 @@
 import { Job, User, CandidateProfile } from '../models/index.js';
 import { generateEmbeddingWithRetry, generateBatchEmbeddings } from '../utils/embedding.js';
 import logger from '../utils/logger.js';
-import pdfParse from 'pdf-parse';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 /**
  * Split text into chunks for embedding generation
@@ -71,8 +71,8 @@ export const generateJobEmbeddings = async (jobId) => {
       return;
     }
 
-    // Split text into chunks (Use 8000 to keep it as 1 chunk mostly)
-    const textChunks = splitTextIntoChunks(combinedText, 8000);
+    // Split text into chunks
+    const textChunks = splitTextIntoChunks(combinedText, 3000, 150);
 
     logger.info('Generating embeddings for job', {
       jobId,
@@ -405,14 +405,20 @@ const extractCVText = async (cvs) => {
         }
 
         const arrayBuffer = await response.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
+        const uint8Array = new Uint8Array(arrayBuffer);
 
-        // Parse PDF buffer
-        const pdfData = await pdfParse(buffer);
-        if (pdfData && pdfData.text) {
-          fullText += pdfData.text + ' ';
-          logger.info(`Extracted text from CV: ${cv.fileName || cv.fileUrl}`);
+        // Parse PDF using pdfjs-dist
+        const loadingTask = pdfjsLib.getDocument({ data: uint8Array });
+        const pdf = await loadingTask.promise;
+        
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items.map(item => item.str).join(' ');
+          fullText += pageText + ' ';
         }
+        
+        logger.info(`Extracted text from CV: ${cv.fileName || cv.fileUrl}`);
       } catch (err) {
         logger.error(`Error extracting text from CV ${cv.fileUrl}`, { error: err.message });
       }
