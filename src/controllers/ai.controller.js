@@ -1,20 +1,67 @@
 import * as aiService from '../services/ai.service.js';
-import { BadRequestError } from '../utils/AppError.js';
+import logger from '../utils/logger.js';
 
-export const chatWithBot = (req, res) => {
-  const { query } = req.body;
+/**
+ * Enhance job content with AI
+ * @route POST /api/ai/enhance-job
+ */
+export const enhanceJobContent = async (req, res) => {
+  try {
+    const jobData = req.body;
 
-  if (!query) {
-    throw new BadRequestError('Query is required');
+    if (!jobData || Object.keys(jobData).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Job data is required'
+      });
+    }
+
+    const enhancedData = await aiService.enhanceJobContent(jobData);
+
+    res.status(200).json({
+      success: true,
+      message: 'Job content enhanced successfully',
+      data: enhancedData
+    });
+  } catch (error) {
+    logger.error('Error in enhanceJobContent controller:', error);
+    logger.error('Error stack:', error.stack);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to enhance job content',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
+};
 
-  // Disable response compression for this route to allow streaming
-  req.noCompression = true;
 
-  // Set headers for streaming
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
+/**
+ * Generate smart suggestions based on job title
+ * @route POST /api/ai/smart-suggestions
+ */
+export const generateSmartSuggestions = async (req, res) => {
+  try {
+    const { jobTitle } = req.body;
 
-  aiService.streamChatbotResponse(query, res);
+    if (!jobTitle || jobTitle.trim().length < 3) {
+      return res.status(400).json({
+        success: false,
+        message: 'Job title is required (minimum 3 characters)'
+      });
+    }
+
+    const suggestions = await aiService.generateSmartSuggestions(jobTitle);
+
+    res.status(200).json({
+      success: true,
+      message: 'Smart suggestions generated successfully',
+      data: suggestions
+    });
+  } catch (error) {
+    logger.error('Error in generateSmartSuggestions controller:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to generate suggestions'
+    });
+  }
 };

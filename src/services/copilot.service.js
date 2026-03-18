@@ -1,0 +1,626 @@
+import mongoose from 'mongoose';
+import { Job, InterviewRoom, Application, SavedJob, RecruiterProfile, CandidateProfile } from '../models/index.js';
+import config from '../config/index.js';
+import { normalizeLocation } from '../utils/locationUtils.js';
+
+/**
+ * Tool 2: get_job_detail
+ * Retrieve detailed information about a job by its ID.
+ * Uses populate to fetch recruiter profile.
+ */
+export const get_job_detail = async (args) => {
+    const { jobId } = args;
+    if (!jobId) {
+        throw new Error('jobId is required');
+    }
+
+    const job = await Job.findById(jobId)
+        .select('-chunks -moderationHistory -moderationStatus -embeddingsUpdatedAt')
+        .populate({
+            path: 'recruiterProfileId',
+            select: 'fullname company.name company.about company.logo company.industry company.website'
+        })
+        .lean();
+
+    return job;
+};
+
+//TODO: bổ sung top_n bên fastapi
+
+/**
+ * Tool 3: get_recommendations
+ * Call FastAPI LightFM endpoint for candidate recommendations.
+ */
+export const get_recommendations = async (userId, args = {}) => {
+    const limit = args.limit || 10;
+
+    try {
+        const url = `${config.PYTHON_SERVICE_URL}/api/v1/recommendations/${userId}?top_n=${limit}`;
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`FastAPI returned status ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('Recommendations from FastAPI:', data);
+
+        if (!data.recommendations || data.recommendations.length === 0) {
+            return { data: [], totalCount: 0 };
+        }
+
+        const jobIds = data.recommendations.map(r => new mongoose.Types.ObjectId(r.jobId));
+
+        const jobs = await Job.aggregate([
+            { $match: { _id: { $in: jobIds } } },
+            {
+                $lookup: {
+                    from: 'recruiterprofiles',
+                    localField: 'recruiterProfileId',
+                    foreignField: '_id',
+                    as: 'recruiter',
+                    pipeline: [
+                        { $project: { 'company.name': 1, 'company.logo': 1 } }
+                    ]
+                }
+            },
+            { $unwind: { path: '$recruiter', preserveNullAndEmptyArrays: true } },
+            {
+                $project: {
+                    _id: 1,
+                    title: 1,
+                    province: '$location.province',
+                    district: '$location.district',
+                    minSalary: 1,
+                    maxSalary: 1,
+                    type: 1,
+                    workType: 1,
+                    experience: 1,
+                    category: 1,
+                    skills: 1,
+                    deadline: 1,
+                    createdAt: 1,
+                    company: '$recruiter.company.name',
+                    logo: '$recruiter.company.logo'
+                }
+            }
+        ]);
+
+        // Map back to preserve order from recommendations and format salary
+        const jobMap = jobs.reduce((acc, job) => {
+            acc[job._id.toString()] = job;
+            return acc;
+        }, {});
+
+        const formattedJobs = data.recommendations
+            .map(r => {
+                const job = jobMap[r.jobId];
+                if (!job) return null;
+                return {
+                    ...job,
+                    minSalary: job.minSalary?.toString() || null,
+                    maxSalary: job.maxSalary?.toString() || null,
+                    // LightFM scores are complex (logits), we don't display them as % unless normalized
+                    matchScore: 0
+                };
+            })
+            .filter(j => j !== null);
+
+        return {
+            data: formattedJobs,
+            totalCount: formattedJobs.length,
+            userId: data.userId,
+            source: data.source
+        };
+    } catch (error) {
+        console.error('Error calling get_recommendations from FastAPI:', error);
+        throw error;
+    }
+};
+
+/**
+ * Tool 8: getUpcomingInterviews (get_my_interviews)
+ * Retrieve user's interviews filtered by time range and status.
+ */
+export const getUpcomingInterviews = async (userId, role, args = {}) => {
+    const { timeRange = 'upcoming', limit = 10 } = args;
+
+    const now = new Date();
+    const filter = {};
+
+    if (role === 'recruiter') {
+        filter.recruiterId = new mongoose.Types.ObjectId(userId);
+    } else {
+        filter.candidateId = new mongoose.Types.ObjectId(userId);
+    }
+
+    switch (timeRange) {
+        case 'upcoming':
+            filter.scheduledTime = { $gte: now };
+            filter.status = { $in: ['SCHEDULED', 'RESCHEDULED'] };
+            break;
+        case 'past':
+            filter.scheduledTime = { $lt: now };
+            break;
+        default:
+            filter.scheduledTime = { $gte: now };
+            if (!status) filter.status = { $in: ['SCHEDULED', 'RESCHEDULED'] };
+            break;
+    }
+
+
+    const interviews = await InterviewRoom.find(filter)
+        .populate('jobId', 'title')
+        .populate('recruiterId', 'email')
+        .populate('candidateId', 'email')
+        .sort({ scheduledTime: timeRange === 'past' ? -1 : 1 })
+        .limit(limit)
+        .lean();
+
+    return interviews;
+};
+
+/**
+ * Tool 1: search_jobs (hybridSearchJobs)
+ * Tìm kiếm việc làm kết hợp vector search và pre-/post-filters
+ */
+export const hybridSearchJobs = async (args = {}) => {
+    const {
+        query, province, district, category, type, workType,
+        experience, minSalary, maxSalary, skills, limit = 10
+    } = args;
+
+    const pipeline = [];
+
+    // ── Phase 1: Vector Search (nếu có semantic query) ──
+    if (query && query.trim()) {
+        try {
+            const url = `${config.PYTHON_SERVICE_URL}/api/v1/embeddings/query-embedding`;
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Internal-Secret': config.INTERNAL_API_KEY || '',
+                },
+                body: JSON.stringify({ query: query.trim(), model: 'models/gemini-embedding-001' })
+            });
+
+            if (!response.ok) {
+                console.warn(`FastAPI embedding error: ${response.status}`);
+                buildMatchFallback(pipeline, { province, district, category, type, workType, experience });
+            } else {
+                const data = await response.json();
+                const queryVector = data.embedding;
+
+                const vectorFilter = {
+                    status: 'ACTIVE',
+                    moderationStatus: 'APPROVED',
+                    deadline: { $gte: new Date() }
+                };
+
+                // Normalize location if provided
+                let normalizedProvince = province;
+                let normalizedDistrict = district;
+                if (province || district) {
+                    const normalized = normalizeLocation({ province, district });
+                    normalizedProvince = normalized.province;
+                    normalizedDistrict = normalized.district;
+                }
+
+                // Hard filters vào vectorSearch pre-filter (MQL style)
+                if (normalizedProvince) vectorFilter['location.province'] = normalizedProvince;
+                if (normalizedDistrict) vectorFilter['location.district'] = normalizedDistrict;
+                console.log(normalizedProvince, normalizedDistrict);
+                if (category) vectorFilter.category = category;
+                if (type) vectorFilter.type = type;
+                if (workType) vectorFilter.workType = workType;
+                if (experience) vectorFilter.experience = experience;
+
+                pipeline.push({
+                    $vectorSearch: {
+                        index: 'vt',
+                        path: 'chunks.embedding',
+                        queryVector: queryVector,
+                        numCandidates: 150,
+                        limit: parseInt(limit, 10) * 5, // Tăng limit để group lại 
+                        filter: vectorFilter
+                    }
+                });
+
+                pipeline.push({
+                    $addFields: {
+                        vectorScore: { $meta: 'vectorSearchScore' }
+                    }
+                });
+
+                // Xử lý multi-chunk (Max Score): Nếu 1 chunk của Job cực khớp, nó sẽ kéo cả Job lên
+                pipeline.push(
+                    { $unwind: '$chunks' },
+                    {
+                        $addFields: {
+                            chunkSimilarity: { $meta: 'vectorSearchScore' }
+                        }
+                    },
+                    {
+                        $group: {
+                            _id: '$_id',
+                            doc: { $first: '$$ROOT' },
+                            searchScore: { $max: '$chunkSimilarity' }
+                        }
+                    },
+                    { $replaceRoot: { newRoot: { $mergeObjects: ['$doc', { searchScore: '$searchScore' }] } } }
+                );
+            }
+        } catch (error) {
+            console.error('Error fetching embedding for search_jobs:', error);
+            // Fallback to match if embedding fails
+            buildMatchFallback(pipeline, { province, district, category, type, workType, experience });
+        }
+    } else {
+        // Không có semantic query -> chỉ dùng match filter
+        buildMatchFallback(pipeline, { province, district, category, type, workType, experience });
+    }
+
+    // ── Phase 2: Post-filters ──
+    const postFilter = {};
+
+    postFilter.deadline = { $gte: new Date() };
+
+    // Lọc mức lương (Decimal128 -> cần convert)
+    if (minSalary || maxSalary) {
+        const salaryConditions = [];
+        if (minSalary) {
+            salaryConditions.push({
+                $or: [
+                    { minSalary: { $exists: false } },
+                    { $expr: { $gte: [{ $toDouble: '$minSalary' }, parseFloat(minSalary)] } }
+                ]
+            });
+        }
+        if (maxSalary) {
+            salaryConditions.push({
+                $or: [
+                    { maxSalary: { $exists: false } },
+                    { $expr: { $lte: [{ $toDouble: '$maxSalary' }, parseFloat(maxSalary)] } }
+                ]
+            });
+        }
+        if (salaryConditions.length > 0) {
+            postFilter.$and = salaryConditions;
+        }
+    }
+
+    // Lọc skills
+    if (skills && skills.length > 0) {
+        postFilter.skills = { $in: skills.map(s => new RegExp(s, 'i')) };
+    }
+
+    if (Object.keys(postFilter).length > 0) {
+        pipeline.push({ $match: postFilter });
+    }
+
+    // ── Phase 3: Sort + Limit + Project ──
+    pipeline.push({ $sort: { searchScore: -1, createdAt: -1 } });
+    pipeline.push({ $limit: parseInt(limit, 10) });
+
+    pipeline.push({
+        $lookup: {
+            from: 'recruiterprofiles',
+            localField: 'recruiterProfileId',
+            foreignField: '_id',
+            as: 'recruiter',
+            pipeline: [
+                { $project: { 'company.name': 1, 'company.logo': 1 } }
+            ]
+        }
+    });
+
+    pipeline.push({ $unwind: { path: '$recruiter', preserveNullAndEmptyArrays: true } });
+
+    pipeline.push({
+        $project: {
+            _id: 1,
+            title: 1,
+            province: '$location.province',
+            district: '$location.district',
+            minSalary: 1,
+            maxSalary: 1,
+            type: 1,
+            workType: 1,
+            experience: 1,
+            category: 1,
+            skills: 1,
+            deadline: 1,
+            createdAt: 1,
+            searchScore: 1,
+            company: '$recruiter.company.name',
+            logo: '$recruiter.company.logo'
+        }
+    });
+    console.log(pipeline);
+    const results = await Job.aggregate(pipeline);
+    console.log(results);
+
+    // Xử lý type minSalary, maxSalary
+    const formattedResults = results.map(job => ({
+        ...job,
+        minSalary: job.minSalary?.toString() || null,
+        maxSalary: job.maxSalary?.toString() || null,
+    }));
+
+    return {
+        jobs: formattedResults,
+        totalCount: formattedResults.length,
+        hasMore: formattedResults.length === parseInt(limit, 10)
+    };
+};
+
+function buildMatchFallback(pipeline, options) {
+    const { province, district, category, type, workType, experience } = options;
+    const matchFilter = {
+        status: 'ACTIVE',
+        moderationStatus: 'APPROVED',
+        deadline: { $gte: new Date() }
+    };
+    // Normalize location if provided
+    let normalizedProvince = province;
+    let normalizedDistrict = district;
+    if (province || district) {
+        const normalized = normalizeLocation({ province, district });
+        normalizedProvince = normalized.province;
+        normalizedDistrict = normalized.district;
+    }
+
+    if (normalizedProvince) matchFilter['location.province'] = normalizedProvince;
+    if (normalizedDistrict) matchFilter['location.district'] = normalizedDistrict;
+    if (category) matchFilter.category = category;
+    if (type) matchFilter.type = type;
+    if (workType) matchFilter.workType = workType;
+    if (experience) matchFilter.experience = experience;
+
+    pipeline.push({ $match: matchFilter });
+    pipeline.push({ $addFields: { searchScore: 1.0 } });
+}
+
+/**
+ * 5.4 getExpiringJobs (việc sắp hết hạn của HR)
+ */
+export const getExpiringJobs = async (userId, withinDays = 7) => {
+    const now = new Date();
+    const deadline = new Date(now.getTime() + withinDays * 24 * 60 * 60 * 1000);
+    const recruiterProfile = await RecruiterProfile.findOne({ userId: new mongoose.Types.ObjectId(userId) });
+    if (!recruiterProfile) {
+        return [];
+    }
+    const results = await Job.find({
+        recruiterProfileId: new mongoose.Types.ObjectId(recruiterProfile._id),
+        status: 'ACTIVE',
+        moderationStatus: 'APPROVED',
+        deadline: { $gte: now, $lte: deadline }
+    })
+        .populate({
+            path: 'recruiterProfileId',
+            select: 'company.name company.logo'
+        })
+        .sort({ deadline: 1 })
+        .select('title deadline location.province type minSalary maxSalary category recruiterProfileId')
+        .lean();
+
+    return results.map(job => ({
+        _id: job._id.toString(),
+        title: job.title,
+        province: job.location?.province,
+        type: job.type,
+        minSalary: job.minSalary?.toString() || null,
+        maxSalary: job.maxSalary?.toString() || null,
+        category: job.category,
+        deadline: job.deadline,
+        company: job.recruiterProfileId?.company?.name,
+        logo: job.recruiterProfileId?.company?.logo
+    }));
+};
+
+
+/**
+ * 5.6 getSavedJobsExpiringSoon (việc đã lưu sắp hết hạn của Candidate)
+ */
+export const getSavedJobsExpiringSoon = async (userId, withinDays = 7) => {
+    const now = new Date();
+    const deadline = new Date(now.getTime() + withinDays * 24 * 60 * 60 * 1000);
+
+    const results = await SavedJob.aggregate([
+        { $match: { candidateId: new mongoose.Types.ObjectId(userId) } },
+        {
+            $lookup: {
+                from: 'jobs',
+                localField: 'jobId',
+                foreignField: '_id',
+                as: 'job',
+                pipeline: [
+                    {
+                        $match: {
+                            status: 'ACTIVE',
+                            deadline: { $gte: now, $lte: deadline }
+                        }
+                    },
+                    {
+                        $lookup: {
+                            from: 'recruiterprofiles',
+                            localField: 'recruiterProfileId',
+                            foreignField: '_id',
+                            as: 'recruiter',
+                            pipeline: [{ $project: { 'company.name': 1, 'company.logo': 1 } }]
+                        }
+                    },
+                    { $unwind: { path: '$recruiter', preserveNullAndEmptyArrays: true } },
+                    {
+                        $project: {
+                            title: 1, deadline: 1, 'location.province': 1, category: 1,
+                            type: 1, minSalary: 1, maxSalary: 1,
+                            company: '$recruiter.company.name',
+                            logo: '$recruiter.company.logo'
+                        }
+                    }
+                ]
+            }
+        },
+        { $unwind: '$job' },
+        { $sort: { 'job.deadline': 1 } },
+        {
+            $project: {
+                savedAt: '$createdAt',
+                job: 1
+            }
+        }
+    ]);
+
+    return results.map(item => ({
+        _id: item.job._id.toString(),
+        title: item.job.title,
+        province: item.job.location?.province,
+        type: item.job.type,
+        minSalary: item.job.minSalary?.toString() || null,
+        maxSalary: item.job.maxSalary?.toString() || null,
+        category: item.job.category,
+        deadline: item.job.deadline,
+        company: item.job.company,
+        logo: item.job.logo,
+        savedAt: item.savedAt
+    }));
+};
+
+/**
+ * 5.7 get_my_applications (danh sách công việc đã ứng tuyển của Candidate)
+ */
+export const get_my_applications = async (userId, args = {}) => {
+    const { status, limit = 5 } = args;
+    const candidate = await CandidateProfile.findOne({ userId: new mongoose.Types.ObjectId(userId) }).select('_id');
+    if (!candidate) return { applications: [] };
+
+    const filter = { candidateProfileId: candidate._id };
+
+    if (status) {
+        filter.status = status;
+    }
+
+    const applications = await Application.find(filter)
+        .select('status appliedAt lastStatusUpdateAt activityHistory offerLetter offerFile isDeclineByCandidate jobId')
+        .populate('jobId', 'title company logo')
+        .sort({ appliedAt: -1 })
+        .limit(limit)
+        .lean();
+
+    return {
+        applications: applications.map(app => ({
+            _id: app._id,
+            status: app.status,
+            appliedAt: app.appliedAt,
+            jobId: app.jobId,
+            latestActivity: app.activityHistory?.length > 0 ? app.activityHistory[app.activityHistory.length - 1] : null,
+            hasOffer: !!(app.offerLetter || app.offerFile || app.status === 'OFFER_SENT' || app.status === 'ACCEPTED'),
+            isRejected: app.status === 'REJECTED' || app.status === 'INTERVIEW_FAILED',
+            isDeclined: app.status === 'OFFER_DECLINED' || app.isDeclineByCandidate
+        }))
+    };
+};
+
+/**
+ * Tool 10: search_knowledge_base (RAG Queries)
+ * Lấy top 5 đoạn văn bản liên quan nhất từ CSR Knowledge Base để AI trả lời.
+ */
+export const search_knowledge_base = async (args = {}) => {
+    const { query, limit = 5 } = args;
+
+    if (!query) {
+        return { error: 'Query is required for knowledge base search' };
+    }
+
+    try {
+        // 1. Get embedding for the user's query
+        const url = `${config.PYTHON_SERVICE_URL}/api/v1/embeddings/query-embedding`;
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Internal-Secret': config.INTERNAL_API_KEY || process.env.INTERNAL_API_SECRET || 'careerzone_internal_secret_2024',
+            },
+            body: JSON.stringify({ query: query.trim(), model: 'models/gemini-embedding-001' })
+        });
+
+        if (!response.ok) {
+            console.warn(`FastAPI embedding error: ${response.status}`);
+            return { error: 'Failed to generate embedding for the query' };
+        }
+
+        const data = await response.json();
+        const queryVector = data.embedding || data; // Handle different return shapes
+
+        // 2. Perform Vector Search on the knowledge base using the separate connection
+        const { getKnowledgeBaseModel } = await import('../config/knowledgeDb.js');
+        const KnowledgeBaseModel = await getKnowledgeBaseModel();
+
+        const pipeline = [
+            {
+                $vectorSearch: {
+                    index: 'kb_vector_index',
+                    path: 'chunks.embedding',
+                    queryVector: Array.isArray(queryVector) ? queryVector : queryVector.embedding,
+                    numCandidates: 100,
+                    limit: parseInt(limit, 10) * 3 // Get more to group
+                }
+            },
+            {
+                $addFields: {
+                    score: { $meta: 'vectorSearchScore' }
+                }
+            },
+            {
+                $unwind: '$chunks'
+            },
+            {
+                $addFields: {
+                    chunkSimilarity: { $meta: 'vectorSearchScore' }
+                }
+            },
+            {
+                $sort: { chunkSimilarity: -1 }
+            },
+            {
+                $group: {
+                    _id: '$_id',
+                    doc: { $first: '$$ROOT' },
+                    searchScore: { $max: '$chunkSimilarity' },
+                    bestChunk: { $first: '$chunks.chunkText' }
+                }
+            },
+            {
+                $project: {
+                    _id: 1,
+                    title: '$doc.title',
+                    category: '$doc.sourceInfo.category',
+                    tags: '$doc.sourceInfo.tags',
+                    url: '$doc.sourceInfo.url',
+                    content: '$bestChunk',
+                    score: '$searchScore'
+                }
+            },
+            { $sort: { score: -1 } },
+            { $limit: parseInt(limit, 10) }
+        ];
+
+        const results = await KnowledgeBaseModel.aggregate(pipeline);
+
+        return {
+            results: results,
+            query: query
+        };
+    } catch (error) {
+        console.error('Error executing search_knowledge_base:', error);
+        return { error: 'Internal error during knowledge base search: ' + error.message };
+    }
+};

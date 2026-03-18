@@ -128,11 +128,17 @@ router.post('/onboarding/upload-avatar', uploadMiddleware.uploadAvatar, candidat
 router.post('/onboarding/complete', candidateOnboardingController.completeOnboarding);
 router.post('/onboarding/dismiss', candidateOnboardingController.dismissOnboarding);
 
-// Job Recommendation Routes
+// Job Recommendation Routes (OLD, MANUAL FILTER)
 router.post(
     '/recommendations/generate',
     validationMiddleware.validateBody(recommendationSchema.generateRecommendationsSchema),
     recommendationController.generateRecommendations
+);
+
+// AI-powered recommendations (from FastAPI LightFM model)
+router.get(
+    '/recommendations/ai',
+    recommendationController.getAIRecommendations
 );
 
 router.get(

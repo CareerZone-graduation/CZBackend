@@ -155,7 +155,7 @@ export const getDashboardStats = async () => {
   ] = await Promise.all([
     // --- Các chỉ số tổng quan ---
     User.countDocuments({ role: { $ne: "admin" } }),
-    RecruiterProfile.countDocuments({ "company.name": { $exists: true } }),
+    RecruiterProfile.countDocuments({ "company.name": { $exists: true, $ne: null, $ne: '' } }),
     Job.countDocuments(),
     Application.countDocuments(),
     InterviewRoom.countDocuments(),
@@ -173,14 +173,14 @@ export const getDashboardStats = async () => {
 
     // --- Dữ liệu tăng trưởng: Đếm số lượng bản ghi được tạo trong tháng trước ---
     User.countDocuments({ role: { $ne: "admin" }, createdAt: { $gte: previousPeriodStart, $lt: currentPeriodStart } }),
-    RecruiterProfile.countDocuments({ "company.name": { $exists: true }, createdAt: { $gte: previousPeriodStart, $lt: currentPeriodStart } }),
+    RecruiterProfile.countDocuments({ "company.name": { $exists: true, $ne: null, $ne: '' }, createdAt: { $gte: previousPeriodStart, $lt: currentPeriodStart } }),
     Job.countDocuments({ createdAt: { $gte: previousPeriodStart, $lt: currentPeriodStart } }),
     Application.countDocuments({ createdAt: { $gte: previousPeriodStart, $lt: currentPeriodStart } }),
     InterviewRoom.countDocuments({ createdAt: { $gte: previousPeriodStart, $lt: currentPeriodStart } }),
     
     // --- Dữ liệu tăng trưởng: Đếm số lượng bản ghi được tạo trong tháng này ---
     User.countDocuments({ role: { $ne: 'admin' }, createdAt: { $gte: currentPeriodStart } }),
-    RecruiterProfile.countDocuments({ 'company.name': { $exists: true }, createdAt: { $gte: currentPeriodStart } }),
+    RecruiterProfile.countDocuments({ 'company.name': { $exists: true, $ne: null, $ne: '' }, createdAt: { $gte: currentPeriodStart } }),
     Job.countDocuments({ createdAt: { $gte: currentPeriodStart } }),
     Application.countDocuments({ createdAt: { $gte: currentPeriodStart } }),
     InterviewRoom.countDocuments({ createdAt: { $gte: currentPeriodStart } }),

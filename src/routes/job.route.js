@@ -7,8 +7,13 @@ import { getMapClustersSchema } from '../schemas/map.schema.js';
 import * as commonSchema from '../schemas/common.schema.js';
 import * as jobController from '../controllers/job.controller.js';
 import * as recommendationController from '../controllers/recommendation.controller.js';
+import * as jobSuggestionController from '../controllers/jobSuggestion.controller.js';
 
 const router = express.Router();
+
+// Job title suggestions (public - for autocomplete)
+router.get('/suggestions/titles', jobSuggestionController.searchJobTitles);
+router.get('/suggestions/popular', jobSuggestionController.getPopularJobTitles);
 
 router.post(
   '/',
@@ -80,6 +85,13 @@ router.get(
   jobController.getJobDetailsForRecruiter
 );
 
+// External job search from JSearch (Public endpoint)
+router.get(
+  '/external/search',
+  validationMiddleware.validateQuery(jobSchema.externalJobSearchSchema),
+  jobController.searchExternalJobs
+);
+
 // Candidate suggestions endpoint (AI-powered recommendations)
 router.get(
   '/:id/suggestions',
@@ -88,6 +100,36 @@ router.get(
   validationMiddleware.validateParams(commonSchema.idParamSchema),
   validationMiddleware.validateQuery(jobSchema.candidateSuggestionsQuerySchema),
   recommendationController.getSuggestions
+);
+
+// Similar jobs endpoint (public, optional auth for isSaved status)
+router.get(
+  '/:id/similar',
+  (req, res, next) => {
+    if (req.headers.authorization) {
+      passport.authenticate('jwt', { session: false })(req, res, next);
+    } else {
+      next();
+    }
+  },
+  validationMiddleware.validateParams(commonSchema.idParamSchema),
+  validationMiddleware.validateQuery(jobSchema.similarJobsQuerySchema),
+  jobController.getSimilarJobs
+);
+
+// Also liked jobs endpoint (public, optional auth for isSaved status)
+router.get(
+  '/:id/also-liked',
+  (req, res, next) => {
+    if (req.headers.authorization) {
+      passport.authenticate('jwt', { session: false })(req, res, next);
+    } else {
+      next();
+    }
+  },
+  validationMiddleware.validateParams(commonSchema.idParamSchema),
+  validationMiddleware.validateQuery(jobSchema.similarJobsQuerySchema),
+  jobController.getAlsoLikedJobs
 );
 
 router.get(

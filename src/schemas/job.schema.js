@@ -244,6 +244,7 @@ export const hybridSearchJobSchema = z.object({
   query: z.string().trim().max(200, 'Query không được vượt quá 200 ký tự').optional(),
   page: z.coerce.number().int().min(1, 'Trang phải lớn hơn 0').default(1),
   size: z.coerce.number().int().min(1, 'Kích thước trang phải lớn hơn 0').max(50, 'Kích thước trang không được vượt quá 50').default(10),
+  aiSearch: z.string().optional(),
   // Filters cho tìm kiếm
   category: z.enum(jobCategoryEnum).optional(),
   type: z.enum(jobTypeEnum).optional(),
@@ -356,4 +357,19 @@ export const getJobsByIdsSchema = z.object({
   ids: z.array(
     z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID không hợp lệ')
   ).min(1, 'Cần ít nhất 1 ID').max(50, 'Tối đa 50 IDs'),
+});
+
+// Schema for external JSearch API
+export const externalJobSearchSchema = z.object({
+  query: z.string({ required_error: 'Yêu cầu từ khóa tìm kiếm' }).trim().min(1, 'Từ khóa không được để trống').max(200),
+  page: z.coerce.number().int().min(1).default(1).optional(),
+  num_pages: z.coerce.number().int().min(1).max(20).default(1).optional(),
+  employment_types: z.string().optional(),
+  date_posted: z.enum(['all', 'today', '3days', 'week', 'month']).default('all').optional(),
+  remote_jobs_only: z.coerce.boolean().optional(),
+});
+
+// Schema for similar jobs query parameters
+export const similarJobsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1, 'Limit phải lớn hơn 0').max(20, 'Limit không được vượt quá 20').default(6),
 });

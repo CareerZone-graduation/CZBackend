@@ -15,3 +15,4 @@ export * as cvService from './cv.service.js';
 export { default as notificationTemplateService } from './notificationTemplate.service.js';
 export * as creditHistoryService from './creditHistory.service.js';
 export * as recommendationService from './recommendation.service.js';
+export * as copilotService from './copilot.service.js';

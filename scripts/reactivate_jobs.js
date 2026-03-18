@@ -29,9 +29,9 @@ const updateJobs = async () => {
 
     const now = new Date();
     // 1/12/2025 -> Dec 1, 2025
-    const startDate = new Date('2025-12-01T00:00:00.000Z');
+    const startDate = new Date('2025-02-05T00:00:00.000Z');
     // 2/2/2026 -> Feb 2, 2026
-    const endDate = new Date('2026-02-02T23:59:59.999Z');
+    const endDate = new Date('2026-06-02T23:59:59.999Z');
 
     try {
         // Find jobs that are either expired OR not active

@@ -169,12 +169,19 @@ export const getJobDetailsForRecruiter = asyncHandler(async (req, res) => {
 });
 
 export const hybridSearchJobs = asyncHandler(async (req, res) => {
-  const searchParams = { ...req.validatedQuery || req.query };
+  const { aiSearch, ...searchParams } = { ...req.validatedQuery || req.query };
   const userId = req.user ? req.user._id : null;
-  const result = await jobService.searchJobsForCandidate(searchParams, userId);
+  let result;
+  // If aiSearch is 'true', use the AI hybrid search, otherwise use standard search
+  if (aiSearch === 'true') {
+    result = await jobService.hybridSearchJobs(searchParams, userId);
+  } else {
+    result = await jobService.searchJobsForCandidate(searchParams, userId);
+  }
+
   res.status(200).json({
     success: true,
-    message: 'Tìm kiếm hybrid công việc thành công.',
+    message: aiSearch === 'true' ? 'Tìm kiếm AI công việc thành công.' : 'Tìm kiếm công việc thành công.',
     meta: result.meta,
     data: result.data,
   });
@@ -225,5 +232,52 @@ export const getJobsByIds = asyncHandler(async (req, res) => {
     success: true,
     message: 'Lấy danh sách công việc thành công.',
     data: jobs,
+  });
+});
+
+/**
+ * Search external jobs via OpenWebNinja JSearch API
+ */
+import * as externalJobService from '../services/externalJob.service.js';
+
+export const searchExternalJobs = asyncHandler(async (req, res) => {
+  const searchParams = req.validatedQuery || req.query;
+  const result = await externalJobService.searchExternalJobs(searchParams);
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy kết quả việc làm bên ngoài thành công.',
+    meta: result.meta,
+    data: result.data,
+  });
+});
+
+export const getSimilarJobs = asyncHandler(async (req, res) => {
+  const { id: jobId } = req.params;
+  const userId = req.user ? req.user._id : null;
+  const options = req.validatedQuery || req.query;
+
+  const result = await jobService.getSimilarJobs(jobId, options, userId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy danh sách việc làm tương tự thành công.',
+    meta: result.meta,
+    data: result.data,
+  });
+});
+
+export const getAlsoLikedJobs = asyncHandler(async (req, res) => {
+  const { id: jobId } = req.params;
+  const userId = req.user ? req.user._id : null;
+  const options = req.validatedQuery || req.query;
+
+  const result = await jobService.getAlsoLikedJobs(jobId, options, userId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy danh sách việc làm người khác cũng quan tâm thành công.',
+    meta: result.meta,
+    data: result.data,
   });
 });

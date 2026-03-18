@@ -54,11 +54,11 @@ import sharePreviewRoutes from './routes/sharePreview.route.js'; // Facebook sha
 import talentPoolRoutes from './routes/talentPool.route.js'; // Talent pool management
 import supportRequestRoutes from './routes/supportRequest.route.js'; // Support request system
 import contactRoutes from './routes/contact.route.js'; // Public contact form
+import aiInterviewRoutes from './routes/aiInterview.route.js'; // MỚI: Route orchestration API sang FastAPI
+import interactionRoutes from './routes/interaction.route.js';
+import copilotRoutes from './routes/copilot.route.js'; // Copilot API
 
-// � Python Proxy (for Development - WebRTC, Streaming, AI Gateway)
-import { pythonProxyMiddleware, getPythonProxyInstance } from './middleware/pythonProxy.middleware.js';
-
-// �🚧 Middlewares
+// 🚧 Middlewares
 import * as errorMiddleware from './middleware/error.middleware.js';
 import * as notFoundMiddleware from './middleware/notFound.middleware.js';
 
@@ -110,27 +110,10 @@ app.use(cors({
 
 // app.options("*", cors()); // xử lý preflight
 
-// === KHỞI TẠO PASSPORT (CẦN TRƯỚC PROXY ĐỂ VERIFY JWT) ===
+// === KHỞI TẠO PASSPORT ===
 app.use(passport.initialize());
 
-// === PYTHON PROXY (ĐẶT TRƯỚC BODY PARSER ĐỂ TRÁNH BUFFER STREAMING/UPLOAD) ===
-// Route: /api/python/* -> Python FastAPI service
-// Chỉ hoạt động trong development hoặc khi ENABLE_PYTHON_PROXY=true
-// Yêu cầu JWT authentication và role = 'candidate'
-if (config.NODE_ENV === 'development' || process.env.ENABLE_PYTHON_PROXY === 'true') {
-  // Authenticated proxy cho candidate (WebRTC, AI features)
-  app.use('/api/python', pythonProxyMiddleware({ 
-    requireAuth: true, 
-    allowedRole: 'candidate' 
-  }));
-  
-  // Nếu cần thêm route public (không cần auth), có thể thêm:
-  // app.use('/api/python-public', pythonProxyMiddleware({ requireAuth: false }));
-  
-  console.log('[Python Proxy] ✅ Enabled - proxying /api/python/* (candidate auth required)');
-}
 
-// Khác - ĐẶT SAU PROXY ĐỂ KHÔNG CONSUME BODY CỦA PROXY REQUESTS
 const shouldCompress = (req, res) => {
   if (req.noCompression) {
     // don't compress responses with this request header
@@ -146,7 +129,7 @@ app.use(cookieParser());
 
 // welcome
 app.get('/', (_, res) => res.status(200).json(
-  { message: 'Welcome to CareerZone API"!' }
+  { message: 'Welcome to CareerZone API!' }
 ))
 // Health check
 app.get('/health', (_, res) =>
@@ -174,15 +157,19 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/interviews', interviewRoutes);
-app.use('/api/analytics', analyticsRoutes); // [MỚI] Thêm route mới vào app
-app.use('/api/soniox', sonioxRoutes); // Soniox voice search API
-app.use('/api/search-history', searchHistoryRoutes); // Search history API
-app.use('/api/job-view-history', viewHistoryRoutes); // Job view history API
-app.use('/api/credit-history', creditHistoryRoutes); // Credit history API
-app.use('/api/share-preview', sharePreviewRoutes); // Facebook share preview
-app.use('/api/talent-pool', talentPoolRoutes); // Talent pool management
-app.use('/api/support-requests', supportRequestRoutes); // Support request system
-app.use('/api/contact', contactRoutes); // Public contact form
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/soniox', sonioxRoutes);
+app.use('/api/search-history', searchHistoryRoutes);
+app.use('/api/job-view-history', viewHistoryRoutes);
+app.use('/api/credit-history', creditHistoryRoutes);
+app.use('/api/share-preview', sharePreviewRoutes);
+app.use('/api/talent-pool', talentPoolRoutes);
+app.use('/api/support-requests', supportRequestRoutes);
+app.use('/api/contact', contactRoutes);
+
+app.use('/api/ai-interview', aiInterviewRoutes); // MỚI: Route orchestration API sang FastAPI
+app.use('/api/interactions', interactionRoutes);
+app.use('/api/copilot', copilotRoutes);
 
 // 404 & error
 app.use(notFoundMiddleware.notFound);

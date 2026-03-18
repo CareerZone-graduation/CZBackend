@@ -1,6 +1,7 @@
 import { Job, User, CandidateProfile } from '../models/index.js';
 import { generateEmbeddingWithRetry, generateBatchEmbeddings } from '../utils/embedding.js';
 import logger from '../utils/logger.js';
+import pdfParse from 'pdf-parse';
 
 /**
  * Split text into chunks for embedding generation
@@ -382,24 +383,43 @@ const extractProfileText = (profile) => {
 };
 
 /**
- * Extract text from CV files using Erax AI
+ * Extract text from CV files using pdf-parse
  * @param {Array} cvs - Array of CV file objects
  * @returns {Promise<string>} Extracted text from CV files
  */
 const extractCVText = async (cvs) => {
-  // TODO: Implement CV text extraction using Erax AI
-  // For now, return empty string as placeholder
-  // This will be implemented when Erax AI integration is available
-
   if (!cvs || cvs.length === 0) {
     return '';
   }
 
-  logger.info('CV text extraction not yet implemented', {
-    cvCount: cvs.length
-  });
+  let fullText = '';
 
-  return '';
+  for (const cv of cvs) {
+    if (cv.fileUrl && cv.fileUrl.endsWith('.pdf')) {
+      try {
+        // Fetch the PDF from URL
+        const response = await fetch(cv.fileUrl);
+        if (!response.ok) {
+          logger.warn(`Failed to fetch CV for text extraction: ${cv.fileUrl}`, { status: response.status });
+          continue;
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        // Parse PDF buffer
+        const pdfData = await pdfParse(buffer);
+        if (pdfData && pdfData.text) {
+          fullText += pdfData.text + ' ';
+          logger.info(`Extracted text from CV: ${cv.fileName || cv.fileUrl}`);
+        }
+      } catch (err) {
+        logger.error(`Error extracting text from CV ${cv.fileUrl}`, { error: err.message });
+      }
+    }
+  }
+
+  return fullText.trim();
 };
 
 /**
