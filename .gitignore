@@ -33,7 +33,7 @@ docs
 .kilocode
 /docs
 MIGRATION_SUMMARY.md
-/.github
+.github/instructions
 t copy.js
 t.js
 digest.txt
