@@ -23,4 +23,4 @@ COPY --chown=pptruser:pptruser . .
 EXPOSE 5000
 
 # Lệnh khởi chạy
-CMD ["npm", "run", "dev"]
+CMD ["npm", "run", "prod"]
