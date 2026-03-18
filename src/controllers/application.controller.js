@@ -119,7 +119,7 @@ export const exportApplicationCvPdf = async (req, res) => {
   const { applicationId } = req.params;
   const browser = await puppeteer.launch({
     headless: "new",
-    args: [
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined, args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
@@ -208,7 +208,7 @@ export const compareWithAI = asyncHandler(async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
-  
+
   // X-Accel-Buffering for Nginx if deployed
   res.setHeader('X-Accel-Buffering', 'no');
 

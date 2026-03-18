@@ -7,6 +7,12 @@ RUN npm install -g pnpm@latest
 
 # Đặt thư mục làm việc và cấp quyền cho pptruser
 WORKDIR /app
+
+# Biến môi trường cực kỳ quan trọng để Puppeteer nhận diện Chrome có sẵn
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+
+
 RUN chown -R pptruser:pptruser /app
 
 # Đổi lại user về pptruser để bảo mật
