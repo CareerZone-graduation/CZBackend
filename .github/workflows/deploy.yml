@@ -1,0 +1,41 @@
+name: Deploy to VPS via Self-Hosted Runner
+
+on:
+  push:
+    branches:
+      - master # Chạy khi có push code lên nhánh master
+
+jobs:
+  deploy:
+    # Bắt buộc khai báo chữ 'self-hosted' để Github gọi Nô Tỳ chạy trực tiếp trên VPS của bạn
+    runs-on: self-hosted
+
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v4
+
+    # (Tuỳ chọn) Bạn cần bốc .env dán vào Secret của Github với tên ENV_PRODUCTION
+    - name: Tạo file .env.production trên VPS
+      run: |
+        echo "${{ secrets.ENV_PRODUCTION }}" > .env.production
+
+    - name: Build trực tiếp Docker Image tại ổ cứng VPS
+      run: |
+        # Build image tại VPS đỡ công push tải lên xuống qua trung gian Docker Hub
+        docker build -t careerzone-api:latest .
+
+    - name: Khởi động lại hệ thống (API + 4 Workers)
+      run: |
+        # Xuất biến DOCKER_IMAGE để docker-compose.yml nhận diện
+        export DOCKER_IMAGE=careerzone-api:latest
+        
+        # Dừng hệ thống cũ
+        docker-compose down || true
+        
+        # Chạy ngầm lập tức toàn bộ dịch vụ lấy source mới
+        docker-compose up -d
+
+    - name: Dọn dẹp tài nguyên thừa thãi của VPS
+      run: |
+        docker image prune -a -f
+        docker builder prune -f

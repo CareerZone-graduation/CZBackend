@@ -1297,19 +1297,8 @@ const buildSearchFilter = (searchParams) => {
     filter.compound.must.push({ equals: { path: 'location.district', value: searchParams.district } });
   }
 
-  // Salary range filters (Overlap logic)
-  if (searchParams.minSalary) {
-    filter.compound.must.push({
-      range: { path: 'minSalary', gte: searchParams.minSalary }
-    });
-  }
-
-  if (searchParams.maxSalary) {
-    filter.compound.must.push({
-      range: { path: 'maxSalary', lte: searchParams.maxSalary }
-    });
-  }
-
+  // Salary range filters are handled as a post-filter $match stage 
+  // because $search does not support range queries on unindexed numeric fields
   // Bounding box filter for Map
   // Bounding box filter for Map (Handles Anti-meridian wrap-around)
   if (searchParams.sw_lng && searchParams.sw_lat && searchParams.ne_lng && searchParams.ne_lat) {
@@ -1480,17 +1469,18 @@ const buildPreFilter = (searchParams) => {
   console.log(`[buildPreFilter] Final filter keys:`, Object.keys(preFilter));
   if (preFilter.$and) console.log(`[buildPreFilter] $and length:`, preFilter.$and.length);
 
-  // Salary range filters (Strict containment logic to match user preference)
+  // Salary range filters — tách riêng vì $vectorSearch không hỗ trợ range trên numeric field
+  const postFilter = {};
   if (searchParams.minSalary) {
-    preFilter.minSalary = { $gte: searchParams.minSalary };
+    postFilter.minSalary = { $gte: searchParams.minSalary };
   }
-
   if (searchParams.maxSalary) {
-    preFilter.maxSalary = { $lte: searchParams.maxSalary };
+    postFilter.maxSalary = { $lte: searchParams.maxSalary };
   }
-  logger.info(`[buildPreFilter] Final filter keys:`, preFilter);
-  return preFilter;
 
+  logger.info(`[buildPreFilter] Final filter keys:`, preFilter);
+  logger.info(`[buildPreFilter] Salary postFilter:`, postFilter);
+  return { preFilter, postFilter };
 };
 
 /**
@@ -1511,7 +1501,9 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
   if (!query || query.trim() === '') {
     console.log('No query provided, performing regular search with filters.');
     try {
-      const preFilter = buildPreFilter(searchParams);
+      const { preFilter, postFilter: salaryFilter } = buildPreFilter(searchParams);
+      // Merge salary filter vào preFilter vì Job.find() hỗ trợ range queries
+      Object.assign(preFilter, salaryFilter);
 
       // Add distance filter if coordinates and distance are provided
       if (searchParams.latitude && searchParams.longitude && searchParams.distance) {
@@ -1615,7 +1607,7 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
   delete vectorSearchParams.sw_lat;
   delete vectorSearchParams.ne_lng;
   delete vectorSearchParams.ne_lat;
-  const vectorFilter = buildPreFilter(vectorSearchParams);
+  const { preFilter: vectorFilter, postFilter: salaryPostFilter } = buildPreFilter(vectorSearchParams);
 
 
   // Generate query embedding for vector search
@@ -1751,6 +1743,8 @@ export const hybridSearchJobs = async (searchParams, userId = null) => {
           }
         }
       }] : []),
+      // Post-filter salary (tách khỏi $vectorSearch vì không hỗ trợ range trên numeric field)
+      ...(Object.keys(salaryPostFilter).length > 0 ? [{ $match: salaryPostFilter }] : []),
       {
         $group: {
           _id: "$_id",
@@ -1899,7 +1893,9 @@ export const searchJobsForCandidate = async (searchParams, userId = null) => {
   if (!query || query.trim() === '') {
     console.log('No query provided, performing regular search with filters.');
     try {
-      const preFilter = buildPreFilter(searchParams);
+      const { preFilter, postFilter: salaryFilter } = buildPreFilter(searchParams);
+      // Merge salary filter vào preFilter vì Job.find() hỗ trợ range queries
+      Object.assign(preFilter, salaryFilter);
       console.log('preFilter', JSON.stringify(preFilter));
       const skip = (page - 1) * size;
 
@@ -1977,6 +1973,9 @@ export const searchJobsForCandidate = async (searchParams, userId = null) => {
   // Build common filter cho Atlas Search
   const searchFilter = buildSearchFilter(searchParams);
 
+  // Build salary filter for post-filtering after $search
+  const { postFilter: salaryFilter } = buildPreFilter(searchParams);
+
   try {
     const pipeline = [
       // --- Stage 1: Full-text Search (BM25) ---
@@ -2011,7 +2010,10 @@ export const searchJobsForCandidate = async (searchParams, userId = null) => {
         }
       },
 
-      // --- Stage 2: Filter Location (Handle via buildSearchFilter) ---
+      // --- Stage 2: Post-filter Salary ---
+      // Distace filtering is now part of searchFilter.compound.must
+      // Salary must be filtered after $search because it's not indexed in Atlas Search
+      ...(Object.keys(salaryFilter).length > 0 ? [{ $match: salaryFilter }] : []),
       // Distace filtering is now part of searchFilter.compound.must
 
       // --- Stage 3: Project Score & Fields ---
@@ -2368,7 +2370,8 @@ export const findJobsInBounds = async (bounds) => {
     }));
   } else {
     // Regular match filter
-    const preFilter = buildPreFilter(bounds);
+    const { preFilter, postFilter: salaryFilter } = buildPreFilter(bounds);
+    Object.assign(preFilter, salaryFilter);
     jobs = await Job.find(preFilter)
       .limit(parseInt(limit))
       .populate({
@@ -2617,7 +2620,8 @@ export const getMapClusters = async (bounds, zoom) => { // Removed third argumen
   }
 
   // 1. Xây dựng điều kiện match cơ bản (Sử dụng builder trung tâm)
-  const baseMatch = buildPreFilter(bounds);
+  const { preFilter: baseMatch, postFilter: salaryFilter } = buildPreFilter(bounds);
+  Object.assign(baseMatch, salaryFilter);
 
   // ✅ DEBUG log
   console.log(`[MAP CLUSTERS] Zoom: ${zoom}, Query: "${query || ''}"`);

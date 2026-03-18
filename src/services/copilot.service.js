@@ -271,28 +271,12 @@ export const hybridSearchJobs = async (args = {}) => {
 
     postFilter.deadline = { $gte: new Date() };
 
-    // Lọc mức lương (Decimal128 -> cần convert)
-    if (minSalary || maxSalary) {
-        const salaryConditions = [];
-        if (minSalary) {
-            salaryConditions.push({
-                $or: [
-                    { minSalary: { $exists: false } },
-                    { $expr: { $gte: [{ $toDouble: '$minSalary' }, parseFloat(minSalary)] } }
-                ]
-            });
-        }
-        if (maxSalary) {
-            salaryConditions.push({
-                $or: [
-                    { maxSalary: { $exists: false } },
-                    { $expr: { $lte: [{ $toDouble: '$maxSalary' }, parseFloat(maxSalary)] } }
-                ]
-            });
-        }
-        if (salaryConditions.length > 0) {
-            postFilter.$and = salaryConditions;
-        }
+    // Lọc mức lương (tách khỏi $vectorSearch vì không hỗ trợ range trên numeric field)
+    if (minSalary) {
+        postFilter.minSalary = { $gte: parseFloat(minSalary) };
+    }
+    if (maxSalary) {
+        postFilter.maxSalary = { $lte: parseFloat(maxSalary) };
     }
 
     // Lọc skills

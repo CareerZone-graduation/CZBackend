@@ -1,0 +1,67 @@
+services:
+  # 1. API Server Chính
+  api:
+    image: ${DOCKER_IMAGE:-careerzone-api:latest}
+    container_name: cz_api
+    restart: always
+    ports:
+      - "5000:5000"
+    env_file: .env.production
+    command: npm run prod
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # 2. Worker Gửi Thông báo
+  worker-notification:
+    image: ${DOCKER_IMAGE:-careerzone-api:latest}
+    container_name: cz_worker_notification
+    restart: always
+    env_file: .env.production
+    command: npm run worker:notification
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # 3. Worker Matching
+  worker-matching:
+    image: ${DOCKER_IMAGE:-careerzone-api:latest}
+    container_name: cz_worker_matching
+    restart: always
+    env_file: .env.production
+    command: npm run worker:matching
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # 4. Worker Embedding
+  worker-embedding:
+    image: ${DOCKER_IMAGE:-careerzone-api:latest}
+    container_name: cz_worker_embedding
+    restart: always
+    env_file: .env.production
+    command: npm run worker:embedding
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # 5. Worker Candidate Embedding
+  worker-candidate-embedding:
+    image: ${DOCKER_IMAGE:-careerzone-api:latest}
+    container_name: cz_worker_candidate_embedding
+    restart: always
+    env_file: .env.production
+    command: npm run worker:candidate-embedding
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

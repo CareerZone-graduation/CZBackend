@@ -14,6 +14,14 @@ const router = express.Router();
 // === EXISTING ROUTES (JOB-SPECIFIC) ===
 // ==========================================================
 
+// Route so sánh ứng viên tự do
+router.post(
+  '/compare-ai',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.recruiterOnly,
+  applicationController.compareWithAI
+);
+
 // Route để lấy danh sách ứng viên đã ứng tuyển vào một công việc cụ thể
 router.get(
   '/jobs/:jobId/applications',
