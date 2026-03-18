@@ -52,7 +52,5 @@ serviceAccountKey.json
 .env.local
 .env.test
 .env.development
-pnpm-lock.yaml
-package-lock.json
 scripts/chuan-hoa-location-data.js
 .claude/settings.local.json
