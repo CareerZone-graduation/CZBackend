@@ -5,24 +5,30 @@ FROM ghcr.io/puppeteer/puppeteer:latest
 USER root
 RUN npm install -g pnpm@latest
 
-# Đặt thư mục làm việc và cấp quyền cho pptruser
+# Đặt thư mục làm việc và cấp quyền ngay từ đầu (lúc còn là root)
 WORKDIR /app
 
-# Biến môi trường cực kỳ quan trọng để Puppeteer nhận diện Chrome có sẵn
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+# Ensure browser download is enabled in build and cache path is explicit.
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
+ENV PUPPETEER_SKIP_DOWNLOAD=false
+ENV PUPPETEER_CACHE_DIR=/home/pptruser/.cache/puppeteer
+RUN mkdir -p /home/pptruser/.pnpm-store /home/pptruser/.cache/puppeteer && \
+    chown -R pptruser:pptruser /app /home/pptruser/.pnpm-store /home/pptruser/.cache
 
-
-RUN chown -R pptruser:pptruser /app
-
-# Đổi lại user về pptruser để bảo mật
+# Chuyển sang user pptruser ngay từ bây giờ
 USER pptruser
 
-# Copy package và cài đặt dependencies
+# Copy file cấu hình với quyền pptruser luôn
 COPY --chown=pptruser:pptruser package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
 
-# Copy toàn bộ code
+# Cài đặt dependencies với store nằm trong home của pptruser để tránh lỗi quyền trên một số môi trường BuildKit.
+RUN pnpm config set store-dir /home/pptruser/.pnpm-store && \
+    pnpm install --frozen-lockfile
+
+# Download the exact Chrome version required by the installed Puppeteer package.
+RUN pnpm exec puppeteer browsers install chrome
+
+# Copy toàn bộ code còn lại với quyền pptruser
 COPY --chown=pptruser:pptruser . .
 
 # Expose port API
