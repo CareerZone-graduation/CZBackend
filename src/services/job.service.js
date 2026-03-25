@@ -674,6 +674,16 @@ export const updateJob = async (jobId, userId, updateData) => {
 
   if (shouldReModerate) {
     finalUpdateData.moderationStatus = 'PENDING';
+    // Xóa kết quả AI cũ khi cần duyệt lại
+    finalUpdateData.aiModerationResult = null;
+  }
+
+  // Nếu job đã bị REJECTED hoặc NEUTRAL, khi chỉnh sửa phải reset về PENDING
+  if (job.moderationStatus === 'REJECTED' || job.moderationStatus === 'NEUTRAL') {
+    finalUpdateData.moderationStatus = 'PENDING';
+    finalUpdateData.status = 'INACTIVE'; // Chờ duyệt lại
+    finalUpdateData.approved = false;
+    finalUpdateData.aiModerationResult = null; // Xóa kết quả AI cũ
   }
 
   // Logic cập nhật status dựa trên deadline
