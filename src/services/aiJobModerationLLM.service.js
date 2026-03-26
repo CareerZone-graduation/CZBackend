@@ -7,6 +7,50 @@ const LLM_BASE_URL = process.env.LLM_BASE_URL || 'http://40.81.30.50:8317/v1';
 const LLM_MODEL = process.env.LLM_MODEL || 'gemini-2.5-flash';
 
 /**
+ * Gửi thông báo cho recruiter sau khi duyệt job
+ */
+async function sendModerationNotification(job, isApproved) {
+  try {
+    const { default: Notification } = await import('../models/Notification.js');
+    
+    // Kiểm tra kỹ hơn
+    if (!job.recruiterProfileId) {
+      logger.warn('Cannot send notification: recruiterProfileId not found');
+      return;
+    }
+    
+    const userId = job.recruiterProfileId.userId?._id || job.recruiterProfileId.userId;
+    
+    if (!userId) {
+      logger.warn('Cannot send notification: userId not found');
+      return;
+    }
+
+    const notification = {
+      userId: userId,
+      type: isApproved ? 'JOB_APPROVED' : 'JOB_REJECTED',
+      title: isApproved ? '✅ Tin tuyển dụng đã được duyệt' : '❌ Tin tuyển dụng bị từ chối',
+      message: isApproved 
+        ? `Tin tuyển dụng "${job.title}" đã được phê duyệt và đang hiển thị công khai.`
+        : `Tin tuyển dụng "${job.title}" bị từ chối. Lý do: ${job.aiModerationResult?.summary || 'Không đáp ứng tiêu chuẩn'}`,
+      relatedJob: job._id,
+      metadata: {
+        jobId: job._id,
+        jobTitle: job.title,
+        moderationStatus: job.moderationStatus,
+        reasons: job.aiModerationResult?.reasons || []
+      }
+    };
+
+    await Notification.create(notification);
+    logger.info(`Notification sent to recruiter ${userId} for job ${job._id}`);
+  } catch (error) {
+    logger.error('Failed to send moderation notification:', error.message);
+    // Không throw error - notification là optional
+  }
+}
+
+/**
  * Phát hiện spam - CHỈ bắt spam RÕ RÀNG, không chặn từ lặp hợp lý
  */
 function detectSpam(content) {
@@ -23,7 +67,7 @@ function detectSpam(content) {
     };
   }
   
-  // 2. Kiểm tra lặp CỤM TỪ DÀI (>= 8 từ) LIÊN TIẾP >= 2 lần - Chỉ bắt spam thực sự
+  // 2. Kiểm tra lặp CỤM TỪ DÀI (>= 8 từ) LIÊN TIẾP >= 5 lần - Chỉ bắt spam thực sự
   const words = content.split(/\s+/);
   for (let i = 0; i < words.length - 7; i++) {
     const phrase = words.slice(i, i + 8).join(' ');
@@ -37,16 +81,21 @@ function detectSpam(content) {
       positions.push(match.index);
     }
     
-    // Chỉ coi là spam nếu lặp >= 2 lần VÀ các lần lặp GẦN NHAU (cách nhau < 200 ký tự)
-    if (positions.length >= 2) {
+    // Chỉ coi là spam nếu lặp >= 5 lần VÀ các lần lặp GẦN NHAU (cách nhau < 200 ký tự)
+    if (positions.length >= 5) {
+      // Kiểm tra xem có ít nhất 2 lần lặp gần nhau không
+      let hasCloseRepetition = false;
       for (let j = 0; j < positions.length - 1; j++) {
         const distance = positions[j + 1] - positions[j];
         if (distance < 200) {
-          reasons.push(`Vi phạm spam - Phát hiện cụm từ dài "${phrase.substring(0, 50)}..." lặp gần nhau (cách ${distance} ký tự)`);
+          hasCloseRepetition = true;
+          // Cắt ngắn cụm từ để hiển thị (tối đa 80 ký tự)
+          const displayPhrase = phrase.length > 80 ? phrase.substring(0, 80) + '...' : phrase;
+          reasons.push(`Vi phạm spam - Cụm từ "${displayPhrase}" lặp ${positions.length} lần (có lần lặp cách nhau chỉ ${distance} ký tự)`);
           return {
             isSpam: true,
             reasons,
-            summary: `Tin bị từ chối do spam: Lặp cụm từ dài gần nhau`
+            summary: `Tin bị từ chối do spam: Lặp cụm từ "${displayPhrase}" ${positions.length} lần`
           };
         }
       }
@@ -81,6 +130,9 @@ ${jobData.description || 'N/A'}
 
 Yêu cầu:
 ${jobData.requirements || 'N/A'}
+
+Quyền lợi:
+${jobData.benefits || 'N/A'}
   `.trim();
 
   // Bỏ qua spam check nếu đã AI-enhanced (tin cậy AI-generated content)
@@ -179,6 +231,11 @@ ${jobContent}${aiEnhancedNote}
 - Thông tin công ty mập mờ
 - Lương cao nhưng mô tả chưa rõ
 
+✅ YÊU CẦU NGOẠI HÌNH/GIỌNG NÓI:
+- CHẤP NHẬN nếu công việc yêu cầu hợp lý: MC, diễn viên, người mẫu, KOL, streamer, ca sĩ, nhân viên bán hàng, lễ tân, tiếp viên...
+- CHỈ REVIEW nếu yêu cầu quá phân biệt đối xử (VD: chỉ nhận người đẹp, không nhận người xấu)
+- KHÔNG tự động REJECT chỉ vì có yêu cầu về ngoại hình/giọng nói
+
 ==================================================
 === NGUYÊN TẮC QUYẾT ĐỊNH ===
 
@@ -189,6 +246,7 @@ ${jobContent}${aiEnhancedNote}
 ⚠️ QUY TẮC QUAN TRỌNG:
 - Không chắc chắn → REVIEW (KHÔNG tự đoán)
 - Chỉ REJECT khi có bằng chứng rõ ràng
+- Yêu cầu ngoại hình/giọng nói HỢP LÝ cho một số vị trí → APPROVE
 
 ==================================================
 === OUTPUT ===
@@ -361,6 +419,7 @@ export const autoModerateJobWithLLM = async (jobId) => {
       title: job.title,
       description: job.description,
       requirements: job.requirements,
+      benefits: job.benefits,
       isAIEnhanced: job.isAIEnhanced || job.aiEnhanced // Truyền flag AI-enhanced
     });
 
@@ -390,8 +449,17 @@ export const autoModerateJobWithLLM = async (jobId) => {
 
     await job.save();
 
-    // Populate sau khi save
-    await job.populate('recruiterProfileId');
+    // Populate sau khi save - cần populate nested userId
+    await job.populate({
+      path: 'recruiterProfileId',
+      populate: {
+        path: 'userId',
+        select: '_id'
+      }
+    });
+
+    // Gửi thông báo cho recruiter
+    await sendModerationNotification(job, aiResult.shouldApprove);
 
     return {
       job,
@@ -421,7 +489,13 @@ export const autoModerateJobWithLLM = async (jobId) => {
     job.aiModerationResult.failed = true; // Đánh dấu là thất bại
 
     await job.save();
-    await job.populate('recruiterProfileId');
+    await job.populate({
+      path: 'recruiterProfileId',
+      populate: {
+        path: 'userId',
+        select: '_id'
+      }
+    });
 
     // Throw error để frontend biết và bỏ qua job này
     throw new Error(`Không thể phân tích job: ${error.message}`);

@@ -142,6 +142,8 @@ export const getJobStatistics = async () => {
     expired,
     inactive,
     rejected,
+    aiApproved,
+    aiRejected,
     total
   ] = await Promise.all([
     Job.countDocuments({ status: 'ACTIVE', moderationStatus: 'APPROVED' }),
@@ -152,6 +154,18 @@ export const getJobStatistics = async () => {
     Job.countDocuments({ status: 'EXPIRED', moderationStatus: 'APPROVED' }),
     Job.countDocuments({ status: 'INACTIVE', moderationStatus: 'APPROVED' }),
     Job.countDocuments({ moderationStatus: 'REJECTED' }),
+    // AI Approved: Jobs được AI duyệt - có aiModerationResult với prediction
+    Job.countDocuments({ 
+      moderationStatus: 'APPROVED',
+      'aiModerationResult.moderatedAt': { $exists: true },
+      'aiModerationResult.prediction': { $exists: true, $ne: null }
+    }),
+    // AI Rejected: Jobs bị AI từ chối - có aiModerationResult với prediction
+    Job.countDocuments({ 
+      moderationStatus: 'REJECTED',
+      'aiModerationResult.moderatedAt': { $exists: true },
+      'aiModerationResult.prediction': { $exists: true, $ne: null }
+    }),
     Job.countDocuments()
   ]);
 
@@ -162,6 +176,8 @@ export const getJobStatistics = async () => {
     expired,
     inactive,
     rejected,
+    aiApproved,
+    aiRejected,
     total
   };
 };
