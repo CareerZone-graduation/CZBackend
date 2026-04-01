@@ -30,10 +30,10 @@ jobs:
         export DOCKER_IMAGE=careerzone-api:latest
         
         # Dừng hệ thống cũ
-        docker-compose down || true
+        docker compose down || true
         
         # Chạy ngầm lập tức toàn bộ dịch vụ lấy source mới
-        docker-compose up -d
+        docker compose up -d
 
     - name: Dọn dẹp tài nguyên thừa thãi của VPS
       run: |
