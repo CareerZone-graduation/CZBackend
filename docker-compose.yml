@@ -14,7 +14,7 @@ services:
         max-size: "10m"
         max-file: "3"
     volumes:  
-      - /home/azureuser/serviceAccountKey.json:/app/serviceAccountKey.json:ro 
+      - /home/ec2-user/serviceAccountKey.json:/app/serviceAccountKey.json:ro 
       # (Đường dẫn bên trái là file trên VPS, bên phải là đường dẫn trong code của bạn) 
   # 2. Worker Gửi Thông báo
   worker-notification:
@@ -29,7 +29,7 @@ services:
         max-size: "10m"
         max-file: "3"
     volumes:  
-      - /home/azureuser/serviceAccountKey.json:/app/serviceAccountKey.json:ro
+      - /home/ec2-user/serviceAccountKey.json:/app/serviceAccountKey.json:ro
 
   # 3. Worker Matching
   worker-matching:
