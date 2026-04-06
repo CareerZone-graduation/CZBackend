@@ -123,10 +123,18 @@ export const generateBatchEmbeddings = async (texts, model = 'models/gemini-embe
   }
 
   for (const batch of batches) {
-    const requests = batch.texts.map(text => ({
-      model,
-      content: { parts: [{ text: text ? text.trim().substring(0, 9000) : '' }] }
-    }));  
+    // Lọc index các text hợp lệ (không rỗng) trong batch này
+    const validIndices = [];
+    const requests = [];
+    batch.texts.forEach((text, localIdx) => {
+      const trimmed = text ? text.trim().substring(0, 9000) : '';
+      if (trimmed.length > 0) {
+        validIndices.push(localIdx);
+        requests.push({ model, content: { parts: [{ text: trimmed }] } });
+      }
+    });
+
+    if (requests.length === 0) continue; // toàn bộ chunk rỗng, bỏ qua
 
     // Retry loop
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
@@ -154,17 +162,18 @@ export const generateBatchEmbeddings = async (texts, model = 'models/gemini-embe
             continue; // Retry
           }
 
-          logger.error(`Gemini Batch API fatal error (${status}):`, errorText);
+          logger.error(`Gemini Batch API fatal error (${status}): ${errorText}`);
           break; // Fatal error, move to next batch
         }
 
         const data = await response.json();
         const embeddings = data.embeddings || [];
 
-        // Map back to result array
+        // Map back theo validIndices (bỏ qua các text rỗng đã lọc)
         embeddings.forEach((emb, i) => {
           if (emb && emb.values) {
-            allEmbeddings[batch.startIdx + i] = emb.values;
+            const localIdx = validIndices[i];
+            allEmbeddings[batch.startIdx + localIdx] = emb.values;
           }
         });
 

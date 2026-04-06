@@ -41,6 +41,7 @@ export const ROUTING_KEYS = {
   JOB_ALERT_DAILY: 'notification.job_alert.daily', // Dành cho thông báo việc làm hàng ngày
   JOB_ALERT_WEEKLY: 'notification.job_alert.weekly', // Dành cho thông báo việc làm hàng tuần
   TALENT_POOL_INVITATION: 'notification.talent_pool.invitation', // Dành cho thông báo mời ứng viên vào Talent Pool
+  KNOWLEDGE_DOCUMENT_UPLOADED: 'knowledge.document.uploaded' // Dành cho upload tài liệu knowledge base
 };
 
 /**
@@ -51,6 +52,7 @@ export const QUEUES = {
   IMMEDIATE: 'immediate-notifications', // Queue cho các thông báo cần xử lý ngay lập tức
   DIGEST: 'digest-notifications', // Queue cho các thông báo tổng hợp, xử lý theo đợt
   DLQ: 'notifications-dlq', // Dead-Letter-Queue: Queue chứa các message bị lỗi sau khi đã đi qua DLX
+  KNOWLEDGE_EMBEDDING: 'knowledge-embedding-queue' // Queue cho xử lý embedding
 };
 
 // =================================== CHANNEL SETUP ===================================
@@ -112,6 +114,12 @@ export async function getChannel() {
     await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.COMPANY_VERIFICATION);
     await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.JOB_APPROVAL);
     await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.SUPPORT_REQUEST);
+
+    // 6b. Queue cho xử lý embedding tài liệu Knowledge Base
+    await channel.assertQueue(QUEUES.KNOWLEDGE_EMBEDDING, {
+      durable: true,
+    });
+    await channel.bindQueue(QUEUES.KNOWLEDGE_EMBEDDING, EXCHANGE, ROUTING_KEYS.KNOWLEDGE_DOCUMENT_UPLOADED);
 
     // 6. Queue cho thông báo TỔNG HỢP (daily digest)  (job alert)
     await channel.assertQueue(QUEUES.DIGEST, {

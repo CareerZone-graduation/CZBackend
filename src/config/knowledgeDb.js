@@ -1,19 +1,21 @@
 import mongoose from 'mongoose';
-import KnowledgeBaseSchema from '../models/KnowledgeBase.js';
 import config from './index.js';
 
 /**
- * Separate MongoDB connection for knowledge base feature
- * Uses different database to avoid Atlas Search index limits (max 3)
+ * Separate MongoDB connection for knowledge base feature.
+ * Reuses AUTOCOMPLETE_DB_URI cluster to avoid Atlas Search index limits (max 3 per cluster).
+ * Hosts: KnowledgeChunk (needs $vectorSearch index) + AutocompleteJob (same cluster, separate connection in autocompleteDb.js)
+ * Also hosts: KnowledgeBase (for candidate FAQ copilot)
  */
 
-const KNOWLEDGE_DB_URI = config.AUTOCOMPLETE_DB_URI; // Reusing the autocomplete cluster as it has capacity
+const KNOWLEDGE_DB_URI = config.AUTOCOMPLETE_DB_URI;
 
 let knowledgeConnection = null;
-let KnowledgeBase = null;
+let KnowledgeChunkModel = null;
+let KnowledgeBaseModel = null;
 
 /**
- * Connect to knowledge database
+ * Connect to knowledge database and register models.
  * @returns {Promise<mongoose.Connection>}
  */
 export const connectKnowledgeDB = async () => {
@@ -36,8 +38,12 @@ export const connectKnowledgeDB = async () => {
             console.error('❌ Knowledge MongoDB Error:', err.message);
         });
 
-        // Register KnowledgeBase model on this connection
-        KnowledgeBase = knowledgeConnection.model('KnowledgeBase', KnowledgeBaseSchema);
+        // Import schemas here to avoid circular dependency issues
+        const { default: knowledgeChunkSchema } = await import('../models/KnowledgeChunk.js');
+        KnowledgeChunkModel = knowledgeConnection.model('KnowledgeChunk', knowledgeChunkSchema);
+
+        const { default: knowledgeBaseSchema } = await import('../models/KnowledgeBase.js');
+        KnowledgeBaseModel = knowledgeConnection.model('KnowledgeBase', knowledgeBaseSchema);
 
         return knowledgeConnection;
     } catch (error) {
@@ -47,14 +53,25 @@ export const connectKnowledgeDB = async () => {
 };
 
 /**
- * Get KnowledgeBase model from knowledge database
+ * Get KnowledgeChunk model from knowledge database.
+ * @returns {Promise<mongoose.Model>}
+ */
+export const getKnowledgeChunkModel = async () => {
+    if (!KnowledgeChunkModel) {
+        await connectKnowledgeDB();
+    }
+    return KnowledgeChunkModel;
+};
+
+/**
+ * Get KnowledgeBase model from knowledge database.
  * @returns {Promise<mongoose.Model>}
  */
 export const getKnowledgeBaseModel = async () => {
-    if (!KnowledgeBase) {
+    if (!KnowledgeBaseModel) {
         await connectKnowledgeDB();
     }
-    return KnowledgeBase;
+    return KnowledgeBaseModel;
 };
 
-export { knowledgeConnection, KnowledgeBase };
+export { knowledgeConnection, KnowledgeChunkModel, KnowledgeBaseModel };

@@ -250,6 +250,7 @@ export const getCompanyById = async (companyId) => {
   // Trả về company data với _id của RecruiterProfile để navigate đúng
   return {
     ...recruiterProfile.company.toObject(),
-    _id: recruiterProfile._id // Override với RecruiterProfile ID
+    _id: recruiterProfile._id, // Override với RecruiterProfile ID
+    recruiterId: recruiterProfile.userId // userId của nhà tuyển dụng (dùng cho chatbot)
   };
 };
