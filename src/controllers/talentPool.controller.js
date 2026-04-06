@@ -77,3 +77,21 @@ export const updateTalentPoolEntry = asyncHandler(async (req, res) => {
     data: result
   });
 });
+
+/**
+ * @desc      Invite candidates from talent pool to apply for a job
+ * @route     POST /api/talent-pool/invite
+ * @access    Private - Recruiter Only
+ */
+export const inviteCandidates = asyncHandler(async (req, res) => {
+  const result = await talentPoolService.inviteCandidatesToJob(
+    req.user._id,
+    req.body
+  );
+
+  res.status(200).json({
+    success: true,
+    message: `Đã gửi lời mời đến ${result.invited} ứng viên`,
+    data: result
+  });
+});

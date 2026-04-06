@@ -222,6 +222,7 @@ export const applyToJobSchema = z.object({
   candidateName: z.string({ required_error: "Họ tên là bắt buộc" }).trim().min(2, 'Họ tên phải có ít nhất 2 ký tự').max(100, 'Họ tên không được vượt quá 100 ký tự'),
   candidateEmail: z.string({ required_error: "Email là bắt buộc" }).trim().email('Email không hợp lệ'),
   candidatePhone: z.string({ required_error: "Số điện thoại là bắt buộc" }).trim().regex(/^[\+]?[\d]{1,15}$/, 'Số điện thoại không hợp lệ'),
+  source: z.enum(['DIRECT_APPLY', 'TALENT_POOL_INVITATION', 'JOB_ALERT']).optional()
 }).refine(data => {
   // Điều kiện XOR: một trong hai trường phải tồn tại, nhưng không phải cả hai.
   return (data.cvId && !data.cvTemplateId) || (!data.cvId && data.cvTemplateId);

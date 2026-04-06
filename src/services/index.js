@@ -16,3 +16,4 @@ export { default as notificationTemplateService } from './notificationTemplate.s
 export * as creditHistoryService from './creditHistory.service.js';
 export * as recommendationService from './recommendation.service.js';
 export * as copilotService from './copilot.service.js';
+export * as talentPoolService from './talentPool.service.js';

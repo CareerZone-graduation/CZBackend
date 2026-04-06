@@ -817,7 +817,7 @@ export const getApplicantCount = async (jobId, userId) => {
  * @returns {Promise<Document>} Đơn ứng tuyển đã được tạo
  */
 export const applyToJob = async (userId, jobId, applicationData) => {
-  const { cvId, cvTemplateId, coverLetter, candidateName, candidateEmail, candidatePhone } = applicationData;
+  const { cvId, cvTemplateId, coverLetter, candidateName, candidateEmail, candidatePhone, source } = applicationData;
 
   // 1. Tìm hồ sơ ứng viên
   const candidateProfile = await CandidateProfile.findOne({ userId });
@@ -928,6 +928,7 @@ export const applyToJob = async (userId, jobId, applicationData) => {
       jobId,
       candidateProfileId: candidateProfile._id,
       coverLetter,
+      source: source || 'DIRECT_APPLY',
       // Thông tin cá nhân từ form
       candidateName,
       candidateEmail,
@@ -2779,7 +2780,7 @@ export const getJobsByIds = async (ids) => {
  * @returns {Promise<Document>} Đơn ứng tuyển mới đã được tạo
  */
 export const reapplyToJob = async (userId, jobId, applicationData) => {
-  const { cvId, cvTemplateId, coverLetter, candidateName, candidateEmail, candidatePhone } = applicationData;
+  const { cvId, cvTemplateId, coverLetter, candidateName, candidateEmail, candidatePhone, source } = applicationData;
 
   // 1. Tìm hồ sơ ứng viên
   const candidateProfile = await CandidateProfile.findOne({ userId });
@@ -2889,6 +2890,7 @@ export const reapplyToJob = async (userId, jobId, applicationData) => {
       jobId,
       candidateProfileId: candidateProfile._id,
       coverLetter,
+      source: source || 'DIRECT_APPLY',
       candidateName,
       candidateEmail,
       candidatePhone,

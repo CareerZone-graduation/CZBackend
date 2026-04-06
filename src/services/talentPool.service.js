@@ -4,9 +4,12 @@ import {
   Application,
   CandidateProfile,
   RecruiterProfile,
+  Job
 } from '../models/index.js';
 import { NotFoundError, UnauthorizedError, BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
+import * as queueService from './queue.service.js';
+import { ROUTING_KEYS } from '../queues/rabbitmq.js';
 
 /**
  * Thêm candidate vào talent pool
@@ -151,6 +154,7 @@ export const getTalentPool = async (recruiterId, options = {}) => {
         applicationId: 1,
         candidateProfileId: 1,
         candidateSnapshot: 1,
+        invitations: 1,
         candidateProfile: {
           _id: 1,
           title: 1,
@@ -239,4 +243,116 @@ export const updateTalentPoolEntry = async (recruiterId, talentPoolId, data) => 
   await entry.save();
 
   return entry;
+};
+
+/**
+ * Mời ứng viên trong talent pool ứng tuyển một công việc
+ * @param {string} recruiterId - ID của nhà tuyển dụng
+ * @param {Object} data - Dữ liệu mời (jobId, candidateProfileIds)
+ * @returns {Object} - Kết quả số lượng đã mời và skip
+ */
+export const inviteCandidatesToJob = async (recruiterId, { jobId, candidateProfileIds }) => {
+  // 1. Verify recruiter
+  const recruiterProfile = await RecruiterProfile.findOne({ userId: recruiterId });
+  if (!recruiterProfile) {
+    throw new UnauthorizedError('Bạn không phải là nhà tuyển dụng');
+  }
+
+  // 2. Verify job ownership
+  const job = await Job.findById(jobId);
+  if (!job) {
+    throw new NotFoundError('Không tìm thấy tin tuyển dụng');
+  }
+  if (job.recruiterProfileId.toString() !== recruiterProfile._id.toString()) {
+    throw new UnauthorizedError('Bạn không có quyền mời ứng viên vào tin này');
+  }
+  if (job.status !== 'ACTIVE') {
+    throw new BadRequestError('Chỉ có thể mời ứng viên vào tin đang hoạt động');
+  }
+
+  // 3. Get talent pool entries
+  const talentPoolEntries = await TalentPool.find({
+    recruiterProfileId: recruiterProfile._id,
+    candidateProfileId: { $in: candidateProfileIds }
+  }).populate('candidateProfileId');
+
+  if (talentPoolEntries.length === 0) {
+    throw new NotFoundError('Không tìm thấy ứng viên trong talent pool');
+  }
+
+  // 4. Filter out candidates who already applied or were invited
+  const validInvitations = [];
+  const skippedCandidates = [];
+
+  for (const entry of talentPoolEntries) {
+    // Check if already applied
+    const existingApplication = await Application.findOne({
+      jobId: jobId,
+      candidateProfileId: entry.candidateProfileId._id
+    });
+
+    if (existingApplication) {
+      skippedCandidates.push({
+        candidateId: entry.candidateProfileId._id,
+        reason: 'Đã ứng tuyển'
+      });
+      continue;
+    }
+
+    // Check if already invited
+    const alreadyInvited = entry.invitations && entry.invitations.some(
+      inv => inv.jobId.toString() === jobId
+    );
+
+    if (alreadyInvited) {
+      skippedCandidates.push({
+        candidateId: entry.candidateProfileId._id,
+        reason: 'Đã được mời trước đó'
+      });
+      continue;
+    }
+
+    validInvitations.push(entry);
+  }
+
+  // 5. Update talent pool entries and publish notifications
+  const invitedCandidates = [];
+
+  for (const entry of validInvitations) {
+    // Add to invitations array
+    if (!entry.invitations) {
+      entry.invitations = [];
+    }
+
+    entry.invitations.push({
+      jobId: job._id,
+      invitedAt: new Date(),
+      jobSnapshot: {
+        title: job.title,
+        status: job.status
+      }
+    });
+    await entry.save();
+
+    // Publish to RabbitMQ
+    await queueService.publishNotification(ROUTING_KEYS.TALENT_POOL_INVITATION, {
+      candidateUserId: entry.candidateProfileId.userId,
+      recruiterProfileId: recruiterProfile._id,
+      jobId: job._id,
+      jobTitle: job.title,
+      companyName: recruiterProfile.company.name,
+      companyLogo: recruiterProfile.company.logo
+    });
+
+    invitedCandidates.push(entry.candidateProfileId._id);
+  }
+
+  return {
+    invited: invitedCandidates.length,
+    skipped: skippedCandidates.length,
+    details: {
+      invitedCandidates,
+      skippedCandidates
+    }
+  };
 };

@@ -40,6 +40,7 @@ export const ROUTING_KEYS = {
   NEW_APPLICATION: 'notification.new_application', // Dành cho thông báo ứng viên mới apply
   JOB_ALERT_DAILY: 'notification.job_alert.daily', // Dành cho thông báo việc làm hàng ngày
   JOB_ALERT_WEEKLY: 'notification.job_alert.weekly', // Dành cho thông báo việc làm hàng tuần
+  TALENT_POOL_INVITATION: 'notification.talent_pool.invitation', // Dành cho thông báo mời ứng viên vào Talent Pool
 };
 
 /**
@@ -107,6 +108,7 @@ export async function getChannel() {
     await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.RECORDING_AVAILABLE);
     await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.EMAIL_SEND);
     await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.NEW_APPLICATION); // THÊM: Bind routing key mới
+    await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.TALENT_POOL_INVITATION);
     await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.COMPANY_VERIFICATION);
     await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.JOB_APPROVAL);
     await channel.bindQueue(QUEUES.IMMEDIATE, EXCHANGE, ROUTING_KEYS.SUPPORT_REQUEST);

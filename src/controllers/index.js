@@ -16,3 +16,4 @@ export * from './chat.controller.js';
 export * from './interview.controller.js';
 export * from './admin.controller.js';
 export * from './vnpay.controller.js';
+export * from './talentPool.controller.js';

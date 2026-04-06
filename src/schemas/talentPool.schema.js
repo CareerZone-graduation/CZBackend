@@ -23,3 +23,11 @@ export const getTalentPoolQuery = z.object({
   search: z.string().optional(),
   sort: z.enum(['addedAt', '-addedAt']).optional()
 }).optional();
+
+// Validation schema cho invite ứng viên
+export const inviteCandidates = z.object({
+  jobId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Job ID không hợp lệ'),
+  candidateProfileIds: z.array(
+    z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID ứng viên không hợp lệ')
+  ).min(1, 'Phải chọn ít nhất 1 ứng viên').max(50, 'Tối đa 50 ứng viên mỗi lần')
+});
