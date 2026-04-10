@@ -232,8 +232,8 @@ const jobSchema = new mongoose.Schema({
       default: null
     },
     method: {
-      type: String, // 'PhoBERT' hoặc 'LLM'
-      enum: ['PhoBERT', 'LLM'],
+      type: String, // 'PhoBERT', 'LLM', hoặc 'MANUAL'
+      enum: ['PhoBERT', 'LLM', 'MANUAL'],
       default: 'PhoBERT'
     },
     moderatedAt: {

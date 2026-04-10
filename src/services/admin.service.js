@@ -236,51 +236,133 @@ export const getJobDetail = async (jobId) => {
 };
 
 export const approveJob = async (jobId) => {
-  const updatedJob = await Job.findByIdAndUpdate(
-    jobId,
-    { approved: true, moderationStatus: 'APPROVED', status: 'ACTIVE' },
-    { new: true }
-  ).populate('recruiterProfileId');
-
-  if (!updatedJob) {
-    throw new NotFoundError('Tin tuyển dụng không tồn tại.');
-  }
-
-  // Publish notification
-  await queueService.publishNotification(ROUTING_KEYS.JOB_APPROVAL, {
-    recipientId: updatedJob.recruiterProfileId.userId,
-    data: {
-      status: 'APPROVED',
-      jobTitle: updatedJob.title,
-      jobId: updatedJob._id
+  const job = await Job.findById(jobId).populate({
+    path: 'recruiterProfileId',
+    populate: {
+      path: 'userId',
+      select: '_id'
     }
   });
 
-  return updatedJob;
+  if (!job) {
+    throw new NotFoundError('Tin tuyển dụng không tồn tại.');
+  }
+
+  // Cập nhật job status
+  job.approved = true;
+  job.moderationStatus = 'APPROVED';
+  job.status = 'ACTIVE';
+
+  await job.save();
+
+  // Gửi thông báo cho recruiter
+  const { default: Notification } = await import('../models/Notification.js');
+  
+  if (job.recruiterProfileId?.userId?._id) {
+    try {
+      // KIỂM TRA XEM ĐÃ CÓ NOTIFICATION CHO JOB NÀY CHƯA (trong vòng 5 phút gần đây)
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const existingNotification = await Notification.findOne({
+        userId: job.recruiterProfileId.userId._id,
+        relatedJob: job._id,
+        type: 'JOB_APPROVED',
+        createdAt: { $gte: fiveMinutesAgo }
+      });
+
+      if (existingNotification) {
+        logger.info(`Approval notification already exists for job ${job._id}, skipping duplicate`);
+        return job;
+      }
+
+      await Notification.create({
+        userId: job.recruiterProfileId.userId._id,
+        type: 'JOB_APPROVED',
+        title: '✅ Tin tuyển dụng đã được duyệt',
+        message: `Tin tuyển dụng "${job.title}" đã được phê duyệt và đang hiển thị công khai.`,
+        relatedJob: job._id,
+        metadata: {
+          jobId: job._id,
+          jobTitle: job.title,
+          moderationStatus: job.moderationStatus
+        }
+      });
+      logger.info(`Approval notification sent to recruiter ${job.recruiterProfileId.userId._id} for job ${job._id}`);
+    } catch (error) {
+      logger.error('Failed to send approval notification:', error);
+    }
+  }
+
+  return job;
 };
 
-export const rejectJob = async (jobId) => {
-  const updatedJob = await Job.findByIdAndUpdate(
-    jobId,
-    { approved: false, status: 'INACTIVE', moderationStatus: 'REJECTED' },
-    { new: true }
-  ).populate('recruiterProfileId');
-
-  if (!updatedJob) {
-    throw new NotFoundError('Tin tuyển dụng không tồn tại.');
-  }
-
-  // Publish notification
-  await queueService.publishNotification(ROUTING_KEYS.JOB_APPROVAL, {
-    recipientId: updatedJob.recruiterProfileId.userId,
-    data: {
-      status: 'REJECTED',
-      jobTitle: updatedJob.title,
-      jobId: updatedJob._id
+export const rejectJob = async (jobId, rejectionReason) => {
+  const job = await Job.findById(jobId).populate({
+    path: 'recruiterProfileId',
+    populate: {
+      path: 'userId',
+      select: '_id'
     }
   });
 
-  return updatedJob;
+  if (!job) {
+    throw new NotFoundError('Tin tuyển dụng không tồn tại.');
+  }
+
+  // Cập nhật job status
+  job.approved = false;
+  job.status = 'INACTIVE';
+  job.moderationStatus = 'REJECTED';
+  
+  // Lưu lý do từ chối vào aiModerationResult
+  if (!job.aiModerationResult) {
+    job.aiModerationResult = {};
+  }
+  job.aiModerationResult.summary = rejectionReason || 'Không đáp ứng tiêu chuẩn';
+  job.aiModerationResult.reasons = rejectionReason ? [rejectionReason] : [];
+  job.aiModerationResult.moderatedAt = new Date();
+  job.aiModerationResult.method = 'MANUAL'; // Đánh dấu là duyệt thủ công
+
+  await job.save();
+
+  // Gửi thông báo cho recruiter với lý do từ chối
+  const { default: Notification } = await import('../models/Notification.js');
+  
+  if (job.recruiterProfileId?.userId?._id) {
+    try {
+      // KIỂM TRA XEM ĐÃ CÓ NOTIFICATION CHO JOB NÀY CHƯA (trong vòng 5 phút gần đây)
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const existingNotification = await Notification.findOne({
+        userId: job.recruiterProfileId.userId._id,
+        relatedJob: job._id,
+        type: 'JOB_REJECTED',
+        createdAt: { $gte: fiveMinutesAgo }
+      });
+
+      if (existingNotification) {
+        logger.info(`Rejection notification already exists for job ${job._id}, skipping duplicate`);
+        return job;
+      }
+
+      await Notification.create({
+        userId: job.recruiterProfileId.userId._id,
+        type: 'JOB_REJECTED',
+        title: '❌ Tin tuyển dụng bị từ chối',
+        message: `Tin tuyển dụng "${job.title}" bị từ chối. Lý do: ${rejectionReason || 'Không đáp ứng tiêu chuẩn'}`,
+        relatedJob: job._id,
+        metadata: {
+          jobId: job._id,
+          jobTitle: job.title,
+          moderationStatus: job.moderationStatus,
+          rejectionReason: rejectionReason || 'Không đáp ứng tiêu chuẩn'
+        }
+      });
+      logger.info(`Rejection notification sent to recruiter ${job.recruiterProfileId.userId._id} for job ${job._id}`);
+    } catch (error) {
+      logger.error('Failed to send rejection notification:', error);
+    }
+  }
+
+  return job;
 };
 
 // === AI AUTO MODERATION ===

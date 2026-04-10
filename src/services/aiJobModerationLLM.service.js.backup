@@ -25,20 +25,6 @@ async function sendModerationNotification(job, isApproved) {
       return;
     }
 
-    // KIỂM TRA XEM ĐÃ CÓ NOTIFICATION CHO JOB NÀY CHƯA (trong vòng 5 phút gần đây)
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-    const existingNotification = await Notification.findOne({
-      userId: userId,
-      relatedJob: job._id,
-      type: isApproved ? 'JOB_APPROVED' : 'JOB_REJECTED',
-      createdAt: { $gte: fiveMinutesAgo }
-    });
-
-    if (existingNotification) {
-      logger.info(`Notification already exists for job ${job._id}, skipping duplicate`);
-      return;
-    }
-
     const notification = {
       userId: userId,
       type: isApproved ? 'JOB_APPROVED' : 'JOB_REJECTED',
@@ -209,54 +195,24 @@ ${jobData.benefits || 'N/A'}
   logger.info(`Processing job: ${jobData.title}`);
   logger.info(`isAIEnhanced: ${isAIEnhanced}, jobData.isAIEnhanced: ${jobData.isAIEnhanced}, jobData.aiEnhanced: ${jobData.aiEnhanced}`);
 
-  // VALIDATION CƠ BẢN - Kiểm tra nội dung quá ngắn (KHÔNG kiểm tra spam cụm từ lặp)
+  // Bỏ qua spam check nếu đã AI-enhanced (tin cậy AI-generated content)
   if (!isAIEnhanced) {
-    const title = jobData.title?.trim() || '';
-    const description = jobData.description?.trim() || '';
-    const requirements = jobData.requirements?.trim() || '';
-    
-    // 1. Kiểm tra tiêu đề
-    if (!title || title.length < 5) {
-      logger.info('❌ Rejected: Title too short');
+    logger.info('Running spam detection...');
+    const spamCheck = detectSpam(jobContent);
+    if (spamCheck.isSpam) {
+      logger.info('✅ Spam detected! Rejecting job.', spamCheck);
       return {
         shouldApprove: false,
         confidence: 0.95,
-        reasons: ['Tiêu đề quá ngắn (< 5 ký tự) hoặc thiếu'],
-        summary: 'Tin bị từ chối do tiêu đề quá ngắn hoặc thiếu',
+        reasons: spamCheck.reasons,
+        summary: spamCheck.summary,
         prediction: 0,
         probabilities: { approve: 0.05, reject: 0.95 }
       };
     }
-    
-    // 2. Kiểm tra mô tả công việc
-    if (!description || description.length < 50) {
-      logger.info('❌ Rejected: Description too short');
-      return {
-        shouldApprove: false,
-        confidence: 0.95,
-        reasons: [`Mô tả công việc quá ngắn (${description.length} ký tự, tối thiểu 50 ký tự)`],
-        summary: 'Tin bị từ chối do mô tả công việc quá ngắn, thiếu thông tin',
-        prediction: 0,
-        probabilities: { approve: 0.05, reject: 0.95 }
-      };
-    }
-    
-    // 3. Kiểm tra yêu cầu ứng viên
-    if (!requirements || requirements.length < 30) {
-      logger.info('❌ Rejected: Requirements too short');
-      return {
-        shouldApprove: false,
-        confidence: 0.95,
-        reasons: [`Yêu cầu ứng viên quá ngắn (${requirements.length} ký tự, tối thiểu 30 ký tự)`],
-        summary: 'Tin bị từ chối do yêu cầu ứng viên quá ngắn, thiếu thông tin',
-        prediction: 0,
-        probabilities: { approve: 0.05, reject: 0.95 }
-      };
-    }
-    
-    logger.info('✓ Basic validation passed');
+    logger.info('✓ Spam check passed');
   } else {
-    logger.info('⚠️ Skipping basic validation (AI-enhanced job)');
+    logger.info('⚠️ Skipping spam check (AI-enhanced job)');
   }
 
   // Nếu không có LLM API key, dùng logic đơn giản
@@ -302,20 +258,13 @@ ${jobContent}${aiEnhancedNote}
 === BƯỚC 2: PHÂN TÍCH SPAM & LẶP NỘI DUNG ===
 
 ⚠️ CHỈ coi là SPAM khi:
-1. Lặp câu dài HOÀN TOÀN GIỐNG NHAU (>= 10 từ) >= 3 lần → REJECT
-2. Lặp ký tự vô nghĩa (>= 6 ký tự: "aaaaaaa", "111111") → REJECT
-3. Lặp đoạn văn HOÀN TOÀN GIỐNG NHAU >= 2 lần → REVIEW/REJECT
+1. Lặp câu dài (>= 10 từ) >= 3 lần → REJECT
+2. Lặp ký tự vô nghĩa (>= 6 ký tự) → REJECT
+3. Lặp đoạn văn >= 2 lần → REVIEW/REJECT
 
-✔️ KHÔNG phải spam (CHẤP NHẬN):
-- Lặp từ đơn: "có", "được", "làm", "công việc", "ứng viên"
-- Lặp cụm ngắn (2-3 từ): "có kinh nghiệm", "được hưởng", "ngân hàng", "tài chính"
-- Lặp TỪ KHÓA NGÀNH NGHỀ: "ngân hàng", "tài chính", "kế toán", "marketing", "lập trình", "thiết kế"...
-  → Đây là từ khóa chính của công việc, lặp nhiều lần là BÌN THƯỜNG!
-
-⚠️ QUY TẮC QUAN TRỌNG:
-- Job về "Ngân hàng" có từ "ngân hàng" lặp 10-20 lần → APPROVE (từ khóa ngành nghề)
-- Job về "Marketing" có từ "marketing" lặp nhiều → APPROVE (từ khóa ngành nghề)
-- CHỈ REJECT khi lặp CÂU DÀI HOÀN TOÀN GIỐNG NHAU, không phải từ đơn!
+✔️ KHÔNG phải spam:
+- Lặp từ đơn: "có", "được", "làm"
+- Lặp cụm ngắn: "có kinh nghiệm", "được hưởng"
 
 ==================================================
 === BƯỚC 3: PHÂN TÍCH CHẤT LƯỢNG NỘI DUNG ===

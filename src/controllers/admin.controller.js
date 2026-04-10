@@ -39,7 +39,8 @@ export const approveJob = asyncHandler(async (req, res) => {
 });
 
 export const rejectJob = asyncHandler(async (req, res) => {
-  const data = await adminService.rejectJob(req.params.id);
+  const { rejectionReason } = req.body;
+  const data = await adminService.rejectJob(req.params.id, rejectionReason);
   res.json({
     success: true,
     message: 'Từ chối tin tuyển dụng thành công.',
