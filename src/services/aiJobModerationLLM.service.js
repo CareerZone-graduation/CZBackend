@@ -69,9 +69,28 @@ async function sendModerationNotification(job, isApproved) {
 
 /**
  * Phát hiện spam - Cải tiến để bắt cả spam ngắn và dài
+ * @param {string} content - Nội dung cần kiểm tra
+ * @param {boolean} isAIEnhanced - Job có được AI enhance không (nếu true thì nới lỏng hơn)
  */
-function detectSpam(content) {
+function detectSpam(content, isAIEnhanced = false) {
   const reasons = [];
+  
+  // ⚠️ NẾU LÀ AI-ENHANCED JOB → CHỈ KIỂM TRA SPAM CỰC KỲ NGHIÊM TRỌNG
+  if (isAIEnhanced) {
+    // Chỉ kiểm tra ký tự lặp vô nghĩa (spam rõ ràng)
+    const repeatedChars = content.match(/(.)\1{5,}/g);
+    if (repeatedChars) {
+      reasons.push(`Vi phạm spam - Phát hiện ký tự lặp vô nghĩa: "${repeatedChars[0]}"`);
+      return {
+        isSpam: true,
+        reasons,
+        summary: 'Tin bị từ chối do chứa ký tự lặp vô nghĩa'
+      };
+    }
+    
+    // BỎ QUA tất cả kiểm tra lặp từ/cụm từ cho AI-enhanced jobs
+    return { isSpam: false };
+  }
   
   // 1. Kiểm tra ký tự lặp vô nghĩa (>= 6 ký tự giống nhau)
   const repeatedChars = content.match(/(.)\1{5,}/g);
@@ -86,7 +105,7 @@ function detectSpam(content) {
   
   const words = content.split(/\s+/).filter(w => w.length > 0);
   
-  // 2. Kiểm tra lặp CỤM TỪ NGẮN (2-4 từ) >= 10 lần - Bắt spam kiểu "abc abc abc..."
+  // 2. Kiểm tra lặp CỤM TỪ NGẮN (2-4 từ) >= 25 lần - Tăng từ 20 lên 25 để nới lỏng hơn nữa
   // Kiểm tra cụm 2 từ
   for (let i = 0; i < words.length - 1; i++) {
     const phrase = words.slice(i, i + 2).join(' ');
@@ -96,7 +115,7 @@ function detectSpam(content) {
     const regex = new RegExp(`\\b${escapedPhrase}\\b`, 'gi');
     const matches = content.match(regex);
     
-    if (matches && matches.length >= 10) {
+    if (matches && matches.length >= 25) {  // Tăng từ 20 lên 25
       const displayPhrase = phrase.length > 50 ? phrase.substring(0, 50) + '...' : phrase;
       reasons.push(`Vi phạm spam - Cụm từ "${displayPhrase}" lặp ${matches.length} lần`);
       return {
@@ -116,7 +135,7 @@ function detectSpam(content) {
     const regex = new RegExp(`\\b${escapedPhrase}\\b`, 'gi');
     const matches = content.match(regex);
     
-    if (matches && matches.length >= 8) {
+    if (matches && matches.length >= 20) {  // Tăng từ 15 lên 20
       const displayPhrase = phrase.length > 50 ? phrase.substring(0, 50) + '...' : phrase;
       reasons.push(`Vi phạm spam - Cụm từ "${displayPhrase}" lặp ${matches.length} lần`);
       return {
@@ -160,11 +179,12 @@ function detectSpam(content) {
   }
   
   // 4. Kiểm tra tỷ lệ từ duy nhất (unique words) so với tổng số từ
-  // Nếu < 30% từ là duy nhất → có thể là spam
+  // Nếu < 20% từ là duy nhất → có thể là spam (GIẢM từ 30% xuống 20% để nới lỏng)
   const uniqueWords = new Set(words.map(w => w.toLowerCase()));
   const uniqueRatio = uniqueWords.size / words.length;
   
-  if (words.length > 20 && uniqueRatio < 0.3) {
+  // CHỈ kiểm tra nếu nội dung CỰC KỲ ngắn (< 50 từ) hoặc tỷ lệ CỰC KỲ thấp (< 15%)
+  if (words.length > 50 && uniqueRatio < 0.15) {
     reasons.push(`Vi phạm spam - Nội dung lặp lại quá nhiều (chỉ ${(uniqueRatio * 100).toFixed(1)}% từ là duy nhất)`);
     return {
       isSpam: true,
@@ -185,6 +205,60 @@ function detectSpam(content) {
   }
   
   return { isSpam: false };
+}
+
+/**
+ * Phát hiện chuỗi ký tự vô nghĩa (gibberish)
+ * @param {string} text - Văn bản cần kiểm tra
+ * @returns {boolean} - true nếu là gibberish
+ */
+function isGibberish(text) {
+  if (!text || text.length < 5) return false;
+  
+  // 1. Kiểm tra tỷ lệ phụ âm liên tiếp (consonant clusters)
+  // Tiếng Việt và tiếng Anh ít khi có > 4 phụ âm liên tiếp
+  const consonantClusters = text.match(/[bcdfghjklmnpqrstvwxyz]{5,}/gi);
+  if (consonantClusters && consonantClusters.length > 0) {
+    return true; // VD: "kalasnlkndklsnl" có "kl", "snlkn", "dklsnl"
+  }
+  
+  // 2. Kiểm tra tỷ lệ nguyên âm/phụ âm bất thường
+  const vowels = text.match(/[aeiouàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹ]/gi) || [];
+  const consonants = text.match(/[bcdfghjklmnpqrstvwxyzđ]/gi) || [];
+  const totalLetters = vowels.length + consonants.length;
+  
+  if (totalLetters > 10) {
+    const vowelRatio = vowels.length / totalLetters;
+    // Tiếng Việt thường có 40-60% nguyên âm
+    // Nếu < 20% hoặc > 80% → có thể là gibberish
+    if (vowelRatio < 0.2 || vowelRatio > 0.8) {
+      return true;
+    }
+  }
+  
+  // 3. Kiểm tra từ có nghĩa (chỉ áp dụng cho chuỗi dài)
+  if (text.length > 15) {
+    // Tách thành các từ
+    const words = text.split(/\s+/);
+    let meaninglessCount = 0;
+    
+    for (const word of words) {
+      if (word.length > 8) {
+        // Từ dài > 8 ký tự mà không có nguyên âm hoặc toàn phụ âm → vô nghĩa
+        const wordVowels = word.match(/[aeiouàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹ]/gi) || [];
+        if (wordVowels.length === 0) {
+          meaninglessCount++;
+        }
+      }
+    }
+    
+    // Nếu > 30% từ vô nghĩa → reject
+    if (words.length > 0 && meaninglessCount / words.length > 0.3) {
+      return true;
+    }
+  }
+  
+  return false;
 }
 
 /**
@@ -209,12 +283,37 @@ ${jobData.benefits || 'N/A'}
   logger.info(`Processing job: ${jobData.title}`);
   logger.info(`isAIEnhanced: ${isAIEnhanced}, jobData.isAIEnhanced: ${jobData.isAIEnhanced}, jobData.aiEnhanced: ${jobData.aiEnhanced}`);
 
+  // KIỂM TRA GIBBERISH - ÁP DỤNG CHO TẤT CẢ JOBS (kể cả AI-enhanced)
+  const title = jobData.title?.trim() || '';
+  const description = jobData.description?.trim() || '';
+  const requirements = jobData.requirements?.trim() || '';
+  
+  if (isGibberish(title)) {
+    logger.info('❌ Rejected: Title is gibberish');
+    return {
+      shouldApprove: false,
+      confidence: 0.98,
+      reasons: ['Tiêu đề chứa chuỗi ký tự vô nghĩa, không phải từ có nghĩa'],
+      summary: 'Tin bị từ chối do tiêu đề vô nghĩa',
+      prediction: 0,
+      probabilities: { approve: 0.02, reject: 0.98 }
+    };
+  }
+  
+  if (isGibberish(description)) {
+    logger.info('❌ Rejected: Description is gibberish');
+    return {
+      shouldApprove: false,
+      confidence: 0.98,
+      reasons: ['Mô tả công việc chứa chuỗi ký tự vô nghĩa'],
+      summary: 'Tin bị từ chối do mô tả vô nghĩa',
+      prediction: 0,
+      probabilities: { approve: 0.02, reject: 0.98 }
+    };
+  }
+
   // VALIDATION CƠ BẢN - Kiểm tra nội dung quá ngắn (KHÔNG kiểm tra spam cụm từ lặp)
   if (!isAIEnhanced) {
-    const title = jobData.title?.trim() || '';
-    const description = jobData.description?.trim() || '';
-    const requirements = jobData.requirements?.trim() || '';
-    
     // 1. Kiểm tra tiêu đề
     if (!title || title.length < 5) {
       logger.info('❌ Rejected: Title too short');
@@ -454,8 +553,10 @@ Output phải là JSON hợp lệ, không thêm text ngoài.`;
  */
 function simpleValidation(jobData, jobContent) {
   // LUÔN LUÔN chạy spam check trước, kể cả khi fallback
-  if (jobContent && !jobData.isAIEnhanced && !jobData.aiEnhanced) {
-    const spamCheck = detectSpam(jobContent);
+  // Truyền flag isAIEnhanced để nới lỏng kiểm tra cho AI-enhanced jobs
+  const isAIEnhanced = jobData.isAIEnhanced || jobData.aiEnhanced;
+  if (jobContent) {
+    const spamCheck = detectSpam(jobContent, isAIEnhanced);
     if (spamCheck.isSpam) {
       logger.info('✅ Spam detected in fallback validation! Rejecting job.', spamCheck);
       return {
