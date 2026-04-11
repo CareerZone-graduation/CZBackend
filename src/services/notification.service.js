@@ -1194,7 +1194,7 @@ export const handleCompanyVerification = async (payload) => {
  */
 export const handleJobApproval = async (payload) => {
   const { recipientId, data } = payload;
-  const { status, jobTitle, jobId } = data;
+  const { status, jobTitle, jobId, aiModerated, summary } = data;
 
   if (!recipientId) {
     logger.warn('JOB_APPROVAL payload is missing recipientId.', payload);
@@ -1208,10 +1208,18 @@ export const handleJobApproval = async (payload) => {
 
   if (status === 'APPROVED') {
     title = '✅ Tin tuyển dụng được phê duyệt';
-    message = `Tin tuyển dụng "${jobTitle}" đã được duyệt và đang hiển thị công khai.`;
+    if (aiModerated) {
+      message = `Tin tuyển dụng "${jobTitle}" đã được hệ thống AI tự động duyệt và đang hiển thị công khai.`;
+    } else {
+      message = `Tin tuyển dụng "${jobTitle}" đã được duyệt và đang hiển thị công khai.`;
+    }
   } else if (status === 'REJECTED') {
     title = '❌ Tin tuyển dụng bị từ chối';
-    message = `Tin tuyển dụng "${jobTitle}" đã bị từ chối duyệt. Vui lòng kiểm tra lại nội dung.`;
+    if (aiModerated && summary) {
+      message = `Tin tuyển dụng "${jobTitle}" đã bị hệ thống AI từ chối duyệt. Lý do: ${summary}`;
+    } else {
+      message = `Tin tuyển dụng "${jobTitle}" đã bị từ chối duyệt. Vui lòng kiểm tra lại nội dung.`;
+    }
   } else {
     logger.warn(`Unknown job approval status: ${status}`);
     return;

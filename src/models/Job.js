@@ -232,14 +232,20 @@ const jobSchema = new mongoose.Schema({
       default: null
     },
     method: {
-      type: String, // 'PhoBERT' hoặc 'LLM'
-      enum: ['PhoBERT', 'LLM'],
+      type: String, // 'PhoBERT', 'LLM', hoặc 'MANUAL'
+      enum: ['PhoBERT', 'LLM', 'MANUAL'],
       default: 'PhoBERT'
     },
     moderatedAt: {
       type: Date,
       default: null
     }
+  },
+  // Flag to indicate if job content was enhanced by AI
+  isAIEnhanced: {
+    type: Boolean,
+    default: false,
+    comment: 'Đánh dấu job đã được AI enhance (để nới lỏng spam detection)'
   },
   // Thêm trường cho embeddings
   chunks: {

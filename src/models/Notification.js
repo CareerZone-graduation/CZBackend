@@ -39,6 +39,8 @@ const notificationSchema = new mongoose.Schema({
         "job_approval", // THÊM: Cho thông báo phê duyệt tin tuyển dụng.
         "support_request", // THÊM: Cho thông báo yêu cầu hỗ trợ.
         "talent_pool_invitation" // THÊM MỚI
+        "JOB_APPROVED", // THÊM: Cho thông báo job được duyệt bởi AI/Admin
+        "JOB_REJECTED", // THÊM: Cho thông báo job bị từ chối bởi AI/Admin
       ],
       message: "{VALUE} is not a valid notification type",
     },
