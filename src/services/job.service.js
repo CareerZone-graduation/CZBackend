@@ -708,12 +708,12 @@ export const updateJob = async (jobId, userId, updateData) => {
     new: true,
     runValidators: true
   });
-
+  //  Nơi đây kích hoạt AI
   if (finalUpdateData.moderationStatus === 'PENDING') {
     try {
       const AdminSettings = (await import('../models/AdminSettings.js')).default;
       const setting = await AdminSettings.findOne({ key: 'autoModeration' });
-      
+
       if (setting?.value?.enabled) {
         const aiJobModerationLLMService = await import('./aiJobModerationLLM.service.js');
         aiJobModerationLLMService.autoModerateJobWithLLM(updatedJob._id)
@@ -3023,7 +3023,7 @@ export const getSimilarJobs = async (jobId, options = {}, userId = null) => {
     {
       $project: {
         description: 0, requirements: 0, benefits: 0, address: 0,
-        embeddingsUpdatedAt: 0, chunks: 0, recruiter: 0, moderationHistory: 0,
+        embeddingsUpdatedAt: 0, chunks: 0, recruiter: 0,
       }
     },
   ];
@@ -3121,7 +3121,7 @@ export const getAlsoLikedJobs = async (jobId, options = {}, userId = null) => {
     {
       $project: {
         description: 0, requirements: 0, benefits: 0, address: 0,
-        embeddingsUpdatedAt: 0, chunks: 0, recruiter: 0, moderationHistory: 0,
+        embeddingsUpdatedAt: 0, chunks: 0, recruiter: 0,
       }
     },
   ];

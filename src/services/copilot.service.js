@@ -15,7 +15,7 @@ export const get_job_detail = async (args) => {
     }
 
     const job = await Job.findById(jobId)
-        .select('-chunks -moderationHistory -moderationStatus -embeddingsUpdatedAt')
+        .select('-chunks -moderationStatus -embeddingsUpdatedAt')
         .populate({
             path: 'recruiterProfileId',
             select: 'fullname company.name company.about company.logo company.industry company.website'

@@ -1,53 +1,13 @@
 import axios from 'axios';
 import logger from '../utils/logger.js';
+import * as queueService from './queue.service.js';
+import { ROUTING_KEYS } from '../queues/rabbitmq.js';
 
 const LLM_API_KEY = process.env.LLM_API_KEY;
 const LLM_BASE_URL = process.env.LLM_BASE_URL;
-const LLM_MODEL = process.env.LLM_MODEL;
+const LLM_MODEL = "gemini-3-flash";
 
-/**
- * Gửi thông báo cho recruiter sau khi duyệt job
- */
-async function sendModerationNotification(job, isApproved) {
-  try {
-    const { default: Notification } = await import('../models/Notification.js');
 
-    // Kiểm tra kỹ hơn
-    if (!job.recruiterProfileId) {
-      logger.warn('Cannot send notification: recruiterProfileId not found');
-      return;
-    }
-
-    const userId = job.recruiterProfileId.userId?._id || job.recruiterProfileId.userId;
-
-    if (!userId) {
-      logger.warn('Cannot send notification: userId not found');
-      return;
-    }
-
-    const notification = {
-      userId: userId,
-      type: 'job_approval',
-      title: isApproved ? '✅ Tin tuyển dụng đã được duyệt' : '❌ Tin tuyển dụng bị từ chối',
-      message: isApproved
-        ? `Tin tuyển dụng "${job.title}" đã được phê duyệt và đang hiển thị công khai.`
-        : `Tin tuyển dụng "${job.title}" bị từ chối. Lý do: ${job.aiModerationResult?.summary || 'Không đáp ứng tiêu chuẩn'}`,
-      metadata: {
-        jobId: job._id,
-        jobTitle: job.title,
-        moderationStatus: job.moderationStatus,
-        reasons: job.aiModerationResult?.reasons || []
-      }
-    };
-
-    await Notification.create(notification);
-    logger.info(`Notification sent to recruiter ${userId} for job ${job._id}`);
-  } catch (error) {
-    logger.error(error)
-    logger.error('Failed to send moderation notification:', error.message);
-    // Không throw error - notification là optional
-  }
-}
 
 /**
  * Phát hiện spam - Cải tiến để bắt cả spam ngắn và dài
@@ -56,7 +16,7 @@ async function sendModerationNotification(job, isApproved) {
  */
 function detectSpam(content, isAIEnhanced = false) {
   const reasons = [];
-  
+
   // ⚠️ NẾU LÀ AI-ENHANCED JOB → CHỈ KIỂM TRA SPAM CỰC KỲ NGHIÊM TRỌNG
   if (isAIEnhanced) {
     // Chỉ kiểm tra ký tự lặp vô nghĩa (spam rõ ràng)
@@ -69,11 +29,11 @@ function detectSpam(content, isAIEnhanced = false) {
         summary: 'Tin bị từ chối do chứa ký tự lặp vô nghĩa'
       };
     }
-    
+
     // BỎ QUA tất cả kiểm tra lặp từ/cụm từ cho AI-enhanced jobs
     return { isSpam: false };
   }
-  
+
   // 1. Kiểm tra ký tự lặp vô nghĩa (>= 6 ký tự giống nhau)
   const repeatedChars = content.match(/(.)\1{5,}/g);
   if (repeatedChars) {
@@ -84,19 +44,19 @@ function detectSpam(content, isAIEnhanced = false) {
       summary: 'Tin bị từ chối do chứa ký tự lặp vô nghĩa'
     };
   }
-  
+
   const words = content.split(/\s+/).filter(w => w.length > 0);
-  
+
   // 2. Kiểm tra lặp CỤM TỪ NGẮN (2-4 từ) >= 25 lần - Tăng từ 20 lên 25 để nới lỏng hơn nữa
   // Kiểm tra cụm 2 từ
   for (let i = 0; i < words.length - 1; i++) {
     const phrase = words.slice(i, i + 2).join(' ');
     if (phrase.length < 4) continue; // Bỏ qua cụm quá ngắn như "a b"
-    
+
     const escapedPhrase = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(`\\b${escapedPhrase}\\b`, 'gi');
     const matches = content.match(regex);
-    
+
     if (matches && matches.length >= 25) {  // Tăng từ 20 lên 25
       const displayPhrase = phrase.length > 50 ? phrase.substring(0, 50) + '...' : phrase;
       reasons.push(`Vi phạm spam - Cụm từ "${displayPhrase}" lặp ${matches.length} lần`);
@@ -107,16 +67,16 @@ function detectSpam(content, isAIEnhanced = false) {
       };
     }
   }
-  
+
   // Kiểm tra cụm 3 từ
   for (let i = 0; i < words.length - 2; i++) {
     const phrase = words.slice(i, i + 3).join(' ');
     if (phrase.length < 6) continue;
-    
+
     const escapedPhrase = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(`\\b${escapedPhrase}\\b`, 'gi');
     const matches = content.match(regex);
-    
+
     if (matches && matches.length >= 20) {  // Tăng từ 15 lên 20
       const displayPhrase = phrase.length > 50 ? phrase.substring(0, 50) + '...' : phrase;
       reasons.push(`Vi phạm spam - Cụm từ "${displayPhrase}" lặp ${matches.length} lần`);
@@ -127,7 +87,7 @@ function detectSpam(content, isAIEnhanced = false) {
       };
     }
   }
-  
+
   // 3. Kiểm tra lặp CỤM TỪ DÀI (>= 8 từ) LIÊN TIẾP >= 5 lần
   for (let i = 0; i < words.length - 7; i++) {
     const phrase = words.slice(i, i + 8).join(' ');
@@ -159,12 +119,12 @@ function detectSpam(content, isAIEnhanced = false) {
       }
     }
   }
-  
+
   // 4. Kiểm tra tỷ lệ từ duy nhất (unique words) so với tổng số từ
   // Nếu < 20% từ là duy nhất → có thể là spam (GIẢM từ 30% xuống 20% để nới lỏng)
   const uniqueWords = new Set(words.map(w => w.toLowerCase()));
   const uniqueRatio = uniqueWords.size / words.length;
-  
+
   // CHỈ kiểm tra nếu nội dung CỰC KỲ ngắn (< 50 từ) hoặc tỷ lệ CỰC KỲ thấp (< 15%)
   if (words.length > 50 && uniqueRatio < 0.15) {
     reasons.push(`Vi phạm spam - Nội dung lặp lại quá nhiều (chỉ ${(uniqueRatio * 100).toFixed(1)}% từ là duy nhất)`);
@@ -174,7 +134,7 @@ function detectSpam(content, isAIEnhanced = false) {
       summary: `Tin bị từ chối do nội dung lặp lại vô nghĩa (${uniqueWords.size} từ duy nhất / ${words.length} tổng từ)`
     };
   }
-  
+
   // 5. Kiểm tra mô tả quá ngắn (< 20 ký tự)
   const description = content.split('Mô tả công việc:')[1]?.split('Yêu cầu:')[0]?.trim() || '';
   if (description.length > 0 && description.length < 20) {
@@ -196,19 +156,19 @@ function detectSpam(content, isAIEnhanced = false) {
  */
 function isGibberish(text) {
   if (!text || text.length < 5) return false;
-  
+
   // 1. Kiểm tra tỷ lệ phụ âm liên tiếp (consonant clusters)
   // Tiếng Việt và tiếng Anh ít khi có > 4 phụ âm liên tiếp
   const consonantClusters = text.match(/[bcdfghjklmnpqrstvwxyz]{5,}/gi);
   if (consonantClusters && consonantClusters.length > 0) {
     return true; // VD: "kalasnlkndklsnl" có "kl", "snlkn", "dklsnl"
   }
-  
+
   // 2. Kiểm tra tỷ lệ nguyên âm/phụ âm bất thường
   const vowels = text.match(/[aeiouàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹ]/gi) || [];
   const consonants = text.match(/[bcdfghjklmnpqrstvwxyzđ]/gi) || [];
   const totalLetters = vowels.length + consonants.length;
-  
+
   if (totalLetters > 10) {
     const vowelRatio = vowels.length / totalLetters;
     // Tiếng Việt thường có 40-60% nguyên âm
@@ -217,13 +177,13 @@ function isGibberish(text) {
       return true;
     }
   }
-  
+
   // 3. Kiểm tra từ có nghĩa (chỉ áp dụng cho chuỗi dài)
   if (text.length > 15) {
     // Tách thành các từ
     const words = text.split(/\s+/);
     let meaninglessCount = 0;
-    
+
     for (const word of words) {
       if (word.length > 8) {
         // Từ dài > 8 ký tự mà không có nguyên âm hoặc toàn phụ âm → vô nghĩa
@@ -233,13 +193,13 @@ function isGibberish(text) {
         }
       }
     }
-    
+
     // Nếu > 30% từ vô nghĩa → reject
     if (words.length > 0 && meaninglessCount / words.length > 0.3) {
       return true;
     }
   }
-  
+
   return false;
 }
 
@@ -269,7 +229,7 @@ ${jobData.benefits || 'N/A'}
   const title = jobData.title?.trim() || '';
   const description = jobData.description?.trim() || '';
   const requirements = jobData.requirements?.trim() || '';
-  
+
   if (isGibberish(title)) {
     logger.info('❌ Rejected: Title is gibberish');
     return {
@@ -281,7 +241,7 @@ ${jobData.benefits || 'N/A'}
       probabilities: { approve: 0.02, reject: 0.98 }
     };
   }
-  
+
   if (isGibberish(description)) {
     logger.info('❌ Rejected: Description is gibberish');
     return {
@@ -308,7 +268,7 @@ ${jobData.benefits || 'N/A'}
         probabilities: { approve: 0.05, reject: 0.95 }
       };
     }
-    
+
     // 2. Kiểm tra mô tả công việc
     if (!description || description.length < 50) {
       logger.info('❌ Rejected: Description too short');
@@ -321,7 +281,7 @@ ${jobData.benefits || 'N/A'}
         probabilities: { approve: 0.05, reject: 0.95 }
       };
     }
-    
+
     // 3. Kiểm tra yêu cầu ứng viên
     if (!requirements || requirements.length < 30) {
       logger.info('❌ Rejected: Requirements too short');
@@ -334,7 +294,7 @@ ${jobData.benefits || 'N/A'}
         probabilities: { approve: 0.05, reject: 0.95 }
       };
     }
-    
+
     logger.info('✓ Basic validation passed');
   } else {
     logger.info('⚠️ Skipping basic validation (AI-enhanced job)');
@@ -485,7 +445,7 @@ Output phải là JSON hợp lệ, không thêm text ngoài.`;
         timeout: 30000
       }
     );
-
+    console.log(JSON.stringify(response.data, null, 2));
     const content = response.data.choices[0].message.content;
 
     // Parse JSON từ response
@@ -523,7 +483,7 @@ Output phải là JSON hợp lệ, không thêm text ngoài.`;
     };
 
   } catch (error) {
-    logger.error('LLM analysis error:', error.message);
+    logger.error('LLM analysis error:', error);
     logger.warn('LLM failed, falling back to simple validation with spam check');
     // Fallback về logic đơn giản nếu LLM fail - VẪN PHẢI SPAM CHECK
     return simpleValidation(jobData, jobContent);
@@ -551,7 +511,7 @@ function simpleValidation(jobData, jobContent) {
       };
     }
   }
-  
+
   const title = jobData.title?.trim() || '';
   const description = jobData.description?.trim() || '';
   const requirements = jobData.requirements?.trim() || '';
@@ -660,7 +620,7 @@ export const autoModerateJobWithLLM = async (jobId) => {
         moderatedAt: null
       };
     }
-    
+
     job.aiModerationResult.prediction = aiResult.prediction;
     job.aiModerationResult.confidence = aiResult.confidence;
     job.aiModerationResult.probabilities = aiResult.probabilities;
@@ -688,7 +648,23 @@ export const autoModerateJobWithLLM = async (jobId) => {
       recruiterProfileId: job.recruiterProfileId?._id,
       userId: job.recruiterProfileId?.userId
     });
-    await sendModerationNotification(job, aiResult.shouldApprove);
+
+    if (job.recruiterProfileId?.userId?._id) {
+      try {
+        await queueService.publishNotification(ROUTING_KEYS.JOB_APPROVAL, {
+          recipientId: job.recruiterProfileId.userId._id,
+          data: {
+            status: aiResult.shouldApprove ? 'APPROVED' : 'REJECTED',
+            jobTitle: job.title,
+            jobId: job._id,
+            rejectionReason: !aiResult.shouldApprove ? (aiResult.summary || 'Không đáp ứng tiêu chuẩn. Vui lòng cập nhật lại.') : undefined
+          }
+        });
+        logger.info(`Moderation notification sent to recruiter ${job.recruiterProfileId.userId._id} for job ${job._id} (Approved: ${aiResult.shouldApprove})`);
+      } catch (error) {
+        logger.error('Failed to send moderation notification:', error);
+      }
+    }
 
     return {
       job,
@@ -717,7 +693,7 @@ export const autoModerateJobWithLLM = async (jobId) => {
         failed: false
       };
     }
-    
+
     job.aiModerationResult.prediction = null;
     job.aiModerationResult.confidence = null;
     job.aiModerationResult.probabilities = null;
@@ -728,13 +704,6 @@ export const autoModerateJobWithLLM = async (jobId) => {
     job.aiModerationResult.failed = true; // Đánh dấu là thất bại
 
     await job.save();
-    await job.populate({
-      path: 'recruiterProfileId',
-      populate: {
-        path: 'userId',
-        select: '_id'
-      }
-    });
 
     // Throw error để frontend biết và bỏ qua job này
     throw new Error(`Không thể phân tích job: ${error.message}`);

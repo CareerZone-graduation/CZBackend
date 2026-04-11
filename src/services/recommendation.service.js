@@ -1290,16 +1290,10 @@ export const getAIRecommendations = async (userId, options = {}) => {
 
   // 2. Lấy danh sách jobIds từ AI response
   const allJobIds = recommendations.map(r => r.jobId);
-  const totalItems = allJobIds.length;
 
-  // 3. Phân trang
-  const skip = (page - 1) * limit;
-  const paginatedJobIds = allJobIds.slice(skip, skip + limit);
-  const paginatedScores = recommendations.slice(skip, skip + limit);
-
-  // 4. Lấy chi tiết job từ MongoDB (chỉ lấy jobs active + chưa hết hạn)
+  // 3. Lấy chi tiết job từ MongoDB (chỉ lấy jobs active + chưa hết hạn) cho TẤT CẢ recommendations
   const jobs = await Job.find({
-    _id: { $in: paginatedJobIds },
+    _id: { $in: allJobIds },
     status: 'ACTIVE',
     deadline: { $gte: new Date() },
   })
@@ -1307,13 +1301,13 @@ export const getAIRecommendations = async (userId, options = {}) => {
     .populate('recruiterProfileId', 'fullname company')
     .lean();
 
-  // 5. Ghép score từ AI vào job data (giữ thứ tự từ AI)
+  // 4. Ghép score từ AI vào job data và lọc ra những job hợp lệ (giữ thứ tự từ AI)
   const jobMap = new Map(jobs.map(j => [j._id.toString(), j]));
 
-  const enrichedJobs = paginatedScores
+  const validRecommendations = recommendations
     .map(rec => {
       const job = jobMap.get(rec.jobId);
-      if (!job) return null; // job đã bị xóa / hết hạn
+      if (!job) return null; // job đã bị xóa / hết hạn không được lấy lên từ DB
       return {
         ...job,
         aiScore: rec.score,
@@ -1322,10 +1316,17 @@ export const getAIRecommendations = async (userId, options = {}) => {
     })
     .filter(Boolean);
 
+  const totalItems = validRecommendations.length;
+
+  // 5. Phân trang trên danh sách hợp lệ
+  const skip = (page - 1) * limit;
+  const enrichedJobs = validRecommendations.slice(skip, skip + limit);
+
   logger.info('AI recommendations enriched', {
     userId,
     source,
     totalFromAI: recommendations.length,
+    validTotal: totalItems,
     returnedCount: enrichedJobs.length,
   });
 

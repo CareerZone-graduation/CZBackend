@@ -205,10 +205,6 @@ const jobSchema = new mongoose.Schema({
     },
     default: 'PENDING'
   },
-  moderationHistory: {
-    type: [moderationDetailSchema],
-    default: []
-  },
   // Thêm trường cho embeddings
   chunks: {
     type: [chunkSchema],

@@ -25,27 +25,7 @@ const chunkSchema = new mongoose.Schema({
 }, { _id: false });
 
 
-const moderationDetailSchema = new mongoose.Schema({
-  moderator: {
-    type: String,
-    enum: ['AI', 'ADMIN'],
-    default: 'AI',
-    comment: 'Ai đã thực hiện kiểm duyệt'
-  },
-  reason: {
-    type: String,
-    trim: true,
-    comment: 'Lý do phê duyệt/từ chối/gắn cờ từ AI hoặc admin'
-  },
-  flags: {
-    type: [String],
-    comment: 'Các cờ vi phạm cụ thể (VD: Lừa đảo, Nội dung người lớn, Vũ khí, Ma túy, Ngôn ngữ thù địch...)'
-  },
-  timestamp: {
-    type: Date,
-    default: Date.now
-  }
-}, { _id: false });
+
 
 const jobSchema = new mongoose.Schema({
   title: {
@@ -205,10 +185,7 @@ const jobSchema = new mongoose.Schema({
     },
     default: 'PENDING'
   },
-  moderationHistory: {
-    type: [moderationDetailSchema],
-    default: []
-  },
+
   // AI Moderation Result
   aiModerationResult: {
     prediction: {
