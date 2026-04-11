@@ -47,6 +47,47 @@ export const rejectJob = asyncHandler(async (req, res) => {
   });
 });
 
+export const autoModerateJobWithLLM = asyncHandler(async (req, res) => {
+  const { autoModerateJobWithLLM } = await import('../services/aiJobModerationLLM.service.js');
+  const result = await autoModerateJobWithLLM(req.params.id);
+  res.json({
+    success: true,
+    message: 'Duyệt job tự động bằng LLM thành công.',
+    data: {
+      job: result.job,
+      aiResult: result.aiResult
+    }
+  });
+});
+
+export const resetAIModerationForJob = asyncHandler(async (req, res) => {
+  const job = await adminService.resetAIModerationForJob(req.params.id);
+  res.json({
+    success: true,
+    message: 'Đã bật lại tính năng duyệt AI cho job này.',
+    data: job
+  });
+});
+
+// Settings - Auto Moderation
+export const getAutoModerationStatus = asyncHandler(async (req, res) => {
+  const status = await adminService.getAutoModerationStatus();
+  res.json({
+    success: true,
+    data: status
+  });
+});
+
+export const setAutoModerationStatus = asyncHandler(async (req, res) => {
+  const { enabled } = req.body;
+  const status = await adminService.setAutoModerationStatus(enabled, req.user.id);
+  res.json({
+    success: true,
+    message: enabled ? 'Đã bật tự động duyệt job' : 'Đã tắt tự động duyệt job',
+    data: status
+  });
+});
+
 // Quản lý Người dùng
 export const getUsers = asyncHandler(async (req, res) => {
   const result = await adminService.getUsersForAdmin(req.validatedQuery || req.query);

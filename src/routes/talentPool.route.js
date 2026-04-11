@@ -25,6 +25,15 @@ router.get(
   talentPoolController.getTalentPool
 );
 
+// Route để mời ứng viên
+router.post(
+  '/invite',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.recruiterOnly,
+  validationMiddleware.validateBody(talentPoolSchema.inviteCandidates),
+  talentPoolController.inviteCandidates
+);
+
 // Route để cập nhật talent pool entry
 router.patch(
   '/:talentPoolId',

@@ -43,6 +43,7 @@ const handlerRegistry = {
   [ROUTING_KEYS.JOB_APPROVAL]: notificationService.handleJobApproval,
   [ROUTING_KEYS.COMPANY_VERIFICATION]: notificationService.handleCompanyVerification,
   [ROUTING_KEYS.SUPPORT_REQUEST]: notificationService.handleSupportRequest,
+  [ROUTING_KEYS.TALENT_POOL_INVITATION]: notificationService.handleTalentPoolInvitation,
 };
 
 /**

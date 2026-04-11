@@ -91,7 +91,7 @@ export const generateJobEmbeddings = async (jobId) => {
         chunks.push({
           jobId: jobId.toString(),
           chunkIndex: i,
-          text: chunkText,
+          pageContent: chunkText,
           embedding: embedding
         });
 
@@ -208,8 +208,7 @@ export const batchGenerateJobEmbeddings = async (jobIds, batchSize = 50) => {
           jobUpdates.get(item.jobId).push({
             jobId: item.jobId,
             chunkIndex: item.chunkIndex,
-            text: item.text,
-            pageContent: item.text, // Backward compatibility for scripts
+            pageContent: item.text,
             embedding: embedding
           });
         }

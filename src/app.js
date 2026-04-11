@@ -24,9 +24,12 @@ const __dirname = path.dirname(__filename);
 import config from './config/index.js';
 import './config/redis.js'; // Initialize Redis connection
 import { connectAutocompleteDB } from './config/autocompleteDb.js'; // Autocomplete DB
+import { connectKnowledgeDB } from './config/knowledgeDb.js'; // Knowledge DB (secondary cluster)
 
 // Initialize autocomplete database connection
 connectAutocompleteDB().catch(err => console.error('Autocomplete DB init failed:', err.message));
+// Initialize knowledge database connection (KnowledgeChunk lives here for Atlas Search index)
+connectKnowledgeDB().catch(err => console.error('Knowledge DB init failed:', err.message));
 
 // 🚦 Routes
 import authRoutes from './routes/auth.route.js';
@@ -57,6 +60,8 @@ import contactRoutes from './routes/contact.route.js'; // Public contact form
 import aiInterviewRoutes from './routes/aiInterview.route.js'; // MỚI: Route orchestration API sang FastAPI
 import interactionRoutes from './routes/interaction.route.js';
 import copilotRoutes from './routes/copilot.route.js'; // Copilot API
+import knowledgeBaseRoutes from './routes/knowledgeBase.route.js';
+import knowledgeChatRoutes from './routes/knowledgeChat.route.js';
 
 // 🚧 Middlewares
 import * as errorMiddleware from './middleware/error.middleware.js';
@@ -170,6 +175,8 @@ app.use('/api/contact', contactRoutes);
 app.use('/api/ai-interview', aiInterviewRoutes); // MỚI: Route orchestration API sang FastAPI
 app.use('/api/interactions', interactionRoutes);
 app.use('/api/copilot', copilotRoutes);
+app.use('/api/recruiter/knowledge-base', knowledgeBaseRoutes);
+app.use('/api/candidate/chat', knowledgeChatRoutes);
 
 // 404 & error
 app.use(notFoundMiddleware.notFound);

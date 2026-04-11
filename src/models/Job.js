@@ -209,6 +209,38 @@ const jobSchema = new mongoose.Schema({
     type: [moderationDetailSchema],
     default: []
   },
+  // AI Moderation Result
+  aiModerationResult: {
+    prediction: {
+      type: Number, // 0: reject, 1: approve
+      default: null
+    },
+    confidence: {
+      type: Number, // 0-1
+      default: null
+    },
+    probabilities: {
+      reject: { type: Number, default: null },
+      approve: { type: Number, default: null }
+    },
+    reasons: {
+      type: [String], // Lý do chi tiết từ LLM
+      default: []
+    },
+    summary: {
+      type: String, // Tóm tắt quyết định
+      default: null
+    },
+    method: {
+      type: String, // 'PhoBERT' hoặc 'LLM'
+      enum: ['PhoBERT', 'LLM'],
+      default: 'PhoBERT'
+    },
+    moderatedAt: {
+      type: Date,
+      default: null
+    }
+  },
   // Thêm trường cho embeddings
   chunks: {
     type: [chunkSchema],

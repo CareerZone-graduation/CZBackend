@@ -76,6 +76,11 @@ const applicationSchema = new mongoose.Schema({
     ref: 'CandidateProfile',
     required: [true, 'Candidate reference is required']
   },
+  source: {
+    type: String,
+    enum: ['DIRECT_APPLY', 'TALENT_POOL_INVITATION', 'JOB_ALERT'],
+    default: 'DIRECT_APPLY'
+  },
   coverLetter: {
     type: String,
     trim: true,

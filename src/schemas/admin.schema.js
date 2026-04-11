@@ -15,7 +15,8 @@ export const adminJobsQuerySchema = z.object({
   limit: z.string().optional(),
   search: z.string().optional(),
   company: z.string().optional(),
-  status: z.enum(['ACTIVE', 'INACTIVE', 'EXPIRED', 'PENDING', 'REJECTED']).optional(),
+  // Thêm 'AI_FAILED' để filter jobs AI không duyệt được
+  status: z.enum(['ACTIVE', 'INACTIVE', 'EXPIRED', 'PENDING', 'REJECTED', 'NEUTRAL', 'AI_FAILED']).optional(),
   sort: z
     .enum(['title_asc', 'title_desc', 'createdAt_asc', 'createdAt_desc'])
     .optional()
@@ -95,5 +96,5 @@ export const companyJobsQuerySchema = z.object({
 });
 
 export const jobStatusSchema = z.object({
-  status: z.enum(['ACTIVE', 'INACTIVE', 'EXPIRED']),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'EXPIRED', 'PENDING']),
 });

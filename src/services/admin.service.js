@@ -5,6 +5,9 @@ import mongoose from 'mongoose';
 import * as queueService from './queue.service.js';
 import { ROUTING_KEYS } from '../queues/rabbitmq.js';
 import * as emailService from './email.service.js';
+import axios from 'axios';
+import config from '../config/index.js';
+import logger from '../utils/logger.js';
 
 // === QUẢN LÝ TIN TUYỂN DỤNG ===
 
@@ -57,7 +60,16 @@ export const getJobsForAdmin = async (queryParams) => {
   // Filter by status (Unified)
   if (status) {
     if (status === 'PENDING') {
+      // Chỉ hiển thị jobs PENDING, không bao gồm NEUTRAL
       filter.moderationStatus = 'PENDING';
+    } else if (status === 'NEUTRAL') {
+      // Tab riêng cho jobs không xác định
+      filter.moderationStatus = 'NEUTRAL';
+    } else if (status === 'AI_FAILED') {
+      // Tab riêng cho jobs AI không duyệt được - cần duyệt thủ công
+      filter.moderationStatus = { $in: ['PENDING', 'NEUTRAL'] };
+      filter['aiModerationResult.failed'] = true;
+      filter['aiModerationResult.allowRetry'] = { $ne: true }; // Chưa được reset
     } else if (status === 'ACTIVE') {
       filter.status = 'ACTIVE';
       filter.moderationStatus = 'APPROVED';
@@ -101,7 +113,7 @@ export const getJobsForAdmin = async (queryParams) => {
         path: 'recruiterProfileId',
         select: 'company.name company.logo'
       })
-      .select('title description approved moderationStatus status createdAt recruiterProfileId')
+      .select('title description requirements approved moderationStatus status createdAt recruiterProfileId aiModerationResult')
       .sort(sortOptions)
       .skip(skip)
       .limit(limit)
@@ -126,25 +138,46 @@ export const getJobStatistics = async () => {
   const [
     active,
     pending,
+    neutral,
     expired,
     inactive,
     rejected,
+    aiApproved,
+    aiRejected,
     total
   ] = await Promise.all([
     Job.countDocuments({ status: 'ACTIVE', moderationStatus: 'APPROVED' }),
+    // PENDING: Chỉ jobs chờ duyệt, không bao gồm NEUTRAL
     Job.countDocuments({ moderationStatus: 'PENDING' }),
+    // NEUTRAL: Jobs không xác định - AI không duyệt được
+    Job.countDocuments({ moderationStatus: 'NEUTRAL' }),
     Job.countDocuments({ status: 'EXPIRED', moderationStatus: 'APPROVED' }),
     Job.countDocuments({ status: 'INACTIVE', moderationStatus: 'APPROVED' }),
     Job.countDocuments({ moderationStatus: 'REJECTED' }),
+    // AI Approved: Jobs được AI duyệt - có aiModerationResult với prediction
+    Job.countDocuments({ 
+      moderationStatus: 'APPROVED',
+      'aiModerationResult.moderatedAt': { $exists: true },
+      'aiModerationResult.prediction': { $exists: true, $ne: null }
+    }),
+    // AI Rejected: Jobs bị AI từ chối - có aiModerationResult với prediction
+    Job.countDocuments({ 
+      moderationStatus: 'REJECTED',
+      'aiModerationResult.moderatedAt': { $exists: true },
+      'aiModerationResult.prediction': { $exists: true, $ne: null }
+    }),
     Job.countDocuments()
   ]);
 
   return {
     active,
     pending,
+    neutral,
     expired,
     inactive,
     rejected,
+    aiApproved,
+    aiRejected,
     total
   };
 };
@@ -248,6 +281,201 @@ export const rejectJob = async (jobId) => {
   });
 
   return updatedJob;
+};
+
+// === AI AUTO MODERATION ===
+
+const PYTHON_SERVICE_URL = config.PYTHON_SERVICE_URL || 'http://localhost:8000';
+const INTERNAL_API_KEY = config.INTERNAL_API_KEY;
+
+export const autoModerateJobWithLLM = async (jobId) => {
+  const job = await Job.findById(jobId);
+  
+  if (!job) {
+    throw new NotFoundError('Không tìm thấy job');
+  }
+
+  // Kiểm tra xem job đã ở trạng thái NEUTRAL chưa
+  if (job.moderationStatus === 'NEUTRAL') {
+    throw new BadRequestError('Job này đã ở trạng thái không xác định. AI không thể duyệt job này. Vui lòng duyệt thủ công.');
+  }
+
+  // Kiểm tra xem job đã thử AI và thất bại chưa (và chưa được reset)
+  if (job.aiModerationResult?.failed === true && job.aiModerationResult?.allowRetry !== true) {
+    throw new BadRequestError('Job này đã thử duyệt bằng AI nhưng thất bại. Vui lòng duyệt thủ công hoặc bật lại tính năng duyệt AI cho job này.');
+  }
+  
+  // Đảm bảo status luôn hợp lệ (KHÔNG BAO GIỜ là PENDING)
+  if (!['ACTIVE', 'INACTIVE', 'EXPIRED'].includes(job.status)) {
+    job.status = 'INACTIVE'; // Default to INACTIVE nếu status không hợp lệ
+  }
+
+  try {
+    if (!INTERNAL_API_KEY) {
+      throw new Error('INTERNAL_API_KEY is not configured');
+    }
+
+    logger.info('Calling AI service for job moderation');
+
+    const url = `${PYTHON_SERVICE_URL}/api/v1/job-moderation/analyze`;
+    
+    const response = await axios.post(url, {
+      title: job.title,
+      description: job.description,
+      requirements: job.requirements,
+      benefits: job.benefits
+    }, {
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-api-key': INTERNAL_API_KEY
+      },
+      timeout: 30000
+    });
+
+    const aiResult = response.data;
+    logger.info('AI service moderation completed successfully');
+
+    // Cập nhật job dựa trên kết quả LLM
+    if (aiResult.shouldApprove) {
+      job.moderationStatus = 'APPROVED';
+      job.status = 'ACTIVE';
+      job.approved = true;
+    } else {
+      job.moderationStatus = 'REJECTED';
+      job.status = 'INACTIVE';
+      job.approved = false;
+    }
+
+    // Lưu kết quả AI với thông tin chi tiết
+    if (!job.aiModerationResult) {
+      job.aiModerationResult = {};
+    }
+    job.aiModerationResult.prediction = aiResult.prediction;
+    job.aiModerationResult.confidence = aiResult.confidence;
+    job.aiModerationResult.probabilities = aiResult.probabilities;
+    job.aiModerationResult.reasons = aiResult.reasons;
+    job.aiModerationResult.summary = aiResult.summary;
+    job.aiModerationResult.moderatedAt = new Date();
+    job.aiModerationResult.method = 'LLM'; // Đánh dấu là dùng LLM
+    job.aiModerationResult.failed = false; // Đánh dấu thành công
+
+    await job.save();
+
+    // Populate sau khi save
+    await job.populate('recruiterProfileId');
+
+    // Gửi notification cho recruiter
+    if (job.recruiterProfileId) {
+      try {
+        const recruiterProfile = await RecruiterProfile.findById(job.recruiterProfileId);
+        
+        if (recruiterProfile?.userId) {
+          await queueService.publishNotification(ROUTING_KEYS.JOB_APPROVAL, {
+            recipientId: recruiterProfile.userId,
+            data: {
+              status: aiResult.shouldApprove ? 'APPROVED' : 'REJECTED',
+              jobTitle: job.title,
+              jobId: job._id,
+              aiModerated: true,
+              confidence: aiResult.confidence,
+              summary: aiResult.summary
+            }
+          });
+        }
+      } catch (notificationError) {
+        logger.error('Failed to send notification:', notificationError);
+      }
+    }
+
+    return {
+      job,
+      aiResult
+    };
+  } catch (error) {
+    // Nếu phân tích thất bại, chuyển sang trạng thái NEUTRAL (không xác định)
+    logger.error('Failed to analyze job with LLM:', {
+      jobId,
+      error: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data
+    });
+
+    // Chuyển sang NEUTRAL - Job này không thể duyệt bằng AI
+    job.moderationStatus = 'NEUTRAL';
+    // Đảm bảo status là INACTIVE (không được phép ACTIVE khi chưa duyệt)
+    job.status = 'INACTIVE';
+    job.approved = false;
+    
+    // Lưu thông tin lỗi vào aiModerationResult
+    if (!job.aiModerationResult) {
+      job.aiModerationResult = {};
+    }
+    job.aiModerationResult.prediction = null;
+    job.aiModerationResult.confidence = null;
+    job.aiModerationResult.probabilities = null;
+    job.aiModerationResult.reasons = ['AI service không khả dụng - Job chuyển sang trạng thái không xác định'];
+    
+    // Xử lý error message chi tiết hơn
+    let errorMessage = error.message;
+    if (error.response?.status === 401) {
+      errorMessage = 'Không có quyền truy cập AI service';
+    } else if (error.response?.status === 404) {
+      errorMessage = 'Endpoint AI service không tồn tại';
+    } else if (error.response?.status === 503) {
+      errorMessage = 'AI service chưa được cấu hình';
+    } else if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+      errorMessage = 'Không thể kết nối với AI service';
+    }
+    
+    job.aiModerationResult.summary = `AI không khả dụng: ${errorMessage}`;
+    job.aiModerationResult.moderatedAt = new Date();
+    job.aiModerationResult.method = 'LLM';
+    job.aiModerationResult.failed = true; // Đánh dấu là thất bại
+
+    await job.save();
+    await job.populate('recruiterProfileId');
+
+    // Throw error để frontend biết job đã chuyển sang NEUTRAL
+    throw new Error(`AI service không khả dụng: ${errorMessage}. Job đã chuyển sang trạng thái không xác định.`);
+  }
+};
+
+// === ADMIN SETTINGS ===
+
+export const getAutoModerationStatus = async () => {
+  const AdminSettings = (await import('../models/AdminSettings.js')).default;
+  
+  const setting = await AdminSettings.findOne({ key: 'autoModeration' });
+  
+  return {
+    enabled: setting?.value?.enabled || false,
+    useLLM: setting?.value?.useLLM !== false, // Default to true
+    updatedAt: setting?.updatedAt
+  };
+};
+
+export const setAutoModerationStatus = async (enabled, userId) => {
+  const AdminSettings = (await import('../models/AdminSettings.js')).default;
+  
+  const setting = await AdminSettings.findOneAndUpdate(
+    { key: 'autoModeration' },
+    {
+      key: 'autoModeration',
+      value: { 
+        enabled,
+        useLLM: true // Always use LLM for auto-moderation
+      },
+      updatedBy: userId
+    },
+    { upsert: true, new: true }
+  );
+  
+  return {
+    enabled: setting.value.enabled,
+    useLLM: setting.value.useLLM,
+    updatedAt: setting.updatedAt
+  };
 };
 
 // === QUẢN LÝ NGƯỜI DÙNG ===
@@ -1422,15 +1650,26 @@ export const getCompanyJobs = async (companyId, queryParams) => {
 };
 
 export const updateJobStatusByAdmin = async (jobId, status) => {
-  const validStatuses = ['ACTIVE', 'INACTIVE', 'EXPIRED'];
+  const validStatuses = ['ACTIVE', 'INACTIVE', 'EXPIRED', 'PENDING'];
 
   if (!validStatuses.includes(status)) {
     throw new BadRequestError('Trạng thái không hợp lệ.');
   }
 
+  const updateData = {};
+  
+  // Nếu set về PENDING, chỉ update moderationStatus, không update status
+  if (status === 'PENDING') {
+    updateData.moderationStatus = 'PENDING';
+    updateData.status = 'INACTIVE'; // Set status về INACTIVE khi chờ duyệt
+    updateData.aiModerationResult = null; // Xóa kết quả AI cũ
+  } else {
+    updateData.status = status;
+  }
+
   const updatedJob = await Job.findByIdAndUpdate(
     jobId,
-    { status },
+    updateData,
     { new: true }
   );
 
@@ -1474,4 +1713,32 @@ export const deactivateJob = async (jobId) => {
   }
 
   return updatedJob;
+};
+
+// === RESET AI MODERATION ===
+
+export const resetAIModerationForJob = async (jobId) => {
+  const job = await Job.findById(jobId);
+
+  if (!job) {
+    throw new NotFoundError('Tin tuyển dụng không tồn tại.');
+  }
+
+  // Kiểm tra xem job có aiModerationResult không
+  if (!job.aiModerationResult || !job.aiModerationResult.failed) {
+    throw new BadRequestError('Job này chưa có lỗi AI moderation hoặc đã được duyệt thành công.');
+  }
+
+  // Reset AI moderation result và cho phép thử lại
+  job.aiModerationResult = {
+    ...job.aiModerationResult,
+    failed: false,
+    allowRetry: true,
+    resetAt: new Date(),
+    resetReason: 'Admin cho phép thử lại AI moderation'
+  };
+
+  await job.save();
+
+  return job;
 };

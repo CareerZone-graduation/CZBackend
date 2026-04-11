@@ -43,6 +43,26 @@ router
     adminController.rejectJob
   );
 
+router
+  .route('/jobs/:id/ai-moderate-llm')
+  .post(
+    validationMiddleware.validateParams(adminSchema.idParamsSchema),
+    adminController.autoModerateJobWithLLM
+  );
+
+router
+  .route('/jobs/:id/reset-ai-moderation')
+  .post(
+    validationMiddleware.validateParams(adminSchema.idParamsSchema),
+    adminController.resetAIModerationForJob
+  );
+
+// Admin Settings
+router
+  .route('/settings/auto-moderation')
+  .get(adminController.getAutoModerationStatus)
+  .post(adminController.setAutoModerationStatus);
+
 // Quản lý Người dùng
 router
   .route('/users')

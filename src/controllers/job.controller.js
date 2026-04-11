@@ -6,6 +6,37 @@ export const createJob = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const jobData = req.body;
   const job = await jobService.createJob(userId, jobData);
+  
+  // Check if auto-moderation is enabled
+  console.log('🔍 Checking auto-moderation status for new job:', job._id);
+  
+  try {
+    const AdminSettings = (await import('../models/AdminSettings.js')).default;
+    const setting = await AdminSettings.findOne({ key: 'autoModeration' });
+    
+    console.log('⚙️ Auto-moderation setting:', setting?.value);
+    
+    if (setting?.value?.enabled) {
+      console.log('✅ Auto-moderation is ENABLED, starting moderation...');
+      
+      // Auto-moderate in background (don't wait)
+      const aiJobModerationLLMService = await import('../services/aiJobModerationLLM.service.js');
+      aiJobModerationLLMService.autoModerateJobWithLLM(job._id)
+        .then((result) => {
+          console.log(`✅ Auto-moderated job ${job._id}: ${job.title}`);
+          console.log(`   Decision: ${result.aiResult.shouldApprove ? 'APPROVED' : 'REJECTED'}`);
+          console.log(`   Confidence: ${(result.aiResult.confidence * 100).toFixed(1)}%`);
+        })
+        .catch(error => {
+          console.error(`❌ Auto-moderation failed for job ${job._id}:`, error.message);
+        });
+    } else {
+      console.log('⏸️ Auto-moderation is DISABLED');
+    }
+  } catch (error) {
+    console.error('❌ Error checking auto-moderation status:', error);
+  }
+  
   res.status(201).json({
     success: true,
     message: 'Tạo công việc thành công.',

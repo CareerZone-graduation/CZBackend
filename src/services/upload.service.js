@@ -13,13 +13,25 @@ import { v4 as uuidv4 } from 'uuid';
  * @param {string} folder 
  * @returns {Promise<object>}
  */
-const _uploadToCloudinary = (fileBuffer, folder) => {
+const _uploadToCloudinary = (fileBuffer, folder, resourceType = 'auto', originalName = null) => {
     return new Promise((resolve, reject) => {
+        const uploadOptions = {
+            folder: folder,
+            resource_type: resourceType,
+        };
+
+        // For raw files (doc, docx, pdf...), Cloudinary strips the extension from the URL.
+        // We explicitly set public_id with the extension so the download URL is correct.
+        if (resourceType === 'raw' && originalName) {
+            const ext = path.extname(originalName); // e.g. ".docx"
+            const baseName = path.basename(originalName, ext); // e.g. "report"
+            const safeBase = baseName.replace(/[^a-zA-Z0-9_\-]/g, '_');
+            uploadOptions.public_id = `${safeBase}_${uuidv4()}${ext}`;
+            uploadOptions.use_filename = false; // we set it manually above
+        }
+
         const uploadStream = cloudinary.uploader.upload_stream(
-            {
-                folder: folder,
-                resource_type: 'auto',
-            },
+            uploadOptions,
             (error, result) => {
                 if (error) {
                     console.error('Cloudinary Upload Error:', error);
@@ -89,13 +101,26 @@ export const uploadFile = async (file, folder) => {
         throw new BadRequestError('Không có file để tải lên.');
     }
 
-    // Check if file is an image
+    // Images -> S3
     if (file.mimetype && file.mimetype.startsWith('image/')) {
         return await _uploadToS3(file.buffer, folder, file.originalname, file.mimetype);
     }
 
-    // Default to Cloudinary for other files (CVs, docs)
-    return await _uploadToCloudinary(file.buffer, folder);
+    // Documents (PDF, DOC, DOCX) -> Cloudinary with resource_type: 'raw'
+    // 'raw' bypasses Cloudinary's content detection which rejects binary office files
+    const DOC_MIMES = [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ];
+    if (file.mimetype && DOC_MIMES.includes(file.mimetype)) {
+        return await _uploadToCloudinary(file.buffer, folder, 'raw', file.originalname);
+    }
+
+    // Default: auto
+    return await _uploadToCloudinary(file.buffer, folder, 'auto', file.originalname);
 };
 
 // Deprecated: Alias for backward compatibility if needed, but we will refactor callers

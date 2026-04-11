@@ -22,3 +22,5 @@ export { default as ProfileUnlock } from './ProfileUnlock.js';
 export { default as SupportRequest } from './SupportRequest.js';
 export { default as Interaction } from './Interaction.js';
 export { default as CopilotSession } from './CopilotSession.js';
+export { default as RecruiterKnowledgeDocument } from './RecruiterKnowledgeDocument.js';
+// KnowledgeChunk is registered on the secondary DB connection — import from config/knowledgeDb.js

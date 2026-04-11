@@ -1,3 +1,5 @@
+import config from '../config/index.js';
+import * as emailService from './email.service.js';
 import admin from '../config/firebase.js';
 import { Notification, Application, User, Job, InterviewRoom, CandidateProfile, JobAlertSubscription, RecruiterProfile } from '../models/index.js';
 import { NotFoundError, BadRequestError } from '../utils/AppError.js';
@@ -1297,5 +1299,76 @@ export const handleSupportRequest = async (payload) => {
     }
   });
 
+  return notification;
+};
+
+/**
+ * Xử lý message TALENT_POOL_INVITATION - Mời ứng viên từ Talent Pool.
+ * @param {object} payload - Toàn bộ payload từ RabbitMQ
+ */
+export const handleTalentPoolInvitation = async (payload) => {
+  const { candidateUserId, recruiterProfileId, jobId, jobTitle, companyName, companyLogo } = payload;
+
+  const missingFields = [];
+  if (!candidateUserId) missingFields.push('candidateUserId');
+  if (!jobId) missingFields.push('jobId');
+
+  if (missingFields.length > 0) {
+    logger.warn(`TALENT_POOL_INVITATION payload is missing required fields: ${missingFields.join(', ')}`, payload);
+    return;
+  }
+
+  // 1. Tạo in-app notification
+  const notification = await Notification.create({
+    userId: new mongoose.Types.ObjectId(candidateUserId),
+    type: 'talent_pool_invitation',
+    title: 'Lời mời ứng tuyển từ Talent Pool',
+    message: `${companyName} mời bạn ứng tuyển vào vị trí "${jobTitle}"`,
+    metadata: {
+      jobId: jobId.toString(),
+      recruiterProfileId: recruiterProfileId.toString(),
+      companyName,
+      companyLogo,
+      invitedAt: new Date()
+    },
+    entity: {
+      type: 'Job',
+      id: new mongoose.Types.ObjectId(jobId)
+    }
+  });
+
+  // 2. Gửi push notification
+  await pushNotification(candidateUserId, {
+    title: 'Lời mời ứng tuyển mới',
+    body: `${companyName} mời bạn ứng tuyển vào vị trí "${jobTitle}"`,
+    type: 'talent_pool_invitation',
+    data: {
+      jobId: jobId.toString(),
+      route: `/jobs/${jobId}`
+    }
+  });
+
+  // 3. Gửi email
+  const user = await User.findById(candidateUserId).select('email fullName');
+  if (user && user.email) {
+    try {
+      await emailService.sendEmail({
+        to: user.email,
+        subject: `Lời mời ứng tuyển từ ${companyName}`,
+        template: 'talent-pool-invitation',
+        data: {
+          candidateName: user.fullName,
+          companyName,
+          jobTitle,
+          jobUrl: `${config.CANDIDATE_FE_URL}/jobs/${jobId}`,
+          companyLogo
+        }
+      });
+    } catch (emailError) {
+      logger.error(`Failed to send talent pool invitation email to ${user.email}`, emailError);
+    }
+  }
+
+  logger.info(`Sent talent pool invitation to user ${candidateUserId} for job ${jobId}`);
   return notification;
 };

@@ -1,5 +1,21 @@
 import mongoose from 'mongoose';
 
+const invitationSchema = new mongoose.Schema({
+  jobId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Job',
+    required: true
+  },
+  invitedAt: {
+    type: Date,
+    default: Date.now
+  },
+  jobSnapshot: {
+    title: String,
+    status: String
+  }
+}, { _id: false });
+
 const talentPoolSchema = new mongoose.Schema({
   recruiterProfileId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -35,6 +51,10 @@ const talentPoolSchema = new mongoose.Schema({
     avatar: String,
     appliedJobTitle: String,
     appliedJobId: mongoose.Schema.Types.ObjectId
+  },
+  invitations: {
+    type: [invitationSchema],
+    default: []
   }
 }, {
   timestamps: true

@@ -150,6 +150,7 @@ export const getApplicationsByJob = async (jobId, recruiterId, options = {}) => 
         coverLetter: 1,
         submittedCV: 1,
         jobSnapshot: 1,
+        source: 1,
         // Thông tin cơ bản của ứng viên từ form hoặc từ thông tin người dùng
         candidateName: { $ifNull: ['$candidateName', '$candidateProfile.fullname'] },
         candidateEmail: { $ifNull: ['$candidateEmail', '$candidateProfile.email'] },
