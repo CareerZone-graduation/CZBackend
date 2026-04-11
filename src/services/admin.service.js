@@ -155,13 +155,13 @@ export const getJobStatistics = async () => {
     Job.countDocuments({ status: 'INACTIVE', moderationStatus: 'APPROVED' }),
     Job.countDocuments({ moderationStatus: 'REJECTED' }),
     // AI Approved: Jobs được AI duyệt - có aiModerationResult với prediction
-    Job.countDocuments({ 
+    Job.countDocuments({
       moderationStatus: 'APPROVED',
       'aiModerationResult.moderatedAt': { $exists: true },
       'aiModerationResult.prediction': { $exists: true, $ne: null }
     }),
     // AI Rejected: Jobs bị AI từ chối - có aiModerationResult với prediction
-    Job.countDocuments({ 
+    Job.countDocuments({
       moderationStatus: 'REJECTED',
       'aiModerationResult.moderatedAt': { $exists: true },
       'aiModerationResult.prediction': { $exists: true, $ne: null }
@@ -248,50 +248,36 @@ export const approveJob = async (jobId) => {
     throw new NotFoundError('Tin tuyển dụng không tồn tại.');
   }
 
-  // Cập nhật job status
-  job.approved = true;
+  if (job.moderationStatus === 'NEUTRAL') {
+    logger.warn(`Admin approving NEUTRAL job ${jobId} (AI failed previously)`);
+  }
+
   job.moderationStatus = 'APPROVED';
-  job.status = 'ACTIVE';
+  
+  if (job.deadline && new Date(job.deadline) < new Date()) {
+    job.status = 'EXPIRED';
+  } else {
+    job.status = 'ACTIVE';
+  }
 
   await job.save();
 
-  // Gửi thông báo cho recruiter
-  const { default: Notification } = await import('../models/Notification.js');
-  
+  // Publish notification
   if (job.recruiterProfileId?.userId?._id) {
     try {
-      // KIỂM TRA XEM ĐÃ CÓ NOTIFICATION CHO JOB NÀY CHƯA (trong vòng 5 phút gần đây)
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-      const existingNotification = await Notification.findOne({
-        userId: job.recruiterProfileId.userId._id,
-        relatedJob: job._id,
-        type: 'JOB_APPROVED',
-        createdAt: { $gte: fiveMinutesAgo }
-      });
-
-      if (existingNotification) {
-        logger.info(`Approval notification already exists for job ${job._id}, skipping duplicate`);
-        return job;
-      }
-
-      await Notification.create({
-        userId: job.recruiterProfileId.userId._id,
-        type: 'JOB_APPROVED',
-        title: '✅ Tin tuyển dụng đã được duyệt',
-        message: `Tin tuyển dụng "${job.title}" đã được phê duyệt và đang hiển thị công khai.`,
-        relatedJob: job._id,
-        metadata: {
-          jobId: job._id,
+      await queueService.publishNotification(ROUTING_KEYS.JOB_APPROVAL, {
+        recipientId: job.recruiterProfileId.userId._id,
+        data: {
+          status: 'APPROVED',
           jobTitle: job.title,
-          moderationStatus: job.moderationStatus
+          jobId: job._id
         }
       });
-      logger.info(`Approval notification sent to recruiter ${job.recruiterProfileId.userId._id} for job ${job._id}`);
     } catch (error) {
-      logger.error('Failed to send approval notification:', error);
+      logger.error('Failed to publish job approval notification:', error);
     }
   }
-
+  
   return job;
 };
 
@@ -309,10 +295,9 @@ export const rejectJob = async (jobId, rejectionReason) => {
   }
 
   // Cập nhật job status
-  job.approved = false;
   job.status = 'INACTIVE';
   job.moderationStatus = 'REJECTED';
-  
+
   // Lưu lý do từ chối vào aiModerationResult
   if (!job.aiModerationResult) {
     job.aiModerationResult = {};
@@ -324,35 +309,15 @@ export const rejectJob = async (jobId, rejectionReason) => {
 
   await job.save();
 
-  // Gửi thông báo cho recruiter với lý do từ chối
-  const { default: Notification } = await import('../models/Notification.js');
-  
+  // Publish notification
   if (job.recruiterProfileId?.userId?._id) {
     try {
-      // KIỂM TRA XEM ĐÃ CÓ NOTIFICATION CHO JOB NÀY CHƯA (trong vòng 5 phút gần đây)
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-      const existingNotification = await Notification.findOne({
-        userId: job.recruiterProfileId.userId._id,
-        relatedJob: job._id,
-        type: 'JOB_REJECTED',
-        createdAt: { $gte: fiveMinutesAgo }
-      });
-
-      if (existingNotification) {
-        logger.info(`Rejection notification already exists for job ${job._id}, skipping duplicate`);
-        return job;
-      }
-
-      await Notification.create({
-        userId: job.recruiterProfileId.userId._id,
-        type: 'JOB_REJECTED',
-        title: '❌ Tin tuyển dụng bị từ chối',
-        message: `Tin tuyển dụng "${job.title}" bị từ chối. Lý do: ${rejectionReason || 'Không đáp ứng tiêu chuẩn'}`,
-        relatedJob: job._id,
-        metadata: {
-          jobId: job._id,
+      await queueService.publishNotification(ROUTING_KEYS.JOB_APPROVAL, {
+        recipientId: job.recruiterProfileId.userId._id,
+        data: {
+          status: 'REJECTED',
           jobTitle: job.title,
-          moderationStatus: job.moderationStatus,
+          jobId: job._id,
           rejectionReason: rejectionReason || 'Không đáp ứng tiêu chuẩn'
         }
       });
@@ -370,9 +335,9 @@ export const rejectJob = async (jobId, rejectionReason) => {
 const PYTHON_SERVICE_URL = config.PYTHON_SERVICE_URL || 'http://localhost:8000';
 const INTERNAL_API_KEY = config.INTERNAL_API_KEY;
 
-export const autoModerateJobWithLLM = async (jobId) => {
+export const autoModerateJobWithPythonService = async (jobId) => {
   const job = await Job.findById(jobId);
-  
+
   if (!job) {
     throw new NotFoundError('Không tìm thấy job');
   }
@@ -386,7 +351,7 @@ export const autoModerateJobWithLLM = async (jobId) => {
   if (job.aiModerationResult?.failed === true && job.aiModerationResult?.allowRetry !== true) {
     throw new BadRequestError('Job này đã thử duyệt bằng AI nhưng thất bại. Vui lòng duyệt thủ công hoặc bật lại tính năng duyệt AI cho job này.');
   }
-  
+
   // Đảm bảo status luôn hợp lệ (KHÔNG BAO GIỜ là PENDING)
   if (!['ACTIVE', 'INACTIVE', 'EXPIRED'].includes(job.status)) {
     job.status = 'INACTIVE'; // Default to INACTIVE nếu status không hợp lệ
@@ -400,7 +365,7 @@ export const autoModerateJobWithLLM = async (jobId) => {
     logger.info('Calling AI service for job moderation');
 
     const url = `${PYTHON_SERVICE_URL}/api/v1/job-moderation/analyze`;
-    
+
     const response = await axios.post(url, {
       title: job.title,
       description: job.description,
@@ -421,11 +386,9 @@ export const autoModerateJobWithLLM = async (jobId) => {
     if (aiResult.shouldApprove) {
       job.moderationStatus = 'APPROVED';
       job.status = 'ACTIVE';
-      job.approved = true;
     } else {
       job.moderationStatus = 'REJECTED';
       job.status = 'INACTIVE';
-      job.approved = false;
     }
 
     // Lưu kết quả AI với thông tin chi tiết
@@ -450,7 +413,7 @@ export const autoModerateJobWithLLM = async (jobId) => {
     if (job.recruiterProfileId) {
       try {
         const recruiterProfile = await RecruiterProfile.findById(job.recruiterProfileId);
-        
+
         if (recruiterProfile?.userId) {
           await queueService.publishNotification(ROUTING_KEYS.JOB_APPROVAL, {
             recipientId: recruiterProfile.userId,
@@ -458,9 +421,7 @@ export const autoModerateJobWithLLM = async (jobId) => {
               status: aiResult.shouldApprove ? 'APPROVED' : 'REJECTED',
               jobTitle: job.title,
               jobId: job._id,
-              aiModerated: true,
-              confidence: aiResult.confidence,
-              summary: aiResult.summary
+              rejectionReason: aiResult.shouldApprove ? undefined : aiResult.summary
             }
           });
         }
@@ -475,20 +436,12 @@ export const autoModerateJobWithLLM = async (jobId) => {
     };
   } catch (error) {
     // Nếu phân tích thất bại, chuyển sang trạng thái NEUTRAL (không xác định)
-    logger.error('Failed to analyze job with LLM:', {
-      jobId,
-      error: error.message,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data
-    });
 
     // Chuyển sang NEUTRAL - Job này không thể duyệt bằng AI
     job.moderationStatus = 'NEUTRAL';
     // Đảm bảo status là INACTIVE (không được phép ACTIVE khi chưa duyệt)
     job.status = 'INACTIVE';
-    job.approved = false;
-    
+
     // Lưu thông tin lỗi vào aiModerationResult
     if (!job.aiModerationResult) {
       job.aiModerationResult = {};
@@ -497,29 +450,14 @@ export const autoModerateJobWithLLM = async (jobId) => {
     job.aiModerationResult.confidence = null;
     job.aiModerationResult.probabilities = null;
     job.aiModerationResult.reasons = ['AI service không khả dụng - Job chuyển sang trạng thái không xác định'];
-    
-    // Xử lý error message chi tiết hơn
-    let errorMessage = error.message;
-    if (error.response?.status === 401) {
-      errorMessage = 'Không có quyền truy cập AI service';
-    } else if (error.response?.status === 404) {
-      errorMessage = 'Endpoint AI service không tồn tại';
-    } else if (error.response?.status === 503) {
-      errorMessage = 'AI service chưa được cấu hình';
-    } else if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
-      errorMessage = 'Không thể kết nối với AI service';
-    }
-    
-    job.aiModerationResult.summary = `AI không khả dụng: ${errorMessage}`;
+    job.aiModerationResult.summary = `AI không khả dụng`;
     job.aiModerationResult.moderatedAt = new Date();
     job.aiModerationResult.method = 'LLM';
     job.aiModerationResult.failed = true; // Đánh dấu là thất bại
 
     await job.save();
-    await job.populate('recruiterProfileId');
+  
 
-    // Throw error để frontend biết job đã chuyển sang NEUTRAL
-    throw new Error(`AI service không khả dụng: ${errorMessage}. Job đã chuyển sang trạng thái không xác định.`);
   }
 };
 
@@ -527,9 +465,9 @@ export const autoModerateJobWithLLM = async (jobId) => {
 
 export const getAutoModerationStatus = async () => {
   const AdminSettings = (await import('../models/AdminSettings.js')).default;
-  
+
   const setting = await AdminSettings.findOne({ key: 'autoModeration' });
-  
+
   return {
     enabled: setting?.value?.enabled || false,
     useLLM: setting?.value?.useLLM !== false, // Default to true
@@ -539,12 +477,12 @@ export const getAutoModerationStatus = async () => {
 
 export const setAutoModerationStatus = async (enabled, userId) => {
   const AdminSettings = (await import('../models/AdminSettings.js')).default;
-  
+
   const setting = await AdminSettings.findOneAndUpdate(
     { key: 'autoModeration' },
     {
       key: 'autoModeration',
-      value: { 
+      value: {
         enabled,
         useLLM: true // Always use LLM for auto-moderation
       },
@@ -552,7 +490,7 @@ export const setAutoModerationStatus = async (enabled, userId) => {
     },
     { upsert: true, new: true }
   );
-  
+
   return {
     enabled: setting.value.enabled,
     useLLM: setting.value.useLLM,
@@ -1039,7 +977,7 @@ export const getCompaniesForAdmin = async (queryParams) => {
               $match: {
                 $expr: { $eq: ['$recruiterProfileId', '$$profileId'] },
                 status: 'ACTIVE',
-                approved: true
+                moderationStatus: 'APPROVED'
               }
             },
             { $count: 'count' }
@@ -1173,7 +1111,7 @@ export const getCompaniesForAdmin = async (queryParams) => {
       $match: {
         recruiterProfileId: { $in: recruiterProfileIds },
         status: 'ACTIVE',
-        approved: true
+        moderationStatus: 'APPROVED'
       }
     },
     {
@@ -1286,8 +1224,8 @@ export const getCompanyDetail = async (companyId) => {
   // Lấy thống kê tin tuyển dụng
   const [totalJobs, recruitingJobs, pendingJobs, expiredJobs] = await Promise.all([
     Job.countDocuments({ recruiterProfileId: companyId }),
-    Job.countDocuments({ recruiterProfileId: companyId, status: 'ACTIVE', approved: true }),
-    Job.countDocuments({ recruiterProfileId: companyId, approved: false }),
+    Job.countDocuments({ recruiterProfileId: companyId, status: 'ACTIVE', moderationStatus: 'APPROVED' }),
+    Job.countDocuments({ recruiterProfileId: companyId, moderationStatus: 'PENDING' }),
     Job.countDocuments({ recruiterProfileId: companyId, status: 'EXPIRED' })
   ]);
 
@@ -1573,12 +1511,12 @@ export const getAdminStats = async () => {
     User.countDocuments({ role: 'candidate' }),
     User.countDocuments({ role: 'recruiter' }),
     Job.countDocuments(),
-    Job.countDocuments({ approved: false }),
-    Job.countDocuments({ approved: true }),
+    Job.countDocuments({ moderationStatus: 'PENDING' }),
+    Job.countDocuments({ moderationStatus: 'APPROVED' }),
     Application.countDocuments(),
     // Đếm công ty đã đăng ký (có company.name)
-    RecruiterProfile.countDocuments({ 
-      'company.name': { $exists: true, $ne: null, $ne: '' } 
+    RecruiterProfile.countDocuments({
+      'company.name': { $exists: true, $ne: null, $ne: '' }
     }),
     // Đếm theo status
     RecruiterProfile.countDocuments({
@@ -1597,8 +1535,8 @@ export const getAdminStats = async () => {
     // Lấy danh sách userId của tất cả recruiter
     User.find({ role: 'recruiter' }).distinct('_id'),
     // Lấy danh sách userId của recruiter đã có company.name
-    RecruiterProfile.find({ 
-      'company.name': { $exists: true, $ne: null, $ne: '' } 
+    RecruiterProfile.find({
+      'company.name': { $exists: true, $ne: null, $ne: '' }
     }).distinct('userId'),
     User.countDocuments({ active: false, role: { $ne: 'admin' } })
   ]);
@@ -1739,7 +1677,7 @@ export const updateJobStatusByAdmin = async (jobId, status) => {
   }
 
   const updateData = {};
-  
+
   // Nếu set về PENDING, chỉ update moderationStatus, không update status
   if (status === 'PENDING') {
     updateData.moderationStatus = 'PENDING';
@@ -1774,7 +1712,6 @@ export const activateJob = async (jobId) => {
     jobId,
     {
       status: 'ACTIVE',
-      approved: true,
       moderationStatus: 'APPROVED'
     },
     { new: true }

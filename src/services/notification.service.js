@@ -1194,7 +1194,7 @@ export const handleCompanyVerification = async (payload) => {
  */
 export const handleJobApproval = async (payload) => {
   const { recipientId, data } = payload;
-  const { status, jobTitle, jobId, aiModerated, summary } = data;
+  const { status, jobTitle, jobId, rejectionReason } = data;
 
   if (!recipientId) {
     logger.warn('JOB_APPROVAL payload is missing recipientId.', payload);
@@ -1208,15 +1208,11 @@ export const handleJobApproval = async (payload) => {
 
   if (status === 'APPROVED') {
     title = '✅ Tin tuyển dụng được phê duyệt';
-    if (aiModerated) {
-      message = `Tin tuyển dụng "${jobTitle}" đã được hệ thống AI tự động duyệt và đang hiển thị công khai.`;
-    } else {
-      message = `Tin tuyển dụng "${jobTitle}" đã được duyệt và đang hiển thị công khai.`;
-    }
+    message = `Tin tuyển dụng "${jobTitle}" đã được duyệt và đang hiển thị công khai.`;
   } else if (status === 'REJECTED') {
     title = '❌ Tin tuyển dụng bị từ chối';
-    if (aiModerated && summary) {
-      message = `Tin tuyển dụng "${jobTitle}" đã bị hệ thống AI từ chối duyệt. Lý do: ${summary}`;
+    if (rejectionReason) {
+      message = `Tin tuyển dụng "${jobTitle}" đã bị từ chối duyệt. Lý do: ${rejectionReason}`;
     } else {
       message = `Tin tuyển dụng "${jobTitle}" đã bị từ chối duyệt. Vui lòng kiểm tra lại nội dung.`;
     }
@@ -1237,7 +1233,8 @@ export const handleJobApproval = async (payload) => {
     metadata: {
       status,
       jobTitle,
-      jobId
+      jobId,
+      rejectionReason
     }
   });
 

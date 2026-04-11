@@ -25,20 +25,6 @@ async function sendModerationNotification(job, isApproved) {
       return;
     }
 
-    // KIỂM TRA XEM ĐÃ CÓ NOTIFICATION CHO JOB NÀY CHƯA (trong vòng 5 phút gần đây)
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-    const existingNotification = await Notification.findOne({
-      userId: userId,
-      relatedJob: job._id,
-      type: isApproved ? 'JOB_APPROVED' : 'JOB_REJECTED',
-      createdAt: { $gte: fiveMinutesAgo }
-    });
-
-    if (existingNotification) {
-      logger.info(`Notification already exists for job ${job._id}, skipping duplicate`);
-      return;
-    }
-
     const notification = {
       userId: userId,
       type: 'job_approval',
@@ -626,12 +612,6 @@ export const autoModerateJobWithLLM = async (jobId) => {
     throw new Error('Không tìm thấy job');
   }
 
-  logger.info(`[AI MODERATION] Starting for job ${jobId}: "${job.title}"`);
-  logger.info(`[AI MODERATION] isAIEnhanced: ${job.isAIEnhanced}, aiEnhanced: ${job.aiEnhanced}`);
-
-  logger.info(`🔍 Starting AI moderation for job ${jobId}: "${job.title}"`);
-  logger.info(`Job details - isAIEnhanced: ${job.isAIEnhanced}, aiEnhanced: ${job.aiEnhanced}`);
-
   // Nếu job đang ở trạng thái NEUTRAL (thất bại trước đó), reset về PENDING
   if (job.moderationStatus === 'NEUTRAL') {
     logger.info(`Resetting job ${jobId} from NEUTRAL to PENDING for retry`);
@@ -662,11 +642,9 @@ export const autoModerateJobWithLLM = async (jobId) => {
     if (aiResult.shouldApprove) {
       job.moderationStatus = 'APPROVED';
       job.status = 'ACTIVE';
-      job.approved = true;
     } else {
       job.moderationStatus = 'REJECTED';
       job.status = 'INACTIVE';
-      job.approved = false;
     }
 
     // Lưu kết quả AI với thông tin chi tiết
@@ -692,89 +670,25 @@ export const autoModerateJobWithLLM = async (jobId) => {
     job.aiModerationResult.method = 'LLM'; // Đánh dấu là dùng LLM
     job.aiModerationResult.failed = false; // Đánh dấu thành công
 
-    // Retry save nếu gặp version conflict
-    let saveAttempts = 0;
-    const maxAttempts = 3;
-    let saveSuccess = false;
-    
-    while (saveAttempts < maxAttempts) {
-      try {
-        await job.save();
-        saveSuccess = true;
-        break; // Save thành công, thoát loop
-      } catch (saveError) {
-        if (saveError.name === 'VersionError' && saveAttempts < maxAttempts - 1) {
-          logger.warn(`Version conflict, retrying... (attempt ${saveAttempts + 1})`);
-          // Reload job từ DB
-          const { default: Job } = await import('../models/Job.js');
-          const freshJob = await Job.findById(jobId);
-          
-          if (!freshJob) {
-            throw new Error('Job not found after reload');
-          }
-          
-          // Copy fresh job data
-          job = freshJob;
-          
-          // Apply lại các thay đổi
-          if (aiResult.shouldApprove) {
-            job.moderationStatus = 'APPROVED';
-            job.status = 'ACTIVE';
-            job.approved = true;
-          } else {
-            job.moderationStatus = 'REJECTED';
-            job.status = 'INACTIVE';
-            job.approved = false;
-          }
-          
-          if (!job.aiModerationResult || job.aiModerationResult === null) {
-            job.aiModerationResult = {
-              prediction: null,
-              confidence: null,
-              probabilities: { reject: null, approve: null },
-              reasons: [],
-              summary: null,
-              method: 'PhoBERT',
-              moderatedAt: null
-            };
-          }
-          
-          job.aiModerationResult.prediction = aiResult.prediction;
-          job.aiModerationResult.confidence = aiResult.confidence;
-          job.aiModerationResult.probabilities = aiResult.probabilities;
-          job.aiModerationResult.reasons = aiResult.reasons;
-          job.aiModerationResult.summary = aiResult.summary;
-          job.aiModerationResult.moderatedAt = new Date();
-          job.aiModerationResult.method = 'LLM';
-          job.aiModerationResult.failed = false;
-          
-          saveAttempts++;
-        } else {
-          throw saveError; // Throw nếu không phải VersionError hoặc hết attempts
-        }
+    await job.save();
+
+    // Populate sau khi save - cần populate nested userId
+    await job.populate({
+      path: 'recruiterProfileId',
+      populate: {
+        path: 'userId',
+        select: '_id'
       }
-    }
+    });
 
-    // CHỈ gửi notification nếu save thành công
-    if (saveSuccess) {
-      // Populate sau khi save - cần populate nested userId
-      await job.populate({
-        path: 'recruiterProfileId',
-        populate: {
-          path: 'userId',
-          select: '_id'
-        }
-      });
-
-      // Gửi thông báo cho recruiter
-      logger.info('Attempting to send notification for job:', {
-        jobId: job._id,
-        hasRecruiterProfileId: !!job.recruiterProfileId,
-        recruiterProfileId: job.recruiterProfileId?._id,
-        userId: job.recruiterProfileId?.userId
-      });
-      await sendModerationNotification(job, aiResult.shouldApprove);
-    }
+    // Gửi thông báo cho recruiter
+    logger.info('Attempting to send notification for job:', {
+      jobId: job._id,
+      hasRecruiterProfileId: !!job.recruiterProfileId,
+      recruiterProfileId: job.recruiterProfileId?._id,
+      userId: job.recruiterProfileId?.userId
+    });
+    await sendModerationNotification(job, aiResult.shouldApprove);
 
     return {
       job,

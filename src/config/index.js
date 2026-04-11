@@ -40,7 +40,7 @@ const config = {
   // KAFKA_SASL_USERNAME: process.env.KAFKA_SASL_USERNAME,
   // KAFKA_SSL_ENABLED: process.env.KAFKA_SSL_ENABLED || 'false', // 'true' or 'false'
   // RabbitMQ Configuration
-  RABBITMQ_URL: process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672',
+  RABBITMQ_URL: process.env.RABBITMQ_URL,
 
   // Cloudinary Configuration
   CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME,

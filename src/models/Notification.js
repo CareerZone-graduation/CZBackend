@@ -34,13 +34,11 @@ const notificationSchema = new mongoose.Schema({
         "profile_view",
         "job_alert",
         "system",
-        "job_applicants_rollup", // THÊM: Cho nhà tuyển dụng gộp nhóm.
-        "company_verification", // THÊM: Cho thông báo xác thực công ty.
-        "job_approval", // THÊM: Cho thông báo phê duyệt tin tuyển dụng.
-        "support_request", // THÊM: Cho thông báo yêu cầu hỗ trợ.
-        "talent_pool_invitation" // THÊM MỚI
-        "JOB_APPROVED", // THÊM: Cho thông báo job được duyệt bởi AI/Admin
-        "JOB_REJECTED", // THÊM: Cho thông báo job bị từ chối bởi AI/Admin
+        "job_applicants_rollup",
+        "company_verification",
+        "job_approval", 
+        "support_request",
+        "talent_pool_invitation"
       ],
       message: "{VALUE} is not a valid notification type",
     },

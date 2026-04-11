@@ -682,7 +682,6 @@ export const updateJob = async (jobId, userId, updateData) => {
   if (job.moderationStatus === 'REJECTED' || job.moderationStatus === 'NEUTRAL') {
     finalUpdateData.moderationStatus = 'PENDING';
     finalUpdateData.status = 'INACTIVE'; // Chờ duyệt lại
-    finalUpdateData.approved = false;
     finalUpdateData.aiModerationResult = null; // Xóa kết quả AI cũ
   }
 
@@ -709,6 +708,21 @@ export const updateJob = async (jobId, userId, updateData) => {
     new: true,
     runValidators: true
   });
+
+  if (finalUpdateData.moderationStatus === 'PENDING') {
+    try {
+      const AdminSettings = (await import('../models/AdminSettings.js')).default;
+      const setting = await AdminSettings.findOne({ key: 'autoModeration' });
+      
+      if (setting?.value?.enabled) {
+        const aiJobModerationLLMService = await import('./aiJobModerationLLM.service.js');
+        aiJobModerationLLMService.autoModerateJobWithLLM(updatedJob._id)
+          .catch(error => logger.error('Auto-moderation failed during job update:', error));
+      }
+    } catch (error) {
+      logger.error('Error triggering auto-moderation during job update:', error);
+    }
+  }
 
   return updatedJob;
 };
