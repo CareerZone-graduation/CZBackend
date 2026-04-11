@@ -19,8 +19,11 @@ router.post(
     authController.login
 );
 
-// Google Sign-In (Client-side flow)
+// Google Sign-In (Legacy - Implicit Flow, deprecated)
 router.post('/google-login', authController.googleLogin);
+
+// Google OAuth with PKCE (Server-Side - Backend đổi code)
+router.post('/google/callback', authController.googleOAuthCallback);
 
 
 // Lấy thông tin người dùng hiện tại (bảo vệ bằng JWT)

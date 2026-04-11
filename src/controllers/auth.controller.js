@@ -7,7 +7,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { CandidateProfile, User, RecruiterProfile } from '../models/index.js';
 import logger from '../utils/logger.js';
 import * as onboardingService from '../services/onboarding.service.js';
-import { UnauthorizedError } from '../utils/AppError.js';
+import { UnauthorizedError, BadRequestError } from '../utils/AppError.js';
 
 const client = new OAuth2Client(config.GOOGLE_CLIENT_ID);
 
@@ -233,6 +233,48 @@ export const googleLogin = asyncHandler(async (req, res) => {
       isEmailVerified: true,
     },
     profileCompleteness
+  });
+});
+
+// Server-Side PKCE: Backend đổi code với Google
+export const googleOAuthCallback = asyncHandler(async (req, res) => {
+  const { code, code_verifier, role } = req.body;
+
+  if (!code || !code_verifier) {
+    throw new BadRequestError('Thiếu mã xác thực hoặc code verifier.');
+  }
+
+  // Determine redirect URI based on role
+  const redirectUri = role === 'recruiter'
+    ? `${config.RECRUITER_FE_URL}/auth/login`
+    : `${config.CANDIDATE_FE_URL}/login`;
+
+  // Exchange code for access token with PKCE verification
+  const googleOAuthService = await import('../services/googleOAuth.service.js');
+  const accessToken = await googleOAuthService.exchangeCodeForToken(code, code_verifier, redirectUri);
+
+  // Get user info from Google
+  const googleUser = await googleOAuthService.getUserInfo(accessToken);
+
+  // Find or create user
+  const result = await googleOAuthService.findOrCreateUser(googleUser, role);
+
+  // Set refresh token cookie
+  res.cookie('refreshToken', result.refreshToken, {
+    httpOnly: true,
+    secure: config.NODE_ENV === 'production',
+    sameSite: 'None',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+
+  res.json({
+    success: true,
+    message: 'Đăng nhập bằng Google thành công.',
+    data: {
+      accessToken: result.accessToken,
+      ...result.user
+    },
+    profileCompleteness: result.profileCompleteness
   });
 });
 
