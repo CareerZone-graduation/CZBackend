@@ -59,3 +59,12 @@ export const resetPasswordSchema = z.object({
     .min(8, 'Mật khẩu mới phải có ít nhất 8 ký tự')
     .max(100, 'Mật khẩu mới không được dài quá 100 ký tự'),
 });
+
+export const googleOAuthCallbackSchema = z.object({
+  code: z.string().min(1, 'Authorization code là bắt buộc'),
+  code_verifier: z.string().min(1, 'Code verifier là bắt buộc'),
+  role: z.enum(['candidate', 'recruiter'], {
+    errorMap: () => ({ message: 'Role phải là candidate hoặc recruiter' })
+  }).optional(),
+  redirect_uri: z.string().url('Redirect URI phải là URL hợp lệ'),
+});

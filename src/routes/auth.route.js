@@ -23,7 +23,10 @@ router.post(
 router.post('/google-login', authController.googleLogin);
 
 // Google OAuth with PKCE (Server-Side - Backend đổi code)
-router.post('/google/callback', authController.googleOAuthCallback);
+router.post('/google/callback',
+  validationMiddleware.validateBody(authSchema.googleOAuthCallbackSchema),
+  authController.googleOAuthCallback
+);
 
 
 // Lấy thông tin người dùng hiện tại (bảo vệ bằng JWT)

@@ -238,20 +238,20 @@ export const googleLogin = asyncHandler(async (req, res) => {
 
 // Server-Side PKCE: Backend đổi code với Google
 export const googleOAuthCallback = asyncHandler(async (req, res) => {
-  const { code, code_verifier, role } = req.body;
+  const { code, code_verifier, role, redirect_uri } = req.body;
 
   if (!code || !code_verifier) {
     throw new BadRequestError('Thiếu mã xác thực hoặc code verifier.');
   }
 
-  // Determine redirect URI based on role
-  const redirectUri = role === 'recruiter'
-    ? `${config.RECRUITER_FE_URL}/auth/login`
-    : `${config.CANDIDATE_FE_URL}/login`;
+  if (!redirect_uri) {
+    throw new BadRequestError('Thiếu redirect URI.');
+  }
 
   // Exchange code for access token with PKCE verification
+  // Google sẽ tự validate redirect_uri phải khớp với URI đã đăng ký
   const googleOAuthService = await import('../services/googleOAuth.service.js');
-  const accessToken = await googleOAuthService.exchangeCodeForToken(code, code_verifier, redirectUri);
+  const accessToken = await googleOAuthService.exchangeCodeForToken(code, code_verifier, redirect_uri);
 
   // Get user info from Google
   const googleUser = await googleOAuthService.getUserInfo(accessToken);
