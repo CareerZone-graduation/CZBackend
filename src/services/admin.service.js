@@ -60,16 +60,17 @@ export const getJobsForAdmin = async (queryParams) => {
   // Filter by status (Unified)
   if (status) {
     if (status === 'PENDING') {
-      // Chỉ hiển thị jobs PENDING, không bao gồm NEUTRAL
       filter.moderationStatus = 'PENDING';
-    } else if (status === 'NEUTRAL') {
-      // Tab riêng cho jobs không xác định
-      filter.moderationStatus = 'NEUTRAL';
+      filter.$and = [
+        { 'aiModerationResult.failed': { $ne: true } },
+        { 'aiModerationResult.prediction': { $ne: 2 } }
+      ];
     } else if (status === 'AI_FAILED') {
-      // Tab riêng cho jobs AI không duyệt được - cần duyệt thủ công
-      filter.moderationStatus = { $in: ['PENDING', 'NEUTRAL'] };
-      filter['aiModerationResult.failed'] = true;
-      filter['aiModerationResult.allowRetry'] = { $ne: true }; // Chưa được reset
+      filter.moderationStatus = 'PENDING';
+      filter.$or = [
+        { 'aiModerationResult.failed': true },
+        { 'aiModerationResult.prediction': 2 }
+      ];
     } else if (status === 'ACTIVE') {
       filter.status = 'ACTIVE';
       filter.moderationStatus = 'APPROVED';
@@ -147,10 +148,9 @@ export const getJobStatistics = async () => {
     total
   ] = await Promise.all([
     Job.countDocuments({ status: 'ACTIVE', moderationStatus: 'APPROVED' }),
-    // PENDING: Chỉ jobs chờ duyệt, không bao gồm NEUTRAL
+    // PENDING: Chỉ jobs chờ duyệt
     Job.countDocuments({ moderationStatus: 'PENDING' }),
-    // NEUTRAL: Jobs không xác định - AI không duyệt được
-    Job.countDocuments({ moderationStatus: 'NEUTRAL' }),
+    Promise.resolve(0),
     Job.countDocuments({ status: 'EXPIRED', moderationStatus: 'APPROVED' }),
     Job.countDocuments({ status: 'INACTIVE', moderationStatus: 'APPROVED' }),
     Job.countDocuments({ moderationStatus: 'REJECTED' }),
@@ -246,10 +246,6 @@ export const approveJob = async (jobId) => {
 
   if (!job) {
     throw new NotFoundError('Tin tuyển dụng không tồn tại.');
-  }
-
-  if (job.moderationStatus === 'NEUTRAL') {
-    logger.warn(`Admin approving NEUTRAL job ${jobId} (AI failed previously)`);
   }
 
   job.moderationStatus = 'APPROVED';
@@ -1729,8 +1725,8 @@ export const resetAIModerationForJob = async (jobId) => {
     throw new NotFoundError('Tin tuyển dụng không tồn tại.');
   }
 
-  // Kiểm tra cả NEUTRAL và failed
-  if (job.moderationStatus !== 'NEUTRAL' && !job.aiModerationResult?.failed) {
+  // Kiểm tra failed
+  if (!job.aiModerationResult?.failed) {
     throw new BadRequestError('Job này không cần reset AI moderation.');
   }
 

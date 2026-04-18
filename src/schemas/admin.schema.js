@@ -16,7 +16,7 @@ export const adminJobsQuerySchema = z.object({
   search: z.string().optional(),
   company: z.string().optional(),
   // Thêm 'AI_FAILED' để filter jobs AI không duyệt được
-  status: z.enum(['ACTIVE', 'INACTIVE', 'EXPIRED', 'PENDING', 'REJECTED', 'NEUTRAL', 'AI_FAILED']).optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'EXPIRED', 'PENDING', 'REJECTED', 'AI_FAILED']).optional(),
   sort: z
     .enum(['title_asc', 'title_desc', 'createdAt_asc', 'createdAt_desc'])
     .optional()
