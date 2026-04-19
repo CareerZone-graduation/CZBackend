@@ -661,3 +661,67 @@ export const gatherComparisonData = async (applicationIds, recruiterId) => {
     candidates: candidatesData
   };
 };
+
+/**
+ * Đánh giá kết quả phỏng vấn tự động (Workflow)
+ */
+export const evaluateInterviewResult = async (applicationId, recruiterId, result, feedback) => {
+  if (!['PASSED', 'FAILED'].includes(result)) {
+    throw new BadRequestError('Kết quả phỏng vấn phải là PASSED hoặc FAILED');
+  }
+
+  const application = await Application.findById(applicationId).populate('jobId');
+  if (!application) {
+    throw new NotFoundError('Không tìm thấy đơn ứng tuyển');
+  }
+
+  const job = application.jobId;
+  const recruiterProfile = await RecruiterProfile.findOne({ userId: recruiterId });
+  if (!recruiterProfile || job.recruiterProfileId.toString() !== recruiterProfile._id.toString()) {
+    throw new UnauthorizedError('Bạn không có quyền đánh giá đơn ứng tuyển này');
+  }
+
+  // Cập nhật interview_result
+  application.interview_result = result;
+  if (feedback) {
+    application.notes = (application.notes || '') + `\n\n[Đánh giá Phỏng vấn - ${result}]: ${feedback}`;
+  }
+
+  logActivity(application, result === 'PASSED' ? 'INTERVIEW_PASSED' : 'INTERVIEW_FAILED', `Nhà tuyển dụng đánh giá phỏng vấn: ${result === 'PASSED' ? 'ĐẠT' : 'KHÔNG ĐẠT'}`);
+  await application.save();
+
+  // Đánh thức Workflow nếu đang bị dừng
+  if (application.workflowData && application.workflowData.isWorkflowPaused) {
+    application.workflowData.isWorkflowPaused = false;
+    await application.save();
+
+    await queueService.publishNotificationStrict(rabbitmq.ROUTING_KEYS.WORKFLOW_EXECUTION_CONTINUE, {
+      applicationId: application._id.toString(),
+      workflowId: application.workflowId.toString(),
+      currentNodeId: application.workflowData.pendingNextNodeId,
+      retryCount: 0
+    });
+  } else {
+    // Nếu là luồng thủ công (không dùng Workflow)
+    if (result === 'FAILED') {
+      application.status = 'INTERVIEW_FAILED';
+      application.lastStatusUpdateAt = new Date();
+      await application.save();
+      
+      const candidateProfile = await CandidateProfile.findById(application.candidateProfileId);
+      if (candidateProfile) {
+        queueService.publishNotification(rabbitmq.ROUTING_KEYS.STATUS_UPDATE, {
+          type: 'INTERVIEW_FAILED',
+          recipientId: candidateProfile.userId.toString(),
+          data: {
+            applicationId: application._id.toString(),
+            newStatus: 'INTERVIEW_FAILED',
+            feedback: feedback
+          }
+        });
+      }
+    }
+  }
+
+  return application;
+};

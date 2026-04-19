@@ -14,8 +14,9 @@
     "worker:embedding": "node workers/embedding.worker.js",
     "worker:candidate-embedding": "node workers/candidate-embedding.worker.js",
     "worker:knowledge-embedding": "node workers/knowledge-embedding.worker.js",
+    "worker:workflow": "node workers/workflowExecution.worker.js",
     "backfill": "node scripts/update-job-embeddings.js",
-    "start:all": "npm-run-all --parallel dev worker:notification worker:matching worker:embedding worker:candidate-embedding worker:knowledge-embedding",
+    "start:all": "npm-run-all --parallel dev worker:notification worker:matching worker:embedding worker:candidate-embedding worker:knowledge-embedding worker:workflow",
     "start:all2": "npm-run-all --parallel dev worker:notification worker:matching ",
     "deploy": "npm-run-all --parallel prod worker:notification worker:matching worker:embedding worker:candidate-embedding worker:knowledge-embedding",
     "test": "cross-env NODE_ENV=test node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --detectOpenHandles --forceExit --no-cache",
@@ -28,7 +29,8 @@
     "check:integrity": "node scripts/check-data-integrity.js",
     "cleanup:orphaned": "node scripts/data-integrity-cleanup.js",
     "backfillembeding": "node scripts/backfill-embeddings.js",
-    "reminders:schedule": "node scripts/schedule-interview-reminders.js"
+    "reminders:schedule": "node scripts/schedule-interview-reminders.js",
+    "seed:workflow-templates": "node scripts/seed-workflow-templates.js"
   },
   "keywords": [
     "job",

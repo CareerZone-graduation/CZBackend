@@ -775,9 +775,65 @@ export const handleStatusUpdate = async (payload) => {
     case 'PROFILE_VIEW':
       return createProfileViewNotification(payload);
 
+    case 'WORKFLOW_NOTIFICATION':
+      return handleWorkflowNotification(payload);
+
     default:
       logger.warn(`⚠️ Unknown STATUS_UPDATE type: ${payload.type}`);
   }
+};
+
+/**
+ * Xử lý thông báo từ workflow engine (ví dụ: giao bài test, thông báo kết quả...).
+ * @param {object} payload - Payload từ RabbitMQ
+ */
+export const handleWorkflowNotification = async (payload) => {
+  const { recipientId, data } = payload;
+  const { applicationId, testAssignmentId, title, message } = data;
+
+  if (!recipientId) {
+    logger.warn('WORKFLOW_NOTIFICATION payload is missing recipientId.', payload);
+    return;
+  }
+
+  // recipientId ở đây là candidateProfileId, cần lookup userId
+  const candidateProfile = await CandidateProfile.findById(recipientId).select('userId').lean();
+  if (!candidateProfile) {
+    logger.warn(`WORKFLOW_NOTIFICATION - CandidateProfile not found for id ${recipientId}`);
+    return;
+  }
+
+  const userId = candidateProfile.userId;
+
+  const notification = await Notification.create({
+    userId: new mongoose.Types.ObjectId(userId),
+    title: title || 'Thông báo từ quy trình tuyển dụng',
+    message: message || 'Bạn có một thông báo mới từ quy trình tuyển dụng.',
+    type: 'workflow',
+    entity: applicationId ? {
+      type: 'Application',
+      id: new mongoose.Types.ObjectId(applicationId)
+    } : undefined,
+    metadata: {
+      applicationId: applicationId?.toString(),
+      testAssignmentId: testAssignmentId?.toString(),
+      source: 'WORKFLOW_ENGINE'
+    }
+  });
+
+  // Push notification real-time
+  await pushNotification(userId, {
+    title: title || 'Thông báo từ quy trình tuyển dụng',
+    body: message || 'Bạn có một thông báo mới từ quy trình tuyển dụng.',
+    data: {
+      url: testAssignmentId
+        ? `/tests/${testAssignmentId}/take`
+        : `/dashboard/applications/${applicationId}`
+    }
+  });
+
+  logger.info(`Workflow notification sent to user ${userId} (candidateProfile ${recipientId})`);
+  return notification;
 };
 
 /**

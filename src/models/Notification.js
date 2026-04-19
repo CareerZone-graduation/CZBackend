@@ -38,7 +38,8 @@ const notificationSchema = new mongoose.Schema({
         "company_verification",
         "job_approval", 
         "support_request",
-        "talent_pool_invitation"
+        "talent_pool_invitation",
+        "workflow"
       ],
       message: "{VALUE} is not a valid notification type",
     },

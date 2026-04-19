@@ -41,6 +41,7 @@ export const ROUTING_KEYS = {
   JOB_ALERT_DAILY: 'notification.job_alert.daily', // Dành cho thông báo việc làm hàng ngày
   JOB_ALERT_WEEKLY: 'notification.job_alert.weekly', // Dành cho thông báo việc làm hàng tuần
   TALENT_POOL_INVITATION: 'notification.talent_pool.invitation', // Dành cho thông báo mời ứng viên vào Talent Pool
+  WORKFLOW_EXECUTION_CONTINUE: 'workflow.execution.continue', // Dành cho tiếp tục workflow sau action test
   KNOWLEDGE_DOCUMENT_UPLOADED: 'knowledge.document.uploaded' // Dành cho upload tài liệu knowledge base
 };
 
@@ -52,6 +53,7 @@ export const QUEUES = {
   IMMEDIATE: 'immediate-notifications', // Queue cho các thông báo cần xử lý ngay lập tức
   DIGEST: 'digest-notifications', // Queue cho các thông báo tổng hợp, xử lý theo đợt
   DLQ: 'notifications-dlq', // Dead-Letter-Queue: Queue chứa các message bị lỗi sau khi đã đi qua DLX
+  WORKFLOW_EXECUTION: 'workflow-execution-queue', // Queue cho workflow execution engine
   KNOWLEDGE_EMBEDDING: 'knowledge-embedding-queue' // Queue cho xử lý embedding
 };
 
@@ -128,6 +130,13 @@ export async function getChannel() {
     });
     await channel.bindQueue(QUEUES.DIGEST, EXCHANGE, ROUTING_KEYS.JOB_ALERT_DAILY); // Job alert daily notifications
     await channel.bindQueue(QUEUES.DIGEST, EXCHANGE, ROUTING_KEYS.JOB_ALERT_WEEKLY); // Job alert weekly notifications
+
+    // 6c. Queue cho workflow execution continue
+    await channel.assertQueue(QUEUES.WORKFLOW_EXECUTION, {
+      durable: true,
+      deadLetterExchange: DLX,
+    });
+    await channel.bindQueue(QUEUES.WORKFLOW_EXECUTION, EXCHANGE, ROUTING_KEYS.WORKFLOW_EXECUTION_CONTINUE);
 
     // 7. Queue chứa các message lỗi (Dead-Letter Queue - DLQ)
     // Queue này sẽ lưu trữ tất cả message được gửi từ DLX.

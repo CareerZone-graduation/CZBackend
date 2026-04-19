@@ -1,4 +1,5 @@
 import { CandidateProfile, User, Application, InterviewRoom } from '../models/index.js';
+import TestAssignment from '../models/TestAssignment.js';
 import { NotFoundError, BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
 import * as uploadService from './upload.service.js';
@@ -429,6 +430,12 @@ export const getApplicationById = async (userId, applicationId) => {
     // Lấy thông tin phỏng vấn nếu có
     const interview = await InterviewRoom.findOne({ applicationId: application._id }).lean();
 
+    // Lấy thông tin bài kiểm tra (nếu có)
+    const testAssignments = await TestAssignment.find({ applicationId: application._id })
+        .populate('testId', 'title description duration passingScore')
+        .sort({ assignedAt: -1 })
+        .lean();
+
     logger.info('Successfully retrieved application details for candidate', {
         userId,
         candidateProfileId: candidateProfile._id,
@@ -446,7 +453,8 @@ export const getApplicationById = async (userId, applicationId) => {
             scheduledTime: interview.scheduledTime,
             roomName: interview.roomName,
             isEnded: interview.status === 'ENDED' || interview.status === 'COMPLETED'
-        } : null
+        } : null,
+        testAssignments: testAssignments && testAssignments.length > 0 ? testAssignments : null
     };
 };
 

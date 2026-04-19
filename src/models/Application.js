@@ -16,7 +16,8 @@ const activityLogSchema = new mongoose.Schema({
       'OFFER_ACCEPTED', // khi người ứng tuyển chấp nhận lời mời
       'OFFER_DECLINED', // khi người ứng tuyển từ chối lời mời
       'REJECTED', // khi người tuyển dụng từ chối ứng viên
-      'INTERVIEW_FAILED' // khi phỏng vấn không đạt
+      'INTERVIEW_FAILED', // khi phỏng vấn không đạt
+      'INTERVIEW_PASSED' // khi phỏng vấn đạt
     ],
     required: true
   },
@@ -107,6 +108,39 @@ const applicationSchema = new mongoose.Schema({
     },
     default: 'PENDING',
     required: [true, 'Application status is required']
+  },
+  workflowId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Workflow',
+    default: null
+  },
+  currentStageNodeId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'WorkflowNode',
+    default: null
+  },
+  test_score: {
+    type: Number,
+    min: 0,
+    max: 100
+  },
+  interview_result: {
+    type: String,
+    enum: ['PASSED', 'FAILED']
+  },
+  workflowData: {
+    lastExecutionAt: {
+      type: Date,
+      default: null
+    },
+    isWorkflowPaused: {
+      type: Boolean,
+      default: false
+    },
+    pendingNextNodeId: {
+      type: String,
+      default: null
+    }
   },
   lastStatusUpdateAt: {
     type: Date,

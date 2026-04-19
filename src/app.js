@@ -62,6 +62,10 @@ import interactionRoutes from './routes/interaction.route.js';
 import copilotRoutes from './routes/copilot.route.js'; // Copilot API
 import knowledgeBaseRoutes from './routes/knowledgeBase.route.js';
 import knowledgeChatRoutes from './routes/knowledgeChat.route.js';
+import workflowRoutes from './routes/workflow.route.js';
+import workflowTemplateRoutes from './routes/workflowTemplate.route.js';
+import testRoutes from './routes/test.route.js';
+import testAssignmentRoutes from './routes/testAssignment.route.js';
 
 // 🚧 Middlewares
 import * as errorMiddleware from './middleware/error.middleware.js';
@@ -177,6 +181,10 @@ app.use('/api/interactions', interactionRoutes);
 app.use('/api/copilot', copilotRoutes);
 app.use('/api/recruiter/knowledge-base', knowledgeBaseRoutes);
 app.use('/api/candidate/chat', knowledgeChatRoutes);
+app.use('/api/workflows', workflowRoutes);
+app.use('/api/workflow-templates', workflowTemplateRoutes);
+app.use('/api/tests', testRoutes);
+app.use('/api/test-assignments', testAssignmentRoutes);
 
 // 404 & error
 app.use(notFoundMiddleware.notFound);

@@ -5,6 +5,8 @@ import * as authMiddleware from '../middleware/auth.middleware.js';
 import * as validationMiddleware from '../middleware/validation.middleware.js';
 import * as applicationSchema from '../schemas/application.schema.js';
 import * as interviewSchema from '../schemas/interview.schema.js';
+import * as workflowController from '../controllers/workflow.controller.js';
+import { z } from 'zod';
 
 const router = express.Router();
 
@@ -89,6 +91,19 @@ router.patch(
   applicationController.updateApplicationNotes
 );
 
+// Route đánh giá kết quả phỏng vấn
+router.post(
+  '/:applicationId/interview-result',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.recruiterOnly,
+  validationMiddleware.validateParams(applicationSchema.applicationIdParam),
+  validationMiddleware.validateBody(z.object({
+    result: z.enum(['PASSED', 'FAILED']),
+    feedback: z.string().optional()
+  })),
+  applicationController.evaluateInterviewResult
+);
+
 // Route export Application PDF using Snapshot
 router.get(
   '/:applicationId/export-pdf',
@@ -98,6 +113,15 @@ router.get(
   applicationController.exportApplicationCvPdf
 );
 
+// Route để chuyển stage thủ công trong workflow
+router.post(
+  '/:applicationId/transition',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.recruiterOnly,
+  validationMiddleware.validateParams(applicationSchema.applicationIdParam),
+  validationMiddleware.validateBody(z.object({ targetStageNodeId: z.string().regex(/^[0-9a-fA-F]{24}$/) })),
+  workflowController.manualTransition
+);
 
 
 export default router;

@@ -252,3 +252,26 @@ export const compareWithAI = asyncHandler(async (req, res) => {
     res.end();
   }
 });
+
+/**
+ * @desc      Evaluate interview result for an application (Workflow)
+ * @route     POST /api/applications/:applicationId/interview-result
+ * @access    Private - Recruiter Only
+ */
+export const evaluateInterviewResult = asyncHandler(async (req, res) => {
+  const { applicationId } = req.params;
+  const { result, feedback } = req.body;
+
+  const updatedApplication = await applicationService.evaluateInterviewResult(
+    applicationId,
+    req.user._id,
+    result,
+    feedback
+  );
+
+  res.status(200).json({
+    success: true,
+    message: 'Đánh giá kết quả phỏng vấn thành công',
+    data: updatedApplication
+  });
+});

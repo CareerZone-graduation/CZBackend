@@ -23,3 +23,19 @@ export const publishNotification = async (routingKey, payload) => {
     logger.error(`Error publishing notification with key [${routingKey}]`, { error, payload });
   }
 };
+
+export const publishNotificationStrict = async (routingKey, payload) => {
+  try {
+    const channel = await rabbitmq.getChannel();
+    const message = Buffer.from(JSON.stringify(payload));
+
+    channel.publish(EXCHANGE, routingKey, message, {
+      persistent: true,
+    });
+
+    logger.info(`Published strict notification task with key [${routingKey}]`, payload);
+  } catch (error) {
+    logger.error(`Error publishing strict notification with key [${routingKey}]`, { error, payload });
+    throw error;
+  }
+};

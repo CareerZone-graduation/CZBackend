@@ -73,9 +73,11 @@ const jobSchema = new mongoose.Schema({
       },
       coordinates: {
         type: [Number], // [longitude, latitude]
+        default: undefined,
         validate: {
           validator: function (coords) {
-            return coords && coords.length === 2 &&
+            if (coords == null || coords.length === 0) return true;
+            return coords.length === 2 &&
               coords[0] >= -180 && coords[0] <= 180 &&
               coords[1] >= -90 && coords[1] <= 90;
           },
@@ -184,6 +186,15 @@ const jobSchema = new mongoose.Schema({
       message: '{VALUE} is not a valid moderation status'
     },
     default: 'PENDING'
+  },
+  workflowId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Workflow',
+    default: null
+  },
+  hasCustomWorkflow: {
+    type: Boolean,
+    default: false
   },
 
   // AI Moderation Result

@@ -21,6 +21,7 @@ import { logActivity } from './application.service.js';
 import { generateEmbeddingWithRetry } from '../utils/embedding.js';
 import { recordCreditTransaction } from './creditHistory.service.js';
 import { TRANSACTION_TYPES, TRANSACTION_CATEGORIES } from '../constants/index.js';
+import * as workflowExecutionService from './workflowExecution.service.js';
 
 import { getCoordinatesByLocationName } from '../utils/geoUtils.js';
 
@@ -630,6 +631,11 @@ export const updateJob = async (jobId, userId, updateData) => {
     }
   }
 
+  // Cập nhật cờ hasCustomWorkflow nếu có workflowId
+  if (finalUpdateData.workflowId !== undefined) {
+    finalUpdateData.hasCustomWorkflow = !!finalUpdateData.workflowId;
+  }
+
   // 3. Logic kích hoạt lại quy trình kiểm duyệt (Moderation)
   // Nếu người dùng chỉnh sửa các trường quan trọng -> set lại moderationStatus = PENDING
   const criticalFields = [
@@ -984,6 +990,15 @@ export const applyToJob = async (userId, jobId, applicationData) => {
       // Quan trọng: Không re-throw lỗi để không làm hỏng response của người dùng
     }
     // --- KẾT THÚC GỬI SỰ KIỆN ---
+
+    // --- BẮT ĐẦU WORKFLOW EXECUTION ---
+    try {
+      await workflowExecutionService.startWorkflowForApplication(application._id);
+    } catch (error) {
+      logger.error('Failed to start workflow for application', { error, applicationId: application._id });
+      // Không re-throw để không làm hỏng response
+    }
+    // --- KẾT THÚC WORKFLOW EXECUTION ---
 
     return application;
 
@@ -2929,7 +2944,7 @@ export const reapplyToJob = async (userId, jobId, applicationData) => {
 
       // 1. Gửi sự kiện để thông báo cho ỨNG VIÊN
       queueService.publishNotification(ROUTING_KEYS.STATUS_UPDATE, {
-        type: 'APPLICATION_RESUBMITTED',
+        type: 'APPLICATION_SUBMITTED',
         recipientId: userId.toString(),
         data: {
           applicationId: newApplication._id.toString(),
@@ -2950,6 +2965,15 @@ export const reapplyToJob = async (userId, jobId, applicationData) => {
     } catch (error) {
       logger.error('Failed to queue notifications after re-application', { error, applicationId: newApplication._id });
     }
+
+    // --- BẮT ĐẦU WORKFLOW EXECUTION ---
+    try {
+      await workflowExecutionService.startWorkflowForApplication(newApplication._id);
+    } catch (error) {
+      logger.error('Failed to start workflow for re-application', { error, applicationId: newApplication._id });
+      // Không re-throw để không làm hỏng response
+    }
+    // --- KẾT THÚC WORKFLOW EXECUTION ---
 
     return newApplication;
 

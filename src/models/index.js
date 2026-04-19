@@ -23,4 +23,11 @@ export { default as SupportRequest } from './SupportRequest.js';
 export { default as Interaction } from './Interaction.js';
 export { default as CopilotSession } from './CopilotSession.js';
 export { default as RecruiterKnowledgeDocument } from './RecruiterKnowledgeDocument.js';
+export { default as Workflow } from './Workflow.js';
+export { default as WorkflowNode } from './WorkflowNode.js';
+export { default as WorkflowConnection } from './WorkflowConnection.js';
+export { default as WorkflowExecution } from './WorkflowExecution.js';
+export { default as Test } from './Test.js';
+export { default as TestAssignment } from './TestAssignment.js';
+export { default as WorkflowTemplate } from './WorkflowTemplate.js';
 // KnowledgeChunk is registered on the secondary DB connection — import from config/knowledgeDb.js

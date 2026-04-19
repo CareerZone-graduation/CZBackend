@@ -115,6 +115,7 @@ export const createJobSchema = z.object({
   experience: z.enum(experienceEnum),
   category: z.enum(jobCategoryEnum),
   skills: z.array(z.string().trim().max(50, 'Kỹ năng không được vượt quá 50 ký tự')).optional(),
+  workflowId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID không hợp lệ').optional(),
 })
   .refine(data => !data.minSalary || !data.maxSalary || data.maxSalary >= data.minSalary, {
     message: 'Lương tối đa phải lớn hơn hoặc bằng lương tối thiểu',
@@ -168,6 +169,7 @@ export const updateJobSchema = z.object({
   category: z.enum(jobCategoryEnum).optional(),
   status: z.enum(jobStatusEnum).optional(),
   skills: z.array(z.string().trim().max(50, 'Kỹ năng không được vượt quá 50 ký tự')).optional(),
+  workflowId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID không hợp lệ').nullable().optional(),
 })
   .refine(data => !data.minSalary || !data.maxSalary || data.maxSalary >= data.minSalary, {
     message: 'Lương tối đa phải lớn hơn hoặc bằng lương tối thiểu',
