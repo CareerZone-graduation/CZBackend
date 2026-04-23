@@ -661,3 +661,277 @@ export const gatherComparisonData = async (applicationIds, recruiterId) => {
     candidates: candidatesData
   };
 };
+
+
+/**
+ * Chấm điểm CV của một application
+ * @param {string} applicationId - ID của application
+ * @param {string} userId - ID của user (để verify quyền)
+ * @returns {Promise<Object>} Kết quả chấm điểm
+ */
+export const scoreApplicationCV = async (applicationId, userId) => {
+  // 1. Tìm application và verify quyền
+  const application = await Application.findById(applicationId)
+    .populate('jobId')
+    .populate('candidateProfileId');
+
+  if (!application) {
+    throw new NotFoundError('Không tìm thấy đơn ứng tuyển');
+  }
+
+  // Verify user owns this application
+  const candidateProfile = await CandidateProfile.findOne({ userId });
+  if (!candidateProfile || application.candidateProfileId._id.toString() !== candidateProfile._id.toString()) {
+    throw new UnauthorizedError('Bạn không có quyền chấm điểm đơn ứng tuyển này');
+  }
+
+  // 2. Kiểm tra đã chấm điểm chưa
+  if (application.cvScore && application.cvScore.overall_score) {
+    // Đã chấm rồi, trả về kết quả cũ
+    return application.cvScore;
+  }
+
+  // 3. Extract CV text
+  const { extractCVText } = await import('./cvScoring.service.js');
+  let cvText = '';
+  
+  if (application.submittedCV.source === 'TEMPLATE' && application.submittedCV.templateSnapshot) {
+    cvText = extractCVText(application.submittedCV.templateSnapshot);
+  } else if (application.submittedCV.source === 'UPLOADED') {
+    // For uploaded CV, use basic info (limited accuracy without PDF text extraction)
+    cvText = `CV: ${application.submittedCV.name}\nPath: ${application.submittedCV.path}\n\nLưu ý: Đây là CV uploaded, chỉ có thông tin cơ bản. Để chấm điểm chính xác hơn, vui lòng sử dụng CV template.`;
+    logger.warn('Scoring uploaded CV with limited info', { cvTextLength: cvText.length });
+  }
+
+  logger.info('Extracted CV text', {
+    applicationId,
+    cvTextLength: cvText.length,
+    source: application.submittedCV.source
+  });
+
+  if (!cvText || cvText.length < 20) {
+    throw new BadRequestError('CV không có đủ thông tin để chấm điểm. Vui lòng đảm bảo CV có đầy đủ nội dung.');
+  }
+
+  // 4. Extract JD text
+  const job = application.jobId;
+  const jdText = `
+Title: ${job.title}
+Description: ${job.description || ''}
+Requirements: ${job.requirements || ''}
+Benefits: ${job.benefits || ''}
+Skills: ${job.skills?.join(', ') || ''}
+  `.trim();
+
+  // 5. Determine job type
+  let jobType = 'technical';
+  const title = job.title.toLowerCase();
+  if (title.includes('marketing') || title.includes('design') || title.includes('creative')) {
+    jobType = 'marketing';
+  } else if (title.includes('business') || title.includes('manager') || title.includes('sales')) {
+    jobType = 'business';
+  }
+
+  // 6. Validate CV trước khi score
+  const { validateCV, scoreCVWithLLM } = await import('./cvScoring.service.js');
+  const validation = validateCV(submittedCV);
+  
+  if (!validation.isValid) {
+    throw new BadRequestError(`File không hợp lệ: ${validation.reason}. Vui lòng upload CV thật với đầy đủ thông tin cá nhân, kinh nghiệm, kỹ năng.`);
+  }
+
+  // 7. Score CV
+  const cvScore = await scoreCVWithLLM({ cvText, jdText, jobType });
+
+  if (!cvScore) {
+    throw new BadRequestError('Không thể chấm điểm CV. Vui lòng thử lại sau.');
+  }
+
+  // 8. Get enhanced analysis (radar chart, career path, projects)
+  let enhancedAnalysis = null;
+  try {
+    const { getEnhancedAnalysis } = await import('./cvEnhancedAnalysis.service.js');
+    enhancedAnalysis = await getEnhancedAnalysis({ cvText, jdText, cvScore });
+    logger.info('Enhanced analysis completed', { hasData: !!enhancedAnalysis });
+  } catch (error) {
+    logger.error('Enhanced analysis failed, continuing without it', { error: error.message });
+    // Don't throw - enhanced analysis is optional
+  }
+
+  // 8. Lưu kết quả (bao gồm enhanced analysis nếu có)
+  application.cvScore = {
+    ...cvScore,
+    ...(enhancedAnalysis && { enhanced: enhancedAnalysis }),
+    scoredAt: new Date()
+  };
+  await application.save();
+
+  logger.info('CV scored successfully', {
+    applicationId: application._id,
+    score: cvScore.overall_score,
+    hasEnhanced: !!enhancedAnalysis
+  });
+
+  return application.cvScore;
+};
+
+/**
+ * Tạo CV mới từ AI cho một application
+ * @param {string} applicationId - ID của application
+ * @param {string} userId - ID của candidate
+ * @returns {Promise<Object>} Generated CV
+ */
+export const generateImprovedCVForApplication = async (applicationId, userId) => {
+  try {
+    logger.info('Starting CV generation', { applicationId, userId });
+
+    // 1. Tìm application và verify quyền
+    const application = await Application.findById(applicationId)
+      .populate('jobId', 'title description requirements benefits jobType skills')
+      .populate('candidateProfileId', 'userId fullname email phone');
+
+    if (!application) {
+      logger.error('Application not found', { applicationId });
+      throw new NotFoundError('Không tìm thấy đơn ứng tuyển');
+    }
+
+    // Check if jobId exists
+    if (!application.jobId) {
+      logger.error('Application has no jobId', { applicationId });
+      throw new NotFoundError('Đơn ứng tuyển không có thông tin công việc');
+    }
+
+    // Check if candidateProfileId exists
+    if (!application.candidateProfileId) {
+      logger.error('Application has no candidateProfileId', { applicationId });
+      throw new NotFoundError('Đơn ứng tuyển không có thông tin ứng viên');
+    }
+
+    logger.info('Application found', {
+      applicationId,
+      hasJob: !!application.jobId,
+      hasCandidateProfile: !!application.candidateProfileId,
+      submittedCVSource: application.submittedCV?.source
+    });
+
+    // Verify quyền: chỉ candidate của application này mới được generate
+    const candidateProfile = await CandidateProfile.findOne({ userId });
+    if (!candidateProfile) {
+      logger.error('Candidate profile not found', { userId });
+      throw new UnauthorizedError('Không tìm thấy hồ sơ ứng viên');
+    }
+
+    if (application.candidateProfileId._id.toString() !== candidateProfile._id.toString()) {
+      logger.error('Unauthorized access', {
+        applicationCandidateId: application.candidateProfileId._id.toString(),
+        requestCandidateId: candidateProfile._id.toString()
+      });
+      throw new ForbiddenError('Bạn không có quyền tạo CV cho đơn ứng tuyển này');
+    }
+
+    // Check if submittedCV exists
+    if (!application.submittedCV) {
+      logger.error('Application has no submittedCV', { applicationId });
+      throw new BadRequestError('Đơn ứng tuyển không có CV');
+    }
+
+    // 2. Lấy CV text
+    const { extractCVText } = await import('./cvScoring.service.js');
+    let cvText = '';
+    
+    if (application.submittedCV.source === 'TEMPLATE' && application.submittedCV.templateSnapshot) {
+      cvText = extractCVText(application.submittedCV.templateSnapshot);
+      logger.info('Extracted CV from template', { cvTextLength: cvText.length });
+    } else if (application.submittedCV.source === 'UPLOADED') {
+      // For uploaded CV, use basic info (limited accuracy)
+      cvText = `CV: ${application.submittedCV.name}\nPath: ${application.submittedCV.path}\n\nLưu ý: Đây là CV uploaded, chỉ có thông tin cơ bản.`;
+      logger.warn('Generating improved CV from uploaded CV with limited info', { cvTextLength: cvText.length });
+    }
+
+    if (!cvText || cvText.trim().length < 50) {
+      logger.error('CV text too short', { cvTextLength: cvText.length });
+      throw new BadRequestError('CV không đủ thông tin để tạo CV mới. Vui lòng đảm bảo CV có đầy đủ nội dung.');
+    }
+
+    // 3. Lấy JD text
+    const job = application.jobId;
+    const jdText = `
+Vị trí: ${job.title}
+Mô tả công việc: ${job.description || ''}
+Yêu cầu: ${job.requirements || ''}
+Quyền lợi: ${job.benefits || ''}
+Kỹ năng: ${job.skills?.join(', ') || ''}
+    `.trim();
+
+    logger.info('Prepared JD text', { jdTextLength: jdText.length });
+
+    // 4. Lấy cvScore nếu có (để biết điểm yếu)
+    const cvScore = application.cvScore || null;
+
+    // 5. Generate improved CV với structured data
+    logger.info('Calling LLM to generate improved CV (structured)');
+    const { generateImprovedCVStructured } = await import('./cvImprovementStructured.service.js');
+    
+    const result = await generateImprovedCVStructured({
+      originalCVData: application.submittedCV.templateSnapshot,
+      jdText,
+      cvScore
+    });
+
+    if (!result || !result.improvedCVData) {
+      logger.error('LLM returned invalid result');
+      throw new BadRequestError('Không thể tạo CV cải thiện. Vui lòng thử lại sau.');
+    }
+
+    logger.info('Improved CV generated successfully', {
+      applicationId: application._id,
+      predicted_score: result.score_prediction,
+      improvements_count: result.improvements.length
+    });
+
+    // Return both improved CV data and metadata
+    return {
+      improvedCVData: result.improvedCVData,
+      improvements: result.improvements,
+      score_prediction: result.score_prediction,
+      key_changes: result.key_changes,
+      originalTemplate: {
+        templateId: application.submittedCV.templateId,
+        name: application.submittedCV.name
+      }
+    };
+  } catch (error) {
+    logger.error('Error in generateImprovedCVForApplication', {
+      error: error.message,
+      stack: error.stack,
+      applicationId,
+      userId
+    });
+    throw error;
+  }
+};
+
+
+/**
+ * Lấy chi tiết đơn ứng tuyển của candidate
+ * @param {string} applicationId - ID của application
+ * @param {string} userId - ID của user (để verify quyền)
+ * @returns {Promise<Object>} Application detail
+ */
+export const getMyApplicationDetail = async (applicationId, userId) => {
+  const application = await Application.findById(applicationId)
+    .populate('jobId')
+    .populate('candidateProfileId');
+
+  if (!application) {
+    throw new NotFoundError('Không tìm thấy đơn ứng tuyển');
+  }
+
+  // Verify user owns this application
+  const candidateProfile = await CandidateProfile.findOne({ userId });
+  if (!candidateProfile || application.candidateProfileId._id.toString() !== candidateProfile._id.toString()) {
+    throw new UnauthorizedError('Bạn không có quyền xem đơn ứng tuyển này');
+  }
+
+  return application;
+};

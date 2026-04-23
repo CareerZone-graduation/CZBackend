@@ -338,7 +338,7 @@ export const getMyApplications = async (userId, options = {}) => {
         Application.find(filter)
             .populate({
                 path: 'jobId',
-                select: 'title recruiterProfileId',
+                select: 'title description requirements recruiterProfileId',
                 populate: {
                     path: 'recruiterProfileId',
                     select: 'userId company.name'
@@ -378,6 +378,13 @@ export const getMyApplications = async (userId, options = {}) => {
         limit
     }
 
+    // Transform applications: đổi jobId thành job để frontend dễ sử dụng
+    const transformedApplications = applications.map(app => ({
+        ...app,
+        job: app.jobId, // Đổi jobId thành job
+        jobId: app.jobId?._id // Giữ lại jobId như ID string
+    }));
+
     logger.info('Successfully retrieved applications for candidate', {
         userId,
         candidateProfileId: candidateProfile._id,
@@ -385,7 +392,7 @@ export const getMyApplications = async (userId, options = {}) => {
         currentPageCount: applications.length
     });
 
-    return { data: applications, meta, stats };
+    return { data: transformedApplications, meta, stats };
 };
 
 /**
@@ -408,10 +415,10 @@ export const getApplicationById = async (userId, applicationId) => {
         _id: applicationId,
         candidateProfileId: candidateProfile._id
     })
-        .select('jobId status appliedAt lastStatusUpdateAt coverLetter submittedCV jobSnapshot candidateName candidateEmail candidatePhone candidateRating notes activityHistory isReapplied previousApplicationId offerLetter offerFile')
+        .select('jobId status appliedAt lastStatusUpdateAt coverLetter submittedCV cv cvScore jobSnapshot candidateName candidateEmail candidatePhone candidateRating notes activityHistory isReapplied previousApplicationId offerLetter offerFile')
         .populate({
             path: 'jobId',
-            select: 'recruiterProfileId',
+            select: 'title description requirements recruiterProfileId',
             populate: {
                 path: 'recruiterProfileId',
                 select: 'userId'
@@ -433,13 +440,20 @@ export const getApplicationById = async (userId, applicationId) => {
         userId,
         candidateProfileId: candidateProfile._id,
         applicationId,
-        recruiterId
+        recruiterId,
+        hasJob: !!application.jobId,
+        hasCV: !!application.cv,
+        hasSubmittedCV: !!application.submittedCV,
+        hasCVScore: !!application.cvScore,
+        jobFields: application.jobId ? Object.keys(application.jobId) : []
     });
 
     return {
         ...application,
+        job: application.jobId, // Đổi jobId thành job
+        jobId: application.jobId?._id || application.jobId, // Giữ lại jobId là string
+        cv: application.cv || application.submittedCV, // Ưu tiên cv, fallback sang submittedCV
         recruiterId,
-        jobId: application.jobId?._id || application.jobId, // Giữ lại jobId là string/ObjectId thay vì object
         interview: interview ? {
             _id: interview._id,
             status: interview.status,

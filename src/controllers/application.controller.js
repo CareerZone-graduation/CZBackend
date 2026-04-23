@@ -252,3 +252,56 @@ export const compareWithAI = asyncHandler(async (req, res) => {
     res.end();
   }
 });
+
+
+/**
+ * Chấm điểm CV của một application
+ * @route POST /api/applications/:applicationId/score-cv
+ */
+export const scoreCV = asyncHandler(async (req, res) => {
+  const { applicationId } = req.params;
+  const userId = req.user._id;
+
+  const cvScore = await applicationService.scoreApplicationCV(applicationId, userId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Chấm điểm CV thành công',
+    data: cvScore
+  });
+});
+
+/**
+ * Tạo CV mới từ AI dựa trên CV hiện tại và JD
+ * @route POST /api/applications/:applicationId/generate-cv
+ */
+export const generateCV = asyncHandler(async (req, res) => {
+  const { applicationId } = req.params;
+  const userId = req.user._id;
+
+  const generatedCV = await applicationService.generateImprovedCVForApplication(applicationId, userId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Tạo CV mới thành công',
+    data: generatedCV
+  });
+});
+
+
+/**
+ * Lấy chi tiết đơn ứng tuyển của candidate
+ * @route GET /api/applications/my/:applicationId
+ */
+export const getMyApplicationDetail = asyncHandler(async (req, res) => {
+  const { applicationId } = req.params;
+  const userId = req.user._id;
+
+  const application = await applicationService.getMyApplicationDetail(applicationId, userId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy chi tiết đơn ứng tuyển thành công',
+    data: application
+  });
+});

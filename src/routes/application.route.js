@@ -50,7 +50,43 @@ router.get(
   applicationController.getApplicationCVData
 );
 
-// Route để xem chi tiết một đơn ứng tuyển
+// Route để candidate xem chi tiết đơn ứng tuyển của mình
+router.get(
+  '/my/:applicationId',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.candidateOnly,
+  validationMiddleware.validateParams(applicationSchema.applicationIdParam),
+  applicationController.getMyApplicationDetail
+);
+
+// Route chấm điểm CV (Candidate only) - ĐẶT TRƯỚC /:applicationId
+router.post(
+  '/:applicationId/score-cv',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.candidateOnly,
+  validationMiddleware.validateParams(applicationSchema.applicationIdParam),
+  applicationController.scoreCV
+);
+
+// Route tạo CV mới từ AI (Candidate only) - ĐẶT TRƯỚC /:applicationId
+router.post(
+  '/:applicationId/generate-cv',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.candidateOnly,
+  // Tạm thời comment validation để test
+  // validationMiddleware.validateParams(applicationSchema.applicationIdParam),
+  applicationController.generateCV
+);
+
+// Test route to verify routing works
+router.get(
+  '/:applicationId/test-route',
+  (req, res) => {
+    res.json({ message: 'Route works!', applicationId: req.params.applicationId });
+  }
+);
+
+// Route để xem chi tiết một đơn ứng tuyển (Recruiter only)
 router.get(
   '/:applicationId',
   passport.authenticate('jwt', { session: false }),
@@ -97,7 +133,5 @@ router.get(
   validationMiddleware.validateParams(applicationSchema.applicationIdParam),
   applicationController.exportApplicationCvPdf
 );
-
-
 
 export default router;
