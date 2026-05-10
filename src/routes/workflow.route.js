@@ -13,6 +13,7 @@ router.get('/:workflowId', passport.authenticate('jwt', { session: false }), aut
 router.put('/:workflowId', passport.authenticate('jwt', { session: false }), authMiddleware.recruiterOnly, validation.validateParams(workflowSchema.workflowIdParam), validation.validateBody(workflowSchema.updateWorkflowBody), workflowController.updateWorkflow);
 router.delete('/:workflowId', passport.authenticate('jwt', { session: false }), authMiddleware.recruiterOnly, validation.validateParams(workflowSchema.workflowIdParam), workflowController.deleteWorkflow);
 router.post('/:workflowId/activate', passport.authenticate('jwt', { session: false }), authMiddleware.recruiterOnly, validation.validateParams(workflowSchema.workflowIdParam), workflowController.activateWorkflow);
+router.get('/:workflowId/tracking', passport.authenticate('jwt', { session: false }), authMiddleware.recruiterOnly, validation.validateParams(workflowSchema.workflowIdParam), workflowController.getWorkflowTracking);
 
 router.post('/:workflowId/nodes', passport.authenticate('jwt', { session: false }), authMiddleware.recruiterOnly, validation.validateParams(workflowSchema.workflowIdParam), validation.validateBody(workflowSchema.createNodeBody), workflowController.createNode);
 router.put('/:workflowId/nodes/:nodeId', passport.authenticate('jwt', { session: false }), authMiddleware.recruiterOnly, validation.validateParams(workflowSchema.workflowIdParam.merge(workflowSchema.nodeIdParam)), validation.validateBody(workflowSchema.updateNodeBody), workflowController.updateNode);
@@ -24,5 +25,7 @@ router.delete('/:workflowId/connections/:connectionId', passport.authenticate('j
 router.post('/:workflowId/connections/batch', passport.authenticate('jwt', { session: false }), authMiddleware.recruiterOnly, validation.validateParams(workflowSchema.workflowIdParam), validation.validateBody(workflowSchema.batchConnectionsBody), workflowController.batchSaveConnections);
 
 router.get('/:workflowId/executions', passport.authenticate('jwt', { session: false }), authMiddleware.recruiterOnly, validation.validateParams(workflowSchema.workflowIdParam), workflowController.getExecutionHistory);
+
+router.post('/executions/:executionId/retry', passport.authenticate('jwt', { session: false }), authMiddleware.recruiterOnly, workflowController.retryExecution);
 
 export default router;

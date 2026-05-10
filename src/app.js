@@ -65,6 +65,7 @@ import knowledgeChatRoutes from './routes/knowledgeChat.route.js';
 import workflowRoutes from './routes/workflow.route.js';
 import workflowTemplateRoutes from './routes/workflowTemplate.route.js';
 import testRoutes from './routes/test.route.js';
+import emailTemplateRoutes from './routes/emailTemplate.route.js';
 import testAssignmentRoutes from './routes/testAssignment.route.js';
 
 // 🚧 Middlewares
@@ -184,6 +185,7 @@ app.use('/api/candidate/chat', knowledgeChatRoutes);
 app.use('/api/workflows', workflowRoutes);
 app.use('/api/workflow-templates', workflowTemplateRoutes);
 app.use('/api/tests', testRoutes);
+app.use('/api/email-templates', emailTemplateRoutes);
 app.use('/api/test-assignments', testAssignmentRoutes);
 
 // 404 & error

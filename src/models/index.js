@@ -30,4 +30,5 @@ export { default as WorkflowExecution } from './WorkflowExecution.js';
 export { default as Test } from './Test.js';
 export { default as TestAssignment } from './TestAssignment.js';
 export { default as WorkflowTemplate } from './WorkflowTemplate.js';
+export { default as EmailTemplate } from './EmailTemplate.js';
 // KnowledgeChunk is registered on the secondary DB connection — import from config/knowledgeDb.js

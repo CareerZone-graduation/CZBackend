@@ -275,3 +275,21 @@ export const evaluateInterviewResult = asyncHandler(async (req, res) => {
     data: updatedApplication
   });
 });
+
+/**
+ * @desc      Get failed workflow executions for an application
+ * @route     GET /api/applications/:applicationId/failed-executions
+ * @access    Private - Recruiter Only
+ */
+export const getFailedExecutions = asyncHandler(async (req, res) => {
+  const { applicationId } = req.params;
+  // Kiểm tra quyền sở hữu bằng cách lấy chi tiết ứng viên
+  await applicationService.getApplicationById(applicationId, req.user._id);
+  const WorkflowExecution = (await import('../models/index.js')).WorkflowExecution;
+  const executions = await WorkflowExecution.find({ 
+    applicationId, 
+    status: 'FAILED' 
+  }).sort({ executedAt: -1 }).lean();
+
+  res.status(200).json({ success: true, data: executions });
+});

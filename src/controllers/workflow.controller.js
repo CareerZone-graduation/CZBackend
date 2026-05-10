@@ -32,6 +32,15 @@ export const activateWorkflow = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, message: 'Kích hoạt workflow thành công', data });
 });
 
+export const getWorkflowTracking = asyncHandler(async (req, res) => {
+  const data = await workflowService.getWorkflowTracking(
+    req.user._id, 
+    req.params.workflowId, 
+    req.query.jobId
+  );
+  res.status(200).json({ success: true, message: 'Lấy dữ liệu tracking workflow thành công', data });
+});
+
 export const createNode = asyncHandler(async (req, res) => {
   const data = await workflowService.createNode(req.user._id, req.params.workflowId, req.body);
   res.status(201).json({ success: true, message: 'Tạo node thành công', data });
@@ -83,4 +92,12 @@ export const manualTransition = asyncHandler(async (req, res) => {
     targetStageNodeId: req.body.targetStageNodeId,
   });
   res.status(200).json({ success: true, message: 'Chuyển stage thủ công thành công', data });
+});
+
+export const retryExecution = asyncHandler(async (req, res) => {
+  const data = await workflowExecutionService.retryFailedExecution(
+    req.user._id,
+    req.params.executionId
+  );
+  res.status(200).json({ success: true, message: 'Khởi động lại tiến trình thành công', data });
 });

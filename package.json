@@ -16,7 +16,7 @@
     "worker:knowledge-embedding": "node workers/knowledge-embedding.worker.js",
     "worker:workflow": "node workers/workflowExecution.worker.js",
     "backfill": "node scripts/update-job-embeddings.js",
-    "start:all": "npm-run-all --parallel dev worker:notification worker:matching worker:embedding worker:candidate-embedding worker:knowledge-embedding worker:workflow",
+    "start:all": "npm-run-all --parallel dev worker:notification worker:matching worker:embedding worker:candidate-embedding worker:knowledge-embedding ",
     "start:all2": "npm-run-all --parallel dev worker:notification worker:matching ",
     "deploy": "npm-run-all --parallel prod worker:notification worker:matching worker:embedding worker:candidate-embedding worker:knowledge-embedding",
     "test": "cross-env NODE_ENV=test node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --detectOpenHandles --forceExit --no-cache",

@@ -113,6 +113,15 @@ router.get(
   applicationController.exportApplicationCvPdf
 );
 
+// Route để lấy các workflow executions bị lỗi của ứng viên
+router.get(
+  '/:applicationId/failed-executions',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.recruiterOnly,
+  validationMiddleware.validateParams(applicationSchema.applicationIdParam),
+  applicationController.getFailedExecutions
+);
+
 // Route để chuyển stage thủ công trong workflow
 router.post(
   '/:applicationId/transition',

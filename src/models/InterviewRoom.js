@@ -46,7 +46,7 @@ const interviewRoomSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Room name is required'],
     trim: true,
-    maxlength: [200, 'Room name cannot exceed 200 characters']
+    maxlength: [2000, 'Room name cannot exceed 2000 characters']
   },
   jobId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -124,7 +124,7 @@ const interviewRoomSchema = new mongoose.Schema({
     action: {
       type: String,
       required: true,
-      enum: ['CREATED', 'RESCHEDULED', 'CANCELLED', 'STARTED', 'COMPLETED', 'NOTE_ADDED','ENDED']
+      enum: ['CREATED', 'RESCHEDULED', 'CANCELLED', 'STARTED', 'COMPLETED', 'NOTE_ADDED', 'ENDED']
     },
     fromTime: {
       type: Date // Thời gian cũ (dành cho RESCHEDULED)

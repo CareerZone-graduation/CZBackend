@@ -18,6 +18,7 @@ import './cron/emailVerificationCleanup.cron.js';
 import './cron/jobExpiration.cron.js';
 import './cron/updateSupportRequestPriority.cron.js';
 import './cron/paymentTimeout.cron.js';
+import './cron/workflowDelay.cron.js';
 
 // Import watchers
 // import { watchCandidateProfileChanges } from './watchers/candidateEmbedding.watcher.js';

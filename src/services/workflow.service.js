@@ -773,3 +773,24 @@ export const getExecutionHistory = async (userId, workflowId, query = {}) => {
     }
   };
 };
+
+export const getWorkflowTracking = async (userId, workflowId, jobId) => {
+  const { workflow } = await getWorkflowOwnershipContext(workflowId, userId);
+
+  const matchCondition = { workflowId: workflow._id };
+  if (jobId) {
+    matchCondition.jobId = toObjectId(jobId, 'Job ID');
+  }
+
+  const stats = await Application.aggregate([
+    { $match: matchCondition },
+    { $group: { _id: "$workflowData.currentNodeId", count: { $sum: 1 } } }
+  ]);
+
+  const result = stats.map(s => ({
+    nodeId: s._id ? s._id.toString() : null,
+    count: s.count
+  }));
+
+  return result;
+};

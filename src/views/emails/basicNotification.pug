@@ -1,0 +1,41 @@
+doctype html
+html
+  head
+    meta(name='viewport', content='width=device-width')
+    meta(http-equiv='Content-Type', content='text/html; charset=UTF-8')
+    title= subject
+    style.
+      body { font-family: sans-serif; -webkit-font-smoothing: antialiased; font-size: 14px; line-height: 1.6; margin: 0; padding: 0; -ms-text-size-adjust: 100%; -webkit-text-size-adjust: 100%; }
+      table { border-collapse: separate; mso-table-lspace: 0pt; mso-table-rspace: 0pt; width: 100%; }
+      td { font-family: sans-serif; font-size: 14px; vertical-align: top; }
+      .body { background-color: #f6f6f6; width: 100%; }
+      .container { display: block; margin: 0 auto !important; max-width: 600px; padding: 20px; width: 600px; }
+      .main { background: #ffffff; border-radius: 4px; width: 100%; border: 1px solid #eaebed; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+      .wrapper { box-sizing: border-box; padding: 30px; }
+      .content { font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px; white-space: pre-wrap; color: #333333; }
+      .footer { color: #999999; font-size: 12px; text-align: center; margin-top: 20px; }
+  body
+    table.body(role='presentation', border='0', cellpadding='0', cellspacing='0')
+      tr
+        td
+        td.container
+          .main
+            table(role='presentation', border='0', cellpadding='0', cellspacing='0', style='background-color: #1e293b; border-top-left-radius: 4px; border-top-right-radius: 4px; width: 100%;')
+              tr
+                td(style='padding: 10px 16px; vertical-align: middle;')
+                  table(role='presentation', border='0', cellpadding='0', cellspacing='0')
+                    tr
+                      td(style='width: 10px; height: 10px; background-color: #f87171; border-radius: 50%; line-height: 10px; font-size: 10px;') &nbsp;
+                      td(style='width: 6px;')
+                      td(style='width: 10px; height: 10px; background-color: #fbbf24; border-radius: 50%; line-height: 10px; font-size: 10px;') &nbsp;
+                      td(style='width: 6px;')
+                      td(style='width: 10px; height: 10px; background-color: #34d399; border-radius: 50%; line-height: 10px; font-size: 10px;') &nbsp;
+                      td(style='width: 12px;')
+                      td(style='color: #e2e8f0; font-size: 12px; font-weight: 500; font-family: sans-serif; vertical-align: middle;') Chủ đề: #{subject}
+            table(role='presentation', border='0', cellpadding='0', cellspacing='0')
+              tr
+                td.wrapper
+                  div.content !{content}
+          .footer
+            | Gửi từ hệ thống tuyển dụng CareerZone
+        td

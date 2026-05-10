@@ -12,6 +12,7 @@ import logger from '../utils/logger.js';
 import { AppError } from '../utils/AppError.js';
 import config from '../config/index.js';
 import CandidateProfile from '../models/CandidateProfile.js';
+import { EmailTemplate } from '../models/index.js';
 
 const WORKFLOW_EXECUTION_RETRY_MAX = parseInt(process.env.WORKFLOW_EXECUTION_RETRY_MAX || '3', 10);
 const WORKFLOW_EXECUTION_RETRY_DELAY_MS = 5000;
@@ -128,6 +129,14 @@ export const executeWorkflowNode = async ({ applicationId, workflowId, currentNo
       result: {}
     });
 
+    // Cập nhật node hiện tại
+    if (!application.workflowData) {
+      application.workflowData = {};
+    }
+    application.workflowData.currentNodeId = currentNodeId.toString();
+    application.workflowData.lastExecutionAt = new Date();
+    await application.save();
+
     let nextNodeData = null;
 
     switch (node.type) {
@@ -140,11 +149,14 @@ export const executeWorkflowNode = async ({ applicationId, workflowId, currentNo
       case 'ACTION_EMAIL':
         nextNodeData = await executeActionEmailNode(application, node, executionLog);
         break;
-      case 'ACTION_NOTIFY':
-        nextNodeData = await executeActionNotifyNode(application, node, executionLog);
+      case 'ACTION_AI':
+        nextNodeData = await executeActionAINode(application, node, executionLog);
         break;
       case 'ACTION_TEST':
         nextNodeData = await executeActionTestNode(application, node, executionLog);
+        break;
+      case 'ACTION_DELAY':
+        nextNodeData = await executeActionDelayNode(application, node, executionLog);
         break;
       default:
         logger.warn(`Unknown node type: ${node.type}`);
@@ -258,20 +270,49 @@ const executeConditionNode = async (application, node, executionLog) => {
 };
 
 const executeActionEmailNode = async (application, node, executionLog) => {
-  const { subject, template, recipient, customEmail, body } = node.config;
+  let { subject, template, recipient, customEmail, body, templateId } = node.config;
+
+  // Fetch template content from DB if templateId is provided
+  if (templateId) {
+    try {
+      const emailTemplate = await EmailTemplate.findById(templateId);
+      if (emailTemplate) {
+        subject = emailTemplate.subject;
+        body = emailTemplate.body;
+      }
+    } catch (err) {
+      logger.warn('Failed to fetch email template, falling back to inline config', err);
+    }
+  }
 
   const toAddress = recipient === 'CUSTOM' ? customEmail : application.candidateEmail;
+
+  // --- PARSE VARIABLES ---
+  const replaceVars = (text) => {
+    let newText = text || '';
+    const candidateName = application.candidateName || '';
+    const jobTitle = application.jobSnapshot?.title || '';
+    const companyName = application.jobSnapshot?.company || '';
+    
+    newText = newText.replace(/{{candidateName}}/g, candidateName);
+    newText = newText.replace(/{{jobTitle}}/g, jobTitle);
+    newText = newText.replace(/{{companyName}}/g, companyName);
+    return newText;
+  };
+
+  const parsedSubject = replaceVars(subject || 'Thông báo từ hệ thống tuyển dụng');
+  const parsedBody = replaceVars(body || '');
 
   try {
     await emailService.sendEmail({
       to: toAddress,
-      subject: subject || 'Thông báo từ hệ thống tuyển dụng',
+      subject: parsedSubject,
       template: template || 'basicNotification',
-      context: {
+      data: {
         candidateName: application.candidateName,
         jobTitle: application.jobSnapshot?.title,
         companyName: application.jobSnapshot?.company,
-        content: body || ''
+        content: parsedBody
       }
     });
 
@@ -288,31 +329,21 @@ const executeActionEmailNode = async (application, node, executionLog) => {
   return null;
 };
 
-const executeActionNotifyNode = async (application, node, executionLog) => {
-  const { title, message, recipientRole } = node.config;
+const executeActionAINode = async (application, node, executionLog) => {
+  const { aiActionType } = node.config || {};
 
-  const payload = {
-    type: 'WORKFLOW_NOTIFICATION',
-    data: {
-      applicationId: application._id,
-      title,
-      message
-    }
-  };
+  if (aiActionType === 'CV_SCREENING') {
+    // Tạm thời giả lập chấm điểm random 60-100 cho CV
+    const mockScore = Math.floor(Math.random() * 41) + 60;
+    
+    application.cv_score = mockScore;
+    await application.save();
 
-  if (recipientRole === 'candidate') {
-    const candidateProfile = await mongoose.model('CandidateProfile').findById(application.candidateProfileId);
-    payload.recipientId = candidateProfile ? candidateProfile.userId.toString() : application.candidateProfileId;
+    logger.info(`Mock AI CV_SCREENING completed for application ${application._id}: ${mockScore} points`);
+    executionLog.result.metadata = { aiActionType, score: mockScore };
   } else {
-    const job = await mongoose.model('Job').findById(application.jobId).populate('recruiterProfileId');
-    if (job && job.recruiterProfileId) {
-      payload.recipientId = job.recruiterProfileId.userId.toString();
-    }
-  }
-
-  if (payload.recipientId) {
-    await queueService.publishNotificationStrict(ROUTING_KEYS.STATUS_UPDATE, payload);
-    executionLog.result.metadata = { notified: payload.recipientId };
+    logger.warn(`Unknown AI Action Type: ${aiActionType}`);
+    executionLog.result.metadata = { aiActionType, warning: 'Unknown type' };
   }
 
   const connection = await WorkflowConnection.findOne({ sourceNodeId: node._id });
@@ -389,6 +420,46 @@ const executeActionTestNode = async (application, node, executionLog) => {
   return null;
 };
 
+const executeActionDelayNode = async (application, node, executionLog) => {
+  const { delayValue, delayUnit } = node.config || {};
+  
+  if (!delayValue || isNaN(delayValue)) {
+    logger.warn(`Action Delay Node ${node._id} has invalid delay config. Skipping delay.`);
+    const connection = await WorkflowConnection.findOne({ sourceNodeId: node._id });
+    if (connection) {
+      return { nextNodeId: connection.targetNodeId };
+    }
+    return null;
+  }
+
+  let delayMs = 0;
+  if (delayUnit === 'DAYS') {
+    delayMs = delayValue * 24 * 60 * 60 * 1000;
+  } else if (delayUnit === 'HOURS') {
+    delayMs = delayValue * 60 * 60 * 1000;
+  } else if (delayUnit === 'MINUTES') {
+    delayMs = delayValue * 60 * 1000;
+  } else {
+    delayMs = delayValue * 24 * 60 * 60 * 1000;
+  }
+
+  const connection = await WorkflowConnection.findOne({ sourceNodeId: node._id });
+  if (connection) {
+    const targetNodeId = connection.targetNodeId.toString();
+    application.workflowData.isWorkflowPaused = true;
+    application.workflowData.resumeAt = new Date(Date.now() + delayMs);
+    application.workflowData.pendingNextNodeId = targetNodeId;
+    await application.save();
+
+    logger.info(`Workflow for application ${application._id} paused at Delay Node ${node._id}. Resuming at ${application.workflowData.resumeAt}`);
+    executionLog.result.metadata = { paused: true, resumeAt: application.workflowData.resumeAt };
+    
+    return null;
+  }
+  
+  return null;
+};
+
 export const manualTransitionToStage = async ({ applicationId, userId, targetStageNodeId }) => {
   const application = await Application.findById(applicationId).populate('jobId');
   if (!application) throw new AppError('Application not found', 404);
@@ -444,4 +515,42 @@ export const manualTransitionToStage = async ({ applicationId, userId, targetSta
   }
 
   return application;
+};
+
+export const retryFailedExecution = async (userId, executionId) => {
+  const execution = await WorkflowExecution.findById(executionId);
+  
+  if (!execution) {
+    throw new AppError('Không tìm thấy lịch sử thực thi này', 404);
+  }
+
+  if (execution.status !== 'FAILED') {
+    throw new AppError('Chỉ có thể chạy lại các task đã bị THẤT BẠI (FAILED)', 400);
+  }
+
+  // Lấy workflow để check quyền
+  const workflow = await Workflow.findById(execution.workflowId);
+  if (!workflow) {
+    throw new AppError('Workflow của task này không tồn tại', 404);
+  }
+
+  const recruiterProfile = await mongoose.model('RecruiterProfile').findOne({ userId }).lean();
+  if (!recruiterProfile || workflow.companyId.toString() !== recruiterProfile._id.toString()) {
+    throw new AppError('Bạn không có quyền thực hiện thao tác trên workflow này', 403);
+  }
+
+  // Update status and reset retry
+  execution.status = 'RETRYING';
+  execution.retryCount = 0;
+  await execution.save();
+
+  // Re-queue
+  await queueService.publishNotificationStrict(ROUTING_KEYS.WORKFLOW_EXECUTION_CONTINUE, {
+    applicationId: execution.applicationId.toString(),
+    workflowId: execution.workflowId.toString(),
+    currentNodeId: execution.nodeId.toString(),
+    retryCount: 0
+  });
+
+  return { message: 'Đã đưa task vào hàng đợi chạy lại thành công' };
 };

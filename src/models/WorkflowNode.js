@@ -4,7 +4,7 @@ const workflowNodeSchema = new mongoose.Schema({
   workflowId: { type: mongoose.Schema.Types.ObjectId, ref: 'Workflow', required: true },
   type: {
     type: String,
-    enum: ['STAGE', 'CONDITION', 'ACTION_EMAIL', 'ACTION_NOTIFY', 'ACTION_TEST'],
+    enum: ['STAGE', 'CONDITION', 'ACTION_EMAIL', 'ACTION_AI', 'ACTION_TEST', 'ACTION_DELAY'],
     required: true
   },
   name: { type: String, required: true, trim: true, maxlength: 200 },

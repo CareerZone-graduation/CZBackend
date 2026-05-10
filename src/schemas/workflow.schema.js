@@ -21,7 +21,7 @@ export const updateWorkflowBody = z.object({
 });
 
 export const createNodeBody = z.object({
-  type: z.enum(['STAGE', 'CONDITION', 'ACTION_EMAIL', 'ACTION_NOTIFY', 'ACTION_TEST']),
+  type: z.enum(['STAGE', 'CONDITION', 'ACTION_EMAIL', 'ACTION_AI', 'ACTION_TEST', 'ACTION_DELAY']),
   name: z.string().min(1).max(200),
   position: z.object({ x: z.number(), y: z.number() }),
   config: z.record(z.any()).optional().default({})
@@ -36,7 +36,7 @@ export const updateNodeBody = z.object({
 export const batchNodesBody = z.object({
   nodes: z.array(z.object({
     _id: objectId.optional(),
-    type: z.enum(['STAGE', 'CONDITION', 'ACTION_EMAIL', 'ACTION_NOTIFY', 'ACTION_TEST']),
+    type: z.enum(['STAGE', 'CONDITION', 'ACTION_EMAIL', 'ACTION_AI', 'ACTION_TEST', 'ACTION_DELAY']),
     name: z.string().min(1).max(200),
     position: z.object({ x: z.number(), y: z.number() }),
     config: z.record(z.any()).optional().default({})

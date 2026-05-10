@@ -124,6 +124,11 @@ const applicationSchema = new mongoose.Schema({
     min: 0,
     max: 100
   },
+  cv_score: {
+    type: Number,
+    min: 0,
+    max: 100
+  },
   interview_result: {
     type: String,
     enum: ['PASSED', 'FAILED']
@@ -139,6 +144,14 @@ const applicationSchema = new mongoose.Schema({
     },
     pendingNextNodeId: {
       type: String,
+      default: null
+    },
+    currentNodeId: {
+      type: String,
+      default: null
+    },
+    resumeAt: {
+      type: Date,
       default: null
     }
   },

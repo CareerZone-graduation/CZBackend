@@ -99,6 +99,15 @@ export const getApplicationsByJob = async (jobId, recruiterId, options = {}) => 
     filter.isReapplied = options.isReapplied === true || options.isReapplied === 'true';
   }
 
+  // Lọc theo workflow node hiện tại
+  if (options.currentNodeId) {
+    filter['workflowData.currentNodeId'] = options.currentNodeId;
+  }
+  // Giữ lại fallback currentStageNodeId nếu cần dùng (cho kanban)
+  else if (options.currentStageNodeId) {
+    filter.currentStageNodeId = new mongoose.Types.ObjectId(options.currentStageNodeId);
+  }
+
   // Building sort options
   let sortOptions = {};
   if (options.sort) {
@@ -137,6 +146,19 @@ export const getApplicationsByJob = async (jobId, recruiterId, options = {}) => 
     },
     { $unwind: { path: '$interview', preserveNullAndEmptyArrays: true } },
     {
+      $lookup: {
+        from: 'workflowexecutions',
+        let: { appId: '$_id' },
+        pipeline: [
+          { $match: { $expr: { $eq: ['$applicationId', '$$appId'] } } },
+          { $sort: { createdAt: -1 } },
+          { $limit: 1 }
+        ],
+        as: 'latestExecution'
+      }
+    },
+    { $unwind: { path: '$latestExecution', preserveNullAndEmptyArrays: true } },
+    {
       $project: {
         _id: 1,
         jobId: 1,
@@ -158,7 +180,11 @@ export const getApplicationsByJob = async (jobId, recruiterId, options = {}) => 
         candidateAvatar: '$candidateProfile.avatar',
         candidateTitle: '$candidateProfile.title',
         candidateUserId: '$candidateProfile.userId',
-        interview: 1
+        interview: 1,
+        latestExecution: 1,
+        interview_result: 1,
+        test_score: 1,
+        cv_score: 1
       }
     },
     { $sort: sortOptions },
@@ -399,6 +425,19 @@ export const updateApplicationStatus = async (applicationId, recruiterId, status
   }
 
   await application.save();
+
+  // Đánh thức Workflow nếu đang bị dừng chờ (do node phỏng vấn hoặc manual stage)
+  if (application.workflowData && application.workflowData.isWorkflowPaused) {
+    application.workflowData.isWorkflowPaused = false;
+    await application.save();
+
+    await queueService.publishNotificationStrict(rabbitmq.ROUTING_KEYS.WORKFLOW_EXECUTION_CONTINUE, {
+      applicationId: application._id.toString(),
+      workflowId: application.workflowId.toString(),
+      currentNodeId: application.workflowData.pendingNextNodeId,
+      retryCount: 0
+    });
+  }
 
   // Gửi thông báo nếu trạng thái thay đổi
   if (oldStatus !== status) {

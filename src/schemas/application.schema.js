@@ -18,6 +18,8 @@ export const getApplicationsQuery = z.object({
   sort: z.enum(['appliedAt', '-appliedAt', 'lastStatusUpdateAt', '-lastStatusUpdateAt']).optional(),
   search: z.string().optional(),
   isReapplied: z.enum(['true', 'false']).optional(),
+  currentStageNodeId: z.string().optional(),
+  currentNodeId: z.string().optional(),
 }).optional();
 
 // Validation schema cho cập nhật trạng thái đơn ứng tuyển

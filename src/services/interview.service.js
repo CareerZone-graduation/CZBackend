@@ -622,7 +622,6 @@ export const endInterview = async (interviewId, userId, feedback = {}) => {
     const application = await Application.findById(interview.applicationId);
     if (application) {
       const oldStatus = application.status;
-      application.status = 'INTERVIEWED';
       application.lastStatusUpdateAt = new Date();
 
       // Store feedback if provided
@@ -636,15 +635,6 @@ export const endInterview = async (interviewId, userId, feedback = {}) => {
         detail: `Interview completed by ${isRecruiter ? 'Recruiter' : 'Candidate'}. Duration: ${durationMinutes} minutes.`,
         timestamp: new Date()
       });
-
-      // Only change status if it hasn't been advanced (simple check)
-      if (oldStatus !== 'INTERVIEWED' && oldStatus !== 'OFFERED' && oldStatus !== 'HIRED' && oldStatus !== 'REJECTED') {
-        application.activityHistory.push({
-          action: 'STATUS_CHANGE',
-          detail: `Status changed from ${oldStatus} to INTERVIEWED`,
-          timestamp: new Date()
-        });
-      }
 
       await application.save();
     }
