@@ -47,6 +47,13 @@ const buildWorkflowFilter = (query = {}, recruiterProfileId) => {
     filter.status = query.status;
   }
 
+  const archived = normalizeBoolean(query.archived);
+  if (archived === true) {
+    filter.isArchived = true;
+  } else {
+    filter.isArchived = { $ne: true };
+  }
+
   return filter;
 };
 
@@ -71,6 +78,10 @@ const assertNodeTypeRules = (nodes, outgoingByNode) => {
       if (nonDefaultEdges > 0) {
         throw new UnprocessableEntityError('Node không phải điều kiện chỉ được dùng sourcePort mặc định');
       }
+    }
+
+    if (node.type === 'END' && outgoing.length > 0) {
+      throw new UnprocessableEntityError('Node END không được có kết nối đi ra');
     }
   }
 };
@@ -137,6 +148,57 @@ const assertGraphIsAcyclic = (nodes, connections) => {
   return startNodeId;
 };
 
+const assertAllPathsLeadToEnd = (nodes, connections) => {
+  const endNodeIds = new Set(nodes.filter((node) => node.type === 'END').map((node) => node._id.toString()));
+
+  if (!endNodeIds.size) {
+    throw new UnprocessableEntityError('Workflow phải có ít nhất một node END');
+  }
+
+  const adjacency = new Map();
+  for (const node of nodes) {
+    adjacency.set(node._id.toString(), []);
+  }
+
+  for (const edge of connections) {
+    const sourceId = edge.sourceNodeId.toString();
+    const targetId = edge.targetNodeId.toString();
+    adjacency.get(sourceId).push(targetId);
+  }
+
+  const memo = new Map();
+  const visiting = new Set();
+
+  const canReachEnd = (nodeId) => {
+    if (endNodeIds.has(nodeId)) return true;
+    if (memo.has(nodeId)) return memo.get(nodeId);
+    if (visiting.has(nodeId)) return false;
+
+    visiting.add(nodeId);
+
+    const nextNodes = adjacency.get(nodeId) || [];
+    let result = false;
+
+    for (const nextId of nextNodes) {
+      if (canReachEnd(nextId)) {
+        result = true;
+        break;
+      }
+    }
+
+    visiting.delete(nodeId);
+    memo.set(nodeId, result);
+    return result;
+  };
+
+  for (const node of nodes) {
+    const nodeId = node._id.toString();
+    if (!canReachEnd(nodeId)) {
+      throw new UnprocessableEntityError('Workflow không hợp lệ: mọi nhánh phải dẫn đến node END');
+    }
+  }
+};
+
 const validateWorkflowGraph = async (workflowId) => {
   const [nodes, connections] = await Promise.all([
     WorkflowNode.find({ workflowId }).lean(),
@@ -196,6 +258,8 @@ const validateWorkflowGraph = async (workflowId) => {
   if (startNode.type !== 'STAGE') {
     throw new UnprocessableEntityError('Node bắt đầu của Workflow bắt buộc phải là loại STAGE (Vòng/Cột)');
   }
+
+  assertAllPathsLeadToEnd(nodes, connections);
 
   return {
     totalNodes: nodes.length,
@@ -301,6 +365,30 @@ export const getWorkflowOwnershipContext = async (workflowId, userId) => {
   return { recruiterProfile, workflow };
 };
 
+const assertWorkflowIsMutable = async (workflowId) => {
+  const workflow = await Workflow.findById(workflowId).select('isArchived').lean();
+  if (!workflow) {
+    throw new NotFoundError('Không tìm thấy workflow');
+  }
+
+  if (workflow.isArchived) {
+    throw new BadRequestError('Workflow đã được lưu trữ, vui lòng khôi phục trước khi chỉnh sửa');
+  }
+
+  const endNodes = await WorkflowNode.find({ workflowId, type: 'END' }).select('_id').lean();
+  const endNodeIds = endNodes.map((node) => node._id.toString());
+
+  const query = { workflowId };
+  if (endNodeIds.length) {
+    query['workflowData.currentNodeId'] = { $nin: endNodeIds };
+  }
+
+  const activeApplications = await Application.countDocuments(query);
+  if (activeApplications > 0) {
+    throw new BadRequestError('Không thể chỉnh sửa hoặc xóa workflow khi còn hồ sơ chưa tới node END');
+  }
+};
+
 export const listWorkflows = async (userId, query = {}) => {
   const recruiterProfile = await findRecruiterProfileByUserId(userId);
   const page = Number(query.page || 1);
@@ -329,11 +417,12 @@ export const listWorkflows = async (userId, query = {}) => {
   for (const job of jobs) {
     const wId = job.workflowId.toString();
     if (!jobsByWorkflow[wId]) jobsByWorkflow[wId] = [];
-    jobsByWorkflow[wId].push(job.title);
+    jobsByWorkflow[wId].push({ _id: job._id, title: job.title });
   }
 
   for (const item of items) {
-    item.attachedJobTitles = jobsByWorkflow[item._id.toString()] || [];
+    item.attachedJobs = jobsByWorkflow[item._id.toString()] || [];
+    item.attachedJobTitles = item.attachedJobs.map(j => j.title); // Keep this for backward compatibility
   }
 
   return {
@@ -443,6 +532,7 @@ export const createWorkflow = async (userId, payload = {}) => {
 };
 export const updateWorkflow = async (userId, workflowId, payload = {}) => {
   const { workflow } = await getWorkflowOwnershipContext(workflowId, userId);
+  await assertWorkflowIsMutable(workflow._id);
 
   const updateData = {};
 
@@ -476,19 +566,108 @@ export const updateWorkflow = async (userId, workflowId, payload = {}) => {
 
 export const deleteWorkflow = async (userId, workflowId) => {
   const { workflow } = await getWorkflowOwnershipContext(workflowId, userId);
+  await assertWorkflowIsMutable(workflow._id);
 
-  const attachedApplications = await Application.countDocuments({ workflowId: workflow._id });
-  if (attachedApplications > 0) {
-    throw new BadRequestError('Không thể xóa workflow đang được gán cho hồ sơ ứng tuyển');
+  const hasLinkedJob = await Job.exists({ workflowId: workflow._id });
+
+  if (!hasLinkedJob) {
+    await Promise.all([
+      WorkflowConnection.deleteMany({ workflowId: workflow._id }),
+      WorkflowNode.deleteMany({ workflowId: workflow._id }),
+      Workflow.findByIdAndDelete(workflow._id)
+    ]);
+
+    return { message: 'Xóa vĩnh viễn workflow thành công' };
   }
 
-  await Promise.all([
-    WorkflowConnection.deleteMany({ workflowId: workflow._id }),
-    WorkflowNode.deleteMany({ workflowId: workflow._id }),
-    Workflow.findByIdAndDelete(workflow._id)
+  await Workflow.findByIdAndUpdate(workflow._id, {
+    $set: {
+      isArchived: true,
+      archivedAt: new Date(),
+      archivedBy: toObjectId(userId, 'User ID'),
+      status: 'INACTIVE'
+    }
+  });
+
+  return { message: 'Lưu trữ workflow thành công' };
+};
+
+export const unarchiveWorkflow = async (userId, workflowId) => {
+  const { workflow } = await getWorkflowOwnershipContext(workflowId, userId);
+
+  if (!workflow.isArchived) {
+    throw new BadRequestError('Workflow này chưa được lưu trữ');
+  }
+
+  await Workflow.findByIdAndUpdate(workflow._id, {
+    $set: {
+      isArchived: false,
+      archivedAt: null,
+      archivedBy: null
+    }
+  });
+
+  return { message: 'Khôi phục workflow thành công' };
+};
+
+export const cloneWorkflow = async (userId, workflowId, payload = {}) => {
+  const { workflow } = await getWorkflowOwnershipContext(workflowId, userId);
+
+  const cloneName = payload.name?.trim() || `${workflow.name} (Bản sao)`;
+  const [sourceNodes, sourceConnections] = await Promise.all([
+    WorkflowNode.find({ workflowId: workflow._id }).lean(),
+    WorkflowConnection.find({ workflowId: workflow._id }).lean()
   ]);
 
-  return { message: 'Xóa workflow thành công' };
+  const { createdNodes, nodeIdMap } = mapTemplateNodesToCreatePayload(sourceNodes);
+  const clonedConnections = mapTemplateConnectionsToCreatePayload(sourceConnections, nodeIdMap);
+
+  let clonedWorkflow;
+
+  try {
+    clonedWorkflow = await Workflow.create({
+      name: cloneName,
+      description: workflow.description || '',
+      companyId: workflow.companyId,
+      isTemplate: workflow.isTemplate,
+      jobId: null,
+      status: 'INACTIVE',
+      createdBy: toObjectId(userId, 'User ID'),
+      metadata: {
+        version: 1,
+        totalNodes: createdNodes.length,
+        totalConnections: clonedConnections.length
+      }
+    });
+
+    if (createdNodes.length) {
+      const nodesToInsert = createdNodes.map((node) => ({ ...node, workflowId: clonedWorkflow._id }));
+      await WorkflowNode.insertMany(nodesToInsert, { ordered: true });
+    }
+
+    if (clonedConnections.length) {
+      const connectionsToInsert = clonedConnections.map((connection) => ({
+        ...connection,
+        workflowId: clonedWorkflow._id
+      }));
+      await WorkflowConnection.insertMany(connectionsToInsert, { ordered: true });
+    }
+  } catch (error) {
+    if (clonedWorkflow?._id) {
+      await Promise.all([
+        WorkflowConnection.deleteMany({ workflowId: clonedWorkflow._id }),
+        WorkflowNode.deleteMany({ workflowId: clonedWorkflow._id }),
+        Workflow.findByIdAndDelete(clonedWorkflow._id)
+      ]);
+    }
+
+    if (error?.code === 11000) {
+      throw new BadRequestError('Không thể nhân bản workflow do dữ liệu kết nối bị trùng lặp');
+    }
+    throw error;
+  }
+
+  return getWorkflowById(userId, clonedWorkflow._id.toString());
 };
 
 export const activateWorkflow = async (userId, workflowId) => {
@@ -518,6 +697,7 @@ export const activateWorkflow = async (userId, workflowId) => {
 
 export const createNode = async (userId, workflowId, payload) => {
   const { workflow } = await getWorkflowOwnershipContext(workflowId, userId);
+  await assertWorkflowIsMutable(workflow._id);
 
   const node = await WorkflowNode.create({
     workflowId: workflow._id,
@@ -534,6 +714,7 @@ export const createNode = async (userId, workflowId, payload) => {
 
 export const updateNode = async (userId, workflowId, nodeId, payload = {}) => {
   const { workflow } = await getWorkflowOwnershipContext(workflowId, userId);
+  await assertWorkflowIsMutable(workflow._id);
   const nodeObjectId = toObjectId(nodeId, 'Node ID');
 
   const node = await WorkflowNode.findOne({ _id: nodeObjectId, workflowId: workflow._id });
@@ -552,6 +733,7 @@ export const updateNode = async (userId, workflowId, nodeId, payload = {}) => {
 
 export const deleteNode = async (userId, workflowId, nodeId) => {
   const { workflow } = await getWorkflowOwnershipContext(workflowId, userId);
+  await assertWorkflowIsMutable(workflow._id);
   const nodeObjectId = toObjectId(nodeId, 'Node ID');
 
   const node = await WorkflowNode.findOne({ _id: nodeObjectId, workflowId: workflow._id });
@@ -574,6 +756,7 @@ export const deleteNode = async (userId, workflowId, nodeId) => {
 
 export const batchSaveNodes = async (userId, workflowId, payload = {}) => {
   const { workflow } = await getWorkflowOwnershipContext(workflowId, userId);
+  await assertWorkflowIsMutable(workflow._id);
 
   const incomingNodes = Array.isArray(payload.nodes) ? payload.nodes : [];
   const existingNodes = await WorkflowNode.find({ workflowId: workflow._id }).lean();
@@ -636,6 +819,7 @@ export const batchSaveNodes = async (userId, workflowId, payload = {}) => {
 
 export const createConnection = async (userId, workflowId, payload) => {
   const { workflow } = await getWorkflowOwnershipContext(workflowId, userId);
+  await assertWorkflowIsMutable(workflow._id);
 
   const sourceNodeId = toObjectId(payload.sourceNodeId, 'Source node ID');
   const targetNodeId = toObjectId(payload.targetNodeId, 'Target node ID');
@@ -682,6 +866,7 @@ export const createConnection = async (userId, workflowId, payload) => {
 
 export const deleteConnection = async (userId, workflowId, connectionId) => {
   const { workflow } = await getWorkflowOwnershipContext(workflowId, userId);
+  await assertWorkflowIsMutable(workflow._id);
   const connectionObjectId = toObjectId(connectionId, 'Connection ID');
 
   const deleted = await WorkflowConnection.findOneAndDelete({
@@ -700,6 +885,7 @@ export const deleteConnection = async (userId, workflowId, connectionId) => {
 
 export const batchSaveConnections = async (userId, workflowId, payload = {}) => {
   const { workflow } = await getWorkflowOwnershipContext(workflowId, userId);
+  await assertWorkflowIsMutable(workflow._id);
 
   const connectionsInput = Array.isArray(payload.connections) ? payload.connections : [];
 

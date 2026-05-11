@@ -7,6 +7,9 @@ const workflowSchema = new mongoose.Schema({
   isTemplate: { type: Boolean, default: false },
   jobId: { type: mongoose.Schema.Types.ObjectId, ref: 'Job', default: null },
   status: { type: String, enum: ['INACTIVE', 'ACTIVE'], default: 'INACTIVE' },
+  isArchived: { type: Boolean, default: false },
+  archivedAt: { type: Date, default: null },
+  archivedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   metadata: {
     version: { type: Number, default: 1 },

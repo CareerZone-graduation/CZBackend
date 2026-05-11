@@ -4,6 +4,8 @@ import {
   CandidateProfile,
   Job,
   RecruiterProfile,
+  Workflow,
+  WorkflowNode,
   SavedJob,
   User,
   CV,
@@ -631,9 +633,39 @@ export const updateJob = async (jobId, userId, updateData) => {
     }
   }
 
-  // Cập nhật cờ hasCustomWorkflow nếu có workflowId
   if (finalUpdateData.workflowId !== undefined) {
-    finalUpdateData.hasCustomWorkflow = !!finalUpdateData.workflowId;
+    const currentWorkflowId = job.workflowId ? job.workflowId.toString() : null;
+    const nextWorkflowId = finalUpdateData.workflowId ? finalUpdateData.workflowId.toString() : null;
+
+    if (currentWorkflowId && currentWorkflowId !== nextWorkflowId) {
+      throw new BadRequestError('Workflow đã được gán cho job này và không thể thay đổi hoặc gỡ. Vui lòng nhân bản workflow để dùng cho job khác.');
+    }
+
+    finalUpdateData.hasCustomWorkflow = !!(currentWorkflowId || nextWorkflowId);
+
+    if (nextWorkflowId) {
+      const workflow = await Workflow.findById(nextWorkflowId).lean();
+      if (!workflow) {
+        throw new NotFoundError('Không tìm thấy workflow.');
+      }
+
+      if (workflow.companyId.toString() !== recruiterProfile._id.toString()) {
+        throw new ForbiddenError('Bạn không có quyền gán workflow này.');
+      }
+
+      if (workflow.isArchived) {
+        throw new BadRequestError('Workflow đã được lưu trữ, không thể gán cho job.');
+      }
+
+      const existingJobUsingWorkflow = await Job.findOne({
+        workflowId: workflow._id,
+        _id: { $ne: job._id }
+      }).select('_id title').lean();
+
+      if (existingJobUsingWorkflow) {
+        throw new BadRequestError(`Workflow này đang được gán cho job "${existingJobUsingWorkflow.title}". Mỗi workflow chỉ được gán cho một job tại một thời điểm.`);
+      }
+    }
   }
 
   // 3. Logic kích hoạt lại quy trình kiểm duyệt (Moderation)

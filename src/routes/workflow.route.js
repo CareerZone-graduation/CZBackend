@@ -12,6 +12,8 @@ router.post('/', passport.authenticate('jwt', { session: false }), authMiddlewar
 router.get('/:workflowId', passport.authenticate('jwt', { session: false }), authMiddleware.recruiterOnly, validation.validateParams(workflowSchema.workflowIdParam), workflowController.getWorkflowById);
 router.put('/:workflowId', passport.authenticate('jwt', { session: false }), authMiddleware.recruiterOnly, validation.validateParams(workflowSchema.workflowIdParam), validation.validateBody(workflowSchema.updateWorkflowBody), workflowController.updateWorkflow);
 router.delete('/:workflowId', passport.authenticate('jwt', { session: false }), authMiddleware.recruiterOnly, validation.validateParams(workflowSchema.workflowIdParam), workflowController.deleteWorkflow);
+router.post('/:workflowId/unarchive', passport.authenticate('jwt', { session: false }), authMiddleware.recruiterOnly, validation.validateParams(workflowSchema.workflowIdParam), workflowController.unarchiveWorkflow);
+router.post('/:workflowId/clone', passport.authenticate('jwt', { session: false }), authMiddleware.recruiterOnly, validation.validateParams(workflowSchema.workflowIdParam), validation.validateBody(workflowSchema.cloneWorkflowBody), workflowController.cloneWorkflow);
 router.post('/:workflowId/activate', passport.authenticate('jwt', { session: false }), authMiddleware.recruiterOnly, validation.validateParams(workflowSchema.workflowIdParam), workflowController.activateWorkflow);
 router.get('/:workflowId/tracking', passport.authenticate('jwt', { session: false }), authMiddleware.recruiterOnly, validation.validateParams(workflowSchema.workflowIdParam), workflowController.getWorkflowTracking);
 

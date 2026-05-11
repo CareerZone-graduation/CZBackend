@@ -1,4 +1,6 @@
 import mongoose from 'mongoose';
+import axios from 'axios';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import Application from '../models/Application.js';
 import Workflow from '../models/Workflow.js';
 import WorkflowNode from '../models/WorkflowNode.js';
@@ -10,7 +12,6 @@ import { ROUTING_KEYS } from '../queues/rabbitmq.js';
 import * as emailService from './email.service.js';
 import logger from '../utils/logger.js';
 import { AppError } from '../utils/AppError.js';
-import config from '../config/index.js';
 import CandidateProfile from '../models/CandidateProfile.js';
 import Job from '../models/Job.js';
 import RecruiterProfile from '../models/RecruiterProfile.js';
@@ -18,8 +19,122 @@ import { EmailTemplate } from '../models/index.js';
 
 const WORKFLOW_EXECUTION_RETRY_MAX = parseInt(process.env.WORKFLOW_EXECUTION_RETRY_MAX || '3', 10);
 const WORKFLOW_EXECUTION_RETRY_DELAY_MS = 5000;
+const LLM_API_KEY = process.env.LLM_API_KEY;
+const LLM_BASE_URL = process.env.LLM_BASE_URL;
+const LLM_MODEL = process.env.LLM_MODEL || 'gemini-3-flash';
 
+const extractTextFromPDF = async (buffer) => {
+  const loadingTask = pdfjsLib.getDocument({ data: buffer });
+  const pdf = await loadingTask.promise;
+  let fullText = '';
 
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    const pageText = textContent.items.map(item => item.str).join(' ');
+    fullText += `${pageText}\n`;
+  }
+
+  return fullText;
+};
+
+const getApplicationCVText = async (application) => {
+  if (!application?.submittedCV) return '';
+
+  if (application.submittedCV.source === 'TEMPLATE' && application.submittedCV.templateSnapshot) {
+    const snapshot = application.submittedCV.templateSnapshot;
+    const rawText = typeof snapshot === 'object' ? JSON.stringify(snapshot) : String(snapshot);
+    return rawText.slice(0, 5000);
+  }
+
+  if (application.submittedCV.source === 'UPLOADED' && application.submittedCV.path) {
+    const response = await fetch(application.submittedCV.path);
+    if (!response.ok) {
+      throw new Error(`Không thể tải CV từ URL: ${application.submittedCV.path}`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    const pdfText = await extractTextFromPDF(uint8Array);
+    return (pdfText || '').slice(0, 5000);
+  }
+
+  return '';
+};
+
+const scoreCVWithLLM = async ({ application, candidateProfile, job }) => {
+  if (!LLM_API_KEY || !LLM_BASE_URL) {
+    throw new AppError('Hệ thống AI chấm CV chưa được cấu hình', 500);
+  }
+
+  const cvText = await getApplicationCVText(application);
+  const prompt = `Bạn là chuyên gia tuyển dụng. Hãy chấm điểm độ phù hợp CV ứng viên với JD theo thang 0-100.
+
+BẮT BUỘC:
+- Chỉ trả về JSON hợp lệ.
+- Không thêm markdown, không thêm giải thích ngoài JSON.
+- Format:
+{
+  "cv_score": number
+}
+
+Thông tin công việc:
+- Tiêu đề: ${job?.title || 'N/A'}
+- Mô tả: ${job?.description || 'N/A'}
+- Yêu cầu: ${job?.requirements || 'N/A'}
+- Kỹ năng: ${(job?.skills || []).join(', ') || 'N/A'}
+- Kinh nghiệm: ${job?.experience || 'N/A'}
+
+Thông tin ứng viên:
+- Họ tên: ${candidateProfile?.fullname || application?.candidateName || 'N/A'}
+- Bio: ${candidateProfile?.bio || 'N/A'}
+- Skills: ${(candidateProfile?.skills || []).map((s) => `${s?.name || ''} (${s?.level || ''})`).filter(Boolean).join(', ') || 'N/A'}
+- Kinh nghiệm: ${(candidateProfile?.experiences || []).map((e) => `${e?.position || ''} tại ${e?.company || ''}: ${e?.description || ''}`).join(' | ') || 'N/A'}
+- Học vấn: ${(candidateProfile?.educations || []).map((e) => `${e?.degree || ''} ${e?.major || ''} ${e?.school || ''}`).join(' | ') || 'N/A'}
+- Nội dung CV: ${cvText || 'N/A'}
+`;
+
+  const response = await axios.post(
+    `${LLM_BASE_URL}/chat/completions`,
+    {
+      model: LLM_MODEL,
+      messages: [
+        {
+          role: 'system',
+          content: 'Bạn là chuyên gia sàng lọc CV. Luôn trả về JSON hợp lệ.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.5,
+      max_tokens: 120
+    },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${LLM_API_KEY}`
+      },
+      timeout: 30000
+    }
+  );
+
+  const content = response?.data?.choices?.[0]?.message?.content || '';
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error('LLM không trả về JSON hợp lệ cho cv_score');
+  }
+
+  const parsed = JSON.parse(jsonMatch[0]);
+  logger.info(`LLM parsed response for CV scoring: ${JSON.stringify(parsed)}`);
+  logger.info(`LLM raw cv_score value: ${parsed.cv_score}`);
+  const rawScore = Number(parsed.cv_score);
+  if (!Number.isFinite(rawScore)) {
+    throw new Error('LLM trả về cv_score không hợp lệ');
+  }
+
+  return Math.max(0, Math.min(100, Math.round(rawScore)));
+};
 
 export const startWorkflowForApplication = async (applicationId) => {
   const application = await Application.findById(applicationId).populate('jobId');
@@ -159,6 +274,9 @@ export const executeWorkflowNode = async ({ applicationId, workflowId, currentNo
         break;
       case 'ACTION_DELAY':
         nextNodeData = await executeActionDelayNode(application, node, executionLog);
+        break;
+      case 'END':
+        nextNodeData = null;
         break;
       default:
         logger.warn(`Unknown node type: ${node.type}`);
@@ -361,14 +479,18 @@ const executeActionAINode = async (application, node, executionLog) => {
   const { aiActionType } = node.config || {};
 
   if (aiActionType === 'CV_SCREENING') {
-    // Tạm thời giả lập chấm điểm random 60-100 cho CV
-    const mockScore = Math.floor(Math.random() * 41) + 60;
-    
-    application.cv_score = mockScore;
+    const [candidateProfile, job] = await Promise.all([
+      CandidateProfile.findById(application.candidateProfileId).lean(),
+      Job.findById(application.jobId).lean()
+    ]);
+
+    const cvScore = await scoreCVWithLLM({ application, candidateProfile, job });
+
+    application.cv_score = cvScore;
     await application.save();
 
-    logger.info(`Mock AI CV_SCREENING completed for application ${application._id}: ${mockScore} points`);
-    executionLog.result.metadata = { aiActionType, score: mockScore };
+    logger.info(`AI CV_SCREENING completed for application ${application._id}: ${cvScore} points`);
+    executionLog.result.metadata = { aiActionType, score: cvScore };
   } else {
     logger.warn(`Unknown AI Action Type: ${aiActionType}`);
     executionLog.result.metadata = { aiActionType, warning: 'Unknown type' };

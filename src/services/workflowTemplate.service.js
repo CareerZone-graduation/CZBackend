@@ -157,7 +157,7 @@ export const applyTemplate = async (templateId, userId, payload = {}) => {
           companyId: recruiterProfile._id,
           isTemplate: !!payload.isTemplate,
           jobId: payload.jobId ? toObjectId(payload.jobId, 'Job ID') : null,
-          status: 'DRAFT',
+          status: 'INACTIVE',
           createdBy: toObjectId(userId, 'User ID'),
           metadata: {
             version: 1,

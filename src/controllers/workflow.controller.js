@@ -23,8 +23,18 @@ export const updateWorkflow = asyncHandler(async (req, res) => {
 });
 
 export const deleteWorkflow = asyncHandler(async (req, res) => {
-  await workflowService.deleteWorkflow(req.user._id, req.params.workflowId);
-  res.status(200).json({ success: true, message: 'Xóa workflow thành công' });
+  const result = await workflowService.deleteWorkflow(req.user._id, req.params.workflowId);
+  res.status(200).json({ success: true, message: result.message });
+});
+
+export const unarchiveWorkflow = asyncHandler(async (req, res) => {
+  await workflowService.unarchiveWorkflow(req.user._id, req.params.workflowId);
+  res.status(200).json({ success: true, message: 'Khôi phục workflow thành công' });
+});
+
+export const cloneWorkflow = asyncHandler(async (req, res) => {
+  const data = await workflowService.cloneWorkflow(req.user._id, req.params.workflowId, req.body || {});
+  res.status(201).json({ success: true, message: 'Nhân bản workflow thành công', data });
 });
 
 export const activateWorkflow = asyncHandler(async (req, res) => {
