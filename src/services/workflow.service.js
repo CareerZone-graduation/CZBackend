@@ -109,6 +109,13 @@ const assertGraphIsAcyclic = (nodes, connections) => {
   if (queue.length === 0) {
     throw new UnprocessableEntityError('Workflow phải có ít nhất một node bắt đầu');
   }
+  
+  if (queue.length > 1) {
+    throw new UnprocessableEntityError('Workflow chỉ được phép có duy nhất MỘT node bắt đầu (không có kết nối đầu vào). Hãy xóa các node bị cô lập hoặc kết nối chúng lại.');
+  }
+
+  // Lưu lại ID của node bắt đầu để validate tiếp
+  const startNodeId = queue[0];
 
   let visited = 0;
   while (queue.length > 0) {
@@ -124,8 +131,10 @@ const assertGraphIsAcyclic = (nodes, connections) => {
   }
 
   if (visited !== nodes.length) {
-    throw new UnprocessableEntityError('Workflow không hợp lệ: đồ thị có chu trình');
+    throw new UnprocessableEntityError('Workflow không hợp lệ: đồ thị có chu trình hoặc có node không thể kết nối tới');
   }
+  
+  return startNodeId;
 };
 
 const validateWorkflowGraph = async (workflowId) => {
@@ -141,6 +150,16 @@ const validateWorkflowGraph = async (workflowId) => {
   const hasStageNode = nodes.some((node) => node.type === 'STAGE');
   if (!hasStageNode) {
     throw new UnprocessableEntityError('Workflow phải có ít nhất một node STAGE');
+  }
+
+  // OFFER_SENT và ACCEPTED yêu cầu recruiter nhập thủ công (offer letter, file đính kèm)
+  const DISALLOWED_STATUS_MAPPINGS = ['OFFER_SENT', 'ACCEPTED'];
+  for (const node of nodes) {
+    if (node.type === 'STAGE' && DISALLOWED_STATUS_MAPPINGS.includes(node.config?.statusMapping)) {
+      throw new UnprocessableEntityError(
+        `Không thể dùng trạng thái "${node.config.statusMapping}" trong workflow. Bước gửi offer cần thực hiện thủ công (có đính kèm thư mời và file offer).`
+      );
+    }
   }
 
   const nodeIdSet = new Set(nodes.map((node) => node._id.toString()));
@@ -171,7 +190,12 @@ const validateWorkflowGraph = async (workflowId) => {
   }
 
   assertNodeTypeRules(nodes, outgoingByNode);
-  assertGraphIsAcyclic(nodes, connections);
+  const startNodeId = assertGraphIsAcyclic(nodes, connections);
+
+  const startNode = nodes.find(n => n._id.toString() === startNodeId);
+  if (startNode.type !== 'STAGE') {
+    throw new UnprocessableEntityError('Node bắt đầu của Workflow bắt buộc phải là loại STAGE (Vòng/Cột)');
+  }
 
   return {
     totalNodes: nodes.length,
@@ -556,6 +580,7 @@ export const batchSaveNodes = async (userId, workflowId, payload = {}) => {
   const existingNodeIds = new Set(existingNodes.map((node) => node._id.toString()));
 
   const retainedNodeIds = new Set();
+  const processedNodeIds = [];
 
   for (const nodeInput of incomingNodes) {
     const safeData = {
@@ -575,12 +600,14 @@ export const batchSaveNodes = async (userId, workflowId, payload = {}) => {
 
       await WorkflowNode.updateOne({ _id: nodeId, workflowId: workflow._id }, { $set: safeData });
       retainedNodeIds.add(nodeIdString);
+      processedNodeIds.push(nodeIdString);
     } else {
       const createdNode = await WorkflowNode.create({
         ...safeData,
         workflowId: workflow._id
       });
       retainedNodeIds.add(createdNode._id.toString());
+      processedNodeIds.push(createdNode._id.toString());
     }
   }
 
@@ -601,7 +628,10 @@ export const batchSaveNodes = async (userId, workflowId, payload = {}) => {
 
   await updateWorkflowMetadata(workflow._id);
 
-  return WorkflowNode.find({ workflowId: workflow._id }).sort({ createdAt: 1 }).lean();
+  const finalNodes = await WorkflowNode.find({ workflowId: workflow._id }).lean();
+  const nodeMap = new Map(finalNodes.map(n => [n._id.toString(), n]));
+
+  return processedNodeIds.map(id => nodeMap.get(id)).filter(Boolean);
 };
 
 export const createConnection = async (userId, workflowId, payload) => {

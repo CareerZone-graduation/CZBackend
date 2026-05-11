@@ -52,7 +52,7 @@ const getTransporter = () => {
  * @param {string} [options.from] - Địa chỉ email gửi đi (mặc định là từ config).
  */
 export const sendEmail = async (options) => {
-    const { to, subject, template, html: preRenderedHtml, data = {}, from = `CareerZone <${config.EMAIL_FROM}>` } = options;
+    const { to, subject, template, html: preRenderedHtml, data = {}, from = `CareerZone <${config.EMAIL_FROM}>`, attachments } = options;
 
     const currentTransporter = getTransporter(); // Lấy transporter
 
@@ -68,6 +68,7 @@ export const sendEmail = async (options) => {
             subject,
             html,
             text: htmlToText(html),
+            ...(attachments && { attachments })
         };
 
         // 3) Send email

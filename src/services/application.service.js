@@ -8,6 +8,7 @@ import {
   RecruiterProfile,
   InterviewRoom,
   TalentPool,
+  TestAssignment,
 } from '../models/index.js';
 import { NotFoundError, UnauthorizedError, BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
@@ -184,7 +185,8 @@ export const getApplicationsByJob = async (jobId, recruiterId, options = {}) => 
         latestExecution: 1,
         interview_result: 1,
         test_score: 1,
-        cv_score: 1
+        cv_score: 1,
+        workflowId: 1
       }
     },
     { $sort: sortOptions },
@@ -264,6 +266,29 @@ export const getApplicationById = async (applicationId, recruiterId) => {
 
   // Lấy thông tin phỏng vấn nếu có
   const interview = await InterviewRoom.findOne({ applicationId: application._id }).lean();
+  // Lấy kết quả bài test nếu có
+  const testAssignment = await TestAssignment.findOne({ applicationId: application._id })
+    .populate({ path: 'testId', select: 'name description duration passingScore totalScore questions' })
+    .lean();
+
+  let questionDetails = [];
+  if (testAssignment && testAssignment.testId?.questions && testAssignment.answers) {
+    questionDetails = testAssignment.answers.map(answer => {
+      const question = testAssignment.testId.questions.find(q => q._id.toString() === answer.questionId.toString());
+      return {
+        questionText: question?.question || '',
+        options: (question?.options || []).map(opt => ({
+          text: opt.text,
+          isCorrect: opt.isCorrect,
+          isSelected: opt._id.toString() === (answer.selectedOptionId || '').toString(),
+        })),
+        maxScore: question?.score || 0,
+        scoreEarned: answer.scoreEarned || 0,
+        isCorrect: answer.isCorrect,
+      };
+    });
+  }
+
   // Check if candidate is in talent pool
   const isInTalentPool = application.candidateProfileId ? await TalentPool.exists({
     recruiterProfileId: recruiterProfile._id,
@@ -284,6 +309,24 @@ export const getApplicationById = async (applicationId, recruiterId) => {
         scheduledTime: interview.scheduledTime,
         status: interview.status,
         roomName: interview.roomName,
+      }
+      : null,
+    testAssignment: testAssignment
+      ? {
+        assignmentId: testAssignment._id,
+        testId: testAssignment.testId?._id,
+        testName: testAssignment.testId?.name,
+        testDescription: testAssignment.testId?.description,
+        duration: testAssignment.testId?.duration,
+        passingScore: testAssignment.testId?.passingScore,
+        totalScore: testAssignment.totalScore,
+        status: testAssignment.status,
+        score: testAssignment.score,
+        passed: testAssignment.passed,
+        timeSpent: testAssignment.timeSpent,
+        startedAt: testAssignment.startedAt,
+        completedAt: testAssignment.completedAt,
+        questionDetails,
       }
       : null,
   };
@@ -727,7 +770,28 @@ export const evaluateInterviewResult = async (applicationId, recruiterId, result
   }
 
   logActivity(application, result === 'PASSED' ? 'INTERVIEW_PASSED' : 'INTERVIEW_FAILED', `Nhà tuyển dụng đánh giá phỏng vấn: ${result === 'PASSED' ? 'ĐẠT' : 'KHÔNG ĐẠT'}`);
+
+  // Nếu là luồng thủ công và FAILED thì cập nhật status luôn trước khi save
+  if ((!application.workflowData || !application.workflowData.isWorkflowPaused) && result === 'FAILED') {
+    application.status = 'INTERVIEW_FAILED';
+    application.lastStatusUpdateAt = new Date();
+  }
+
   await application.save();
+
+  // Luôn gửi thông báo kết quả đánh giá phỏng vấn cho ứng viên
+  const candidateProfile = await CandidateProfile.findById(application.candidateProfileId);
+  if (candidateProfile) {
+    queueService.publishNotification(rabbitmq.ROUTING_KEYS.STATUS_UPDATE, {
+      type: result === 'PASSED' ? 'INTERVIEW_PASSED' : 'INTERVIEW_FAILED',
+      recipientId: candidateProfile.userId.toString(),
+      data: {
+        applicationId: application._id.toString(),
+        newStatus: application.status,
+        feedback: feedback
+      }
+    });
+  }
 
   // Đánh thức Workflow nếu đang bị dừng
   if (application.workflowData && application.workflowData.isWorkflowPaused) {
@@ -740,26 +804,6 @@ export const evaluateInterviewResult = async (applicationId, recruiterId, result
       currentNodeId: application.workflowData.pendingNextNodeId,
       retryCount: 0
     });
-  } else {
-    // Nếu là luồng thủ công (không dùng Workflow)
-    if (result === 'FAILED') {
-      application.status = 'INTERVIEW_FAILED';
-      application.lastStatusUpdateAt = new Date();
-      await application.save();
-      
-      const candidateProfile = await CandidateProfile.findById(application.candidateProfileId);
-      if (candidateProfile) {
-        queueService.publishNotification(rabbitmq.ROUTING_KEYS.STATUS_UPDATE, {
-          type: 'INTERVIEW_FAILED',
-          recipientId: candidateProfile.userId.toString(),
-          data: {
-            applicationId: application._id.toString(),
-            newStatus: 'INTERVIEW_FAILED',
-            feedback: feedback
-          }
-        });
-      }
-    }
   }
 
   return application;

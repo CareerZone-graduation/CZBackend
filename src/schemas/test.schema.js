@@ -67,5 +67,9 @@ export const answerBody = z.object({
 });
 
 export const submitBody = z.object({
-  timeSpent: z.number().int().min(0).optional().default(0)
+  timeSpent: z.number().int().min(0).optional().default(0),
+  answers: z.array(z.object({
+    questionId: objectId,
+    selectedOptionId: objectId.optional().nullable()
+  })).optional().default([])
 });

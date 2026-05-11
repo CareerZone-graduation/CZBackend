@@ -85,14 +85,7 @@ export const getExecutionHistory = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, message: 'Lấy lịch sử thực thi thành công', data });
 });
 
-export const manualTransition = asyncHandler(async (req, res) => {
-  const data = await workflowExecutionService.manualTransitionToStage({
-    applicationId: req.params.applicationId,
-    userId: req.user._id,
-    targetStageNodeId: req.body.targetStageNodeId,
-  });
-  res.status(200).json({ success: true, message: 'Chuyển stage thủ công thành công', data });
-});
+
 
 export const retryExecution = asyncHandler(async (req, res) => {
   const data = await workflowExecutionService.retryFailedExecution(

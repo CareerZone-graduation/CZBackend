@@ -122,15 +122,5 @@ router.get(
   applicationController.getFailedExecutions
 );
 
-// Route để chuyển stage thủ công trong workflow
-router.post(
-  '/:applicationId/transition',
-  passport.authenticate('jwt', { session: false }),
-  authMiddleware.recruiterOnly,
-  validationMiddleware.validateParams(applicationSchema.applicationIdParam),
-  validationMiddleware.validateBody(z.object({ targetStageNodeId: z.string().regex(/^[0-9a-fA-F]{24}$/) })),
-  workflowController.manualTransition
-);
-
 
 export default router;

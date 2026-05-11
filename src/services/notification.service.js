@@ -718,6 +718,41 @@ export const handleNewApplication = async (payload) => {
 };
 
 /**
+ * Gửi thông báo cho nhà tuyển dụng khi cần xếp lịch phỏng vấn (từ workflow engine).
+ * @param {object} payload - Payload từ RabbitMQ
+ */
+export const createInterviewSchedulingRequiredNotification = async (payload) => {
+  const { recipientId, data } = payload;
+  const { applicationId, title, message } = data;
+
+  const notification = await Notification.create({
+    userId: new mongoose.Types.ObjectId(recipientId),
+    title: title || 'Cần xếp lịch phỏng vấn',
+    message: message || 'Vui lòng xếp lịch phỏng vấn cho ứng viên.',
+    type: 'workflow',
+    entity: {
+      type: 'Application',
+      id: new mongoose.Types.ObjectId(applicationId)
+    },
+    metadata: {
+      applicationId: applicationId.toString(),
+      source: 'WORKFLOW_ENGINE'
+    }
+  });
+
+  await pushNotification(recipientId, {
+    title: notification.title,
+    body: notification.message,
+    data: {
+      url: `/applications/${applicationId}`
+    }
+  });
+
+  logger.info(`Interview scheduling required notification sent to recruiter ${recipientId} for application ${applicationId}`);
+  return notification;
+};
+
+/**
  * Xử lý message STATUS_UPDATE - Route đến các handler con tương ứng.
  * @param {object} payload - Toàn bộ payload từ RabbitMQ
  */
@@ -763,7 +798,13 @@ export const handleStatusUpdate = async (payload) => {
     case 'OFFER_SENT':
     case 'REJECTED':
     case 'INTERVIEW_FAILED': // Added INTERVIEW_FAILED
+    case 'INTERVIEW_PASSED': // Added INTERVIEW_PASSED
       return createStatusChangeNotification(applicationId, payload.type, payload.data?.feedback);
+
+    case 'INTERVIEW_SCHEDULING_REQUIRED':
+      return createInterviewSchedulingRequiredNotification(payload);
+
+
 
     case 'OFFER_ACCEPTED':
     case 'OFFER_DECLINED':
@@ -893,6 +934,7 @@ export const createStatusChangeNotification = async (applicationId, newStatus, f
 
   const candidateProfileId = application.candidateProfileId;
   const candidateId = (await CandidateProfile.findById(candidateProfileId).select('userId')).userId;
+  const candidate = await User.findById(candidateId).select('email fullname');
 
   let title = 'Cập nhật trạng thái đơn ứng tuyển';
   let message = '';
@@ -907,6 +949,51 @@ export const createStatusChangeNotification = async (applicationId, newStatus, f
     case 'OFFER_SENT':
       title = '🎉 Chúc mừng! Bạn nhận được lời mời làm việc';
       message = `Bạn đã nhận được lời mời làm việc cho vị trí "${application.jobSnapshot.title}" tại ${application.jobSnapshot.company}.`;
+
+      // Gửi email có chứa offer letter
+      if (candidate && candidate.email) {
+        let emailHtml = '';
+
+        if (application.offerLetter) {
+          // Wrap offerLetter to preserve its format from the textarea
+          emailHtml += `<div style="white-space: pre-wrap; font-family: sans-serif; font-size: 15px; line-height: 1.6; color: #333;">${application.offerLetter}</div>`;
+        } else {
+          // Fallback if no offerLetter was provided
+          emailHtml += `<p>Chào ${candidate.fullname || 'bạn'},</p>`;
+          emailHtml += `<p>Bạn đã nhận được lời mời làm việc cho vị trí <strong>${application.jobSnapshot.title}</strong> tại <strong>${application.jobSnapshot.company}</strong>.</p>`;
+          emailHtml += `<p>Vui lòng đăng nhập vào hệ thống để xem chi tiết thư mời.</p>`;
+        }
+
+        const attachments = [];
+        if (application.offerFile) {
+          emailHtml += `<br><p><em>Vui lòng xem file thư mời được đính kèm ở email này, hoặc <a href="${application.offerFile}" style="color: #4f46e5; text-decoration: underline;">tải xuống từ hệ thống</a>.</em></p>`;
+
+          // Lấy tên file gốc hoặc đặt tên mặc định
+          const urlParts = application.offerFile.split('/');
+          let filename = urlParts[urlParts.length - 1] || 'OfferLetter.pdf';
+          // Nếu có param như ?alt=media thì bỏ đi
+          filename = filename.split('?')[0];
+
+          attachments.push({
+            filename: `OfferLetter_${application.jobSnapshot.title}_${filename}`,
+            path: application.offerFile
+          });
+        }
+
+        emailHtml += `<hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;"><p style="font-size: 13px; color: #666;">Truy cập <a href="${config.CANDIDATE_FE_URL || 'http://localhost:3000'}/dashboard/applications/${applicationId}">CareerZone</a> để phản hồi lại thư mời này.</p>`;
+
+        try {
+          await emailService.sendEmail({
+            to: application.candidateEmail,
+            subject: `[${application.jobSnapshot.company}] Lời mời làm việc - ${application.jobSnapshot.title}`,
+            html: emailHtml,
+            attachments: attachments.length > 0 ? attachments : undefined
+          });
+          logger.info(`Đã gửi email Offer Letter cho ứng viên ${application.candidateEmail}`);
+        } catch (emailErr) {
+          logger.error(`Lỗi gửi email Offer Letter cho ứng viên ${application.candidateEmail}:`, emailErr);
+        }
+      }
       break;
     case 'OFFER_ACCEPTED':
       title = '🎉 Chúc mừng! Bạn đã được nhận';
@@ -918,6 +1005,13 @@ export const createStatusChangeNotification = async (applicationId, newStatus, f
     case 'INTERVIEW_FAILED':
       title = '⚠️ Kết quả phỏng vấn';
       message = `Rất tiếc, bạn chưa đạt yêu cầu phỏng vấn cho vị trí "${application.jobSnapshot.title}" tại ${application.jobSnapshot.company}.`;
+      if (feedback) {
+        message += ` Phản hồi: "${feedback}"`;
+      }
+      break;
+    case 'INTERVIEW_PASSED':
+      title = '🎉 Chúc mừng! Bạn đã qua vòng phỏng vấn';
+      message = `Chúc mừng bạn đã đạt yêu cầu phỏng vấn cho vị trí "${application.jobSnapshot.title}" tại ${application.jobSnapshot.company}.`;
       if (feedback) {
         message += ` Phản hồi: "${feedback}"`;
       }

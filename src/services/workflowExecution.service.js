@@ -12,6 +12,8 @@ import logger from '../utils/logger.js';
 import { AppError } from '../utils/AppError.js';
 import config from '../config/index.js';
 import CandidateProfile from '../models/CandidateProfile.js';
+import Job from '../models/Job.js';
+import RecruiterProfile from '../models/RecruiterProfile.js';
 import { EmailTemplate } from '../models/index.js';
 
 const WORKFLOW_EXECUTION_RETRY_MAX = parseInt(process.env.WORKFLOW_EXECUTION_RETRY_MAX || '3', 10);
@@ -212,6 +214,7 @@ export const executeWorkflowNode = async ({ applicationId, workflowId, currentNo
 
 const executeStageNode = async (application, node, executionLog) => {
   application.currentStageNodeId = node._id;
+  const previousStatus = application.status;
   if (node.config && node.config.statusMapping) {
     application.status = node.config.statusMapping;
   }
@@ -224,8 +227,33 @@ const executeStageNode = async (application, node, executionLog) => {
     application.workflowData.isWorkflowPaused = true;
     application.workflowData.pendingNextNodeId = connection ? connection.targetNodeId.toString() : null;
     await application.save();
+
+    if (previousStatus !== 'SCHEDULED_INTERVIEW') {
+      try {
+        const job = await Job.findById(application.jobId);
+        if (job && job.recruiterProfileId) {
+          const recruiterProfile = await RecruiterProfile.findById(job.recruiterProfileId);
+          if (recruiterProfile && recruiterProfile.userId) {
+            const payload = {
+              type: 'INTERVIEW_SCHEDULING_REQUIRED',
+              recipientId: recruiterProfile.userId.toString(),
+              data: {
+                applicationId: application._id.toString(),
+                title: 'Cần xếp lịch phỏng vấn',
+                message: `Hồ sơ của ứng viên ${application.candidateName || 'Ứng viên'} (vị trí ${application.jobSnapshot?.title || job.title}) đã bước vào vòng Phỏng vấn. Vui lòng xếp lịch phỏng vấn cho ứng viên.`
+              }
+            };
+            await queueService.publishNotificationStrict(ROUTING_KEYS.STATUS_UPDATE, payload);
+          }
+        }
+      } catch (error) {
+        logger.error(`Error sending INTERVIEW_SCHEDULING_REQUIRED notification to recruiter for application ${application._id}:`, error);
+      }
+    }
+
     return null; // Dừng lại chờ HR lên lịch, phỏng vấn và đánh giá
   }
+
 
   await application.save();
 
@@ -376,17 +404,19 @@ const executeActionTestNode = async (application, node, executionLog) => {
     const candidateProfile = await CandidateProfile.findById(application.candidateProfileId);
     const candidateUserId = candidateProfile ? candidateProfile.userId.toString() : application.candidateProfileId;
 
-    const payload = {
-      type: 'WORKFLOW_NOTIFICATION',
-      recipientId: candidateUserId,
-      data: {
-        applicationId: application._id,
-        testAssignmentId: assignment._id,
-        title: 'Yêu cầu làm bài kiểm tra năng lực',
-        message: 'Nhà tuyển dụng vừa yêu cầu bạn hoàn thành một bài kiểm tra cho vòng tuyển dụng này. Vui lòng kiểm tra và hoàn thành trước hạn.'
-      }
-    };
-    await queueService.publishNotificationStrict(ROUTING_KEYS.STATUS_UPDATE, payload);
+    if (candidateUserId) {
+      const payload = {
+        type: 'WORKFLOW_NOTIFICATION',
+        recipientId: candidateUserId,
+        data: {
+          applicationId: application._id,
+          testAssignmentId: assignment._id,
+          title: 'Yêu cầu làm bài kiểm tra năng lực',
+          message: 'Nhà tuyển dụng vừa yêu cầu bạn hoàn thành một bài kiểm tra cho vòng tuyển dụng này. Vui lòng kiểm tra và hoàn thành trước hạn.'
+        }
+      };
+      await queueService.publishNotificationStrict(ROUTING_KEYS.STATUS_UPDATE, payload);
+    }
     
     // await emailService.sendEmail({
     //   to: application.candidateEmail,
@@ -460,62 +490,7 @@ const executeActionDelayNode = async (application, node, executionLog) => {
   return null;
 };
 
-export const manualTransitionToStage = async ({ applicationId, userId, targetStageNodeId }) => {
-  const application = await Application.findById(applicationId).populate('jobId');
-  if (!application) throw new AppError('Application not found', 404);
 
-  const job = application.jobId;
-
-  if (userId) {
-     const recruiterProfile = await mongoose.model('RecruiterProfile').findOne({ userId });
-     if (!recruiterProfile || recruiterProfile._id.toString() !== job.recruiterProfileId.toString()) {
-       throw new AppError('Unauthorized to modify this application', 403);
-     }
-  }
-
-  const targetNode = await WorkflowNode.findOne({
-    _id: targetStageNodeId,
-    workflowId: application.workflowId,
-    type: 'STAGE'
-  });
-
-  if (!targetNode) throw new AppError('Target stage node not found in this workflow', 404);
-
-  if (!application.workflowData) {
-    application.workflowData = {};
-  }
-  application.workflowData.isWorkflowPaused = false;
-  application.currentStageNodeId = targetNode._id;
-
-  if (STAGE_STATUS_MAPPING[targetNode.name]) {
-    application.status = STAGE_STATUS_MAPPING[targetNode.name];
-  }
-
-  await application.save();
-
-  await WorkflowExecution.create({
-    applicationId,
-    workflowId: application.workflowId,
-    nodeId: targetNode._id,
-    nodeType: 'STAGE',
-    nodeName: targetNode.name,
-    status: 'SUCCESS',
-    executedBy: userId || 'SYSTEM',
-    result: { metadata: { manualTransition: true } }
-  });
-
-  const connection = await WorkflowConnection.findOne({ sourceNodeId: targetNode._id });
-  if (connection) {
-    await queueService.publishNotificationStrict(ROUTING_KEYS.WORKFLOW_EXECUTION_CONTINUE, {
-      applicationId: application._id.toString(),
-      workflowId: application.workflowId.toString(),
-      currentNodeId: connection.targetNodeId.toString(),
-      retryCount: 0
-    });
-  }
-
-  return application;
-};
 
 export const retryFailedExecution = async (userId, executionId) => {
   const execution = await WorkflowExecution.findById(executionId);

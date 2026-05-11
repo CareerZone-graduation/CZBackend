@@ -291,6 +291,10 @@ export const submitAssignment = async (userId, assignmentId, payload = {}) => {
 
   if (assignment.status === 'COMPLETED') {
     if (application.workflowData?.isWorkflowPaused) {
+      application.workflowData.isWorkflowPaused = false;
+      application.workflowData.lastExecutionAt = new Date();
+      await application.save();
+
       await publishWorkflowContinueEvent({
         applicationId: application._id,
         testAssignmentId: assignment._id,
@@ -298,10 +302,6 @@ export const submitAssignment = async (userId, assignmentId, payload = {}) => {
         totalScore: assignment.totalScore,
         passed: assignment.passed
       });
-
-      application.workflowData.isWorkflowPaused = false;
-      application.workflowData.lastExecutionAt = new Date();
-      await application.save();
 
       return {
         message: 'Đã gửi lại tín hiệu tiếp tục workflow thành công',
@@ -315,6 +315,25 @@ export const submitAssignment = async (userId, assignmentId, payload = {}) => {
   if (assignment.status === 'PENDING') {
     assignment.status = 'IN_PROGRESS';
     assignment.startedAt = assignment.startedAt || new Date();
+  }
+
+  // Merge answers từ payload vào assignment trước khi chấm điểm
+  if (Array.isArray(payload.answers) && payload.answers.length > 0) {
+    const existingMap = new Map(
+      (assignment.answers || []).map((a) => [String(a.questionId), a])
+    );
+    for (const ans of payload.answers) {
+      if (ans?.questionId) {
+        existingMap.set(String(ans.questionId), {
+          questionId: new mongoose.Types.ObjectId(ans.questionId),
+          selectedOptionId: ans.selectedOptionId ? new mongoose.Types.ObjectId(ans.selectedOptionId) : null,
+          booleanAnswer: null,
+          isCorrect: false,
+          scoreEarned: 0
+        });
+      }
+    }
+    assignment.answers = Array.from(existingMap.values());
   }
 
   const { gradedAnswers, score, totalScore, passed } = gradeAnswers(assignment.testId, assignment.answers || []);
@@ -338,7 +357,7 @@ export const submitAssignment = async (userId, assignmentId, payload = {}) => {
     application.workflowData = {};
   }
 
-  application.workflowData.isWorkflowPaused = true;
+  application.workflowData.isWorkflowPaused = false;
   application.workflowData.lastExecutionAt = new Date();
 
   const session = await mongoose.startSession();
@@ -358,10 +377,6 @@ export const submitAssignment = async (userId, assignmentId, payload = {}) => {
     totalScore,
     passed
   });
-
-  application.workflowData.isWorkflowPaused = false;
-  application.workflowData.lastExecutionAt = new Date();
-  await application.save();
 
   return {
     message: 'Nộp bài test thành công',
