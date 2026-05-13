@@ -583,11 +583,12 @@ export const updateWorkflow = async (userId, workflowId, payload = {}) => {
 
 export const deleteWorkflow = async (userId, workflowId) => {
   const { workflow } = await getWorkflowOwnershipContext(workflowId, userId);
-  await assertWorkflowStructureIsMutable(workflow._id);
+  const linkedJobs = await Job.find({ workflowId: workflow._id })
+    .select('status deadline')
+    .lean();
 
-  const hasLinkedJob = await Job.exists({ workflowId: workflow._id });
-
-  if (!hasLinkedJob) {
+  if (!linkedJobs.length) {
+    await assertWorkflowStructureIsMutable(workflow._id);
     await Promise.all([
       WorkflowConnection.deleteMany({ workflowId: workflow._id }),
       WorkflowNode.deleteMany({ workflowId: workflow._id }),
@@ -595,6 +596,19 @@ export const deleteWorkflow = async (userId, workflowId) => {
     ]);
 
     return { message: 'Xóa vĩnh viễn workflow thành công' };
+  }
+
+  await assertWorkflowNotArchived(workflow._id);
+
+  const now = new Date();
+  const hasUnexpiredLinkedJob = linkedJobs.some((job) => {
+    const hasExpiredByStatus = job.status === 'EXPIRED';
+    const hasExpiredByDeadline = job.deadline instanceof Date && job.deadline.getTime() < now.getTime();
+    return !hasExpiredByStatus && !hasExpiredByDeadline;
+  });
+
+  if (hasUnexpiredLinkedJob) {
+    throw new BadRequestError('Chỉ có thể lưu trữ workflow khi tất cả job liên kết đã hết hạn ứng tuyển');
   }
 
   await Workflow.findByIdAndUpdate(workflow._id, {

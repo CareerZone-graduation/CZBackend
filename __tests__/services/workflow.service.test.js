@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import {
   Application,
+  Job,
   RecruiterProfile,
   User,
   Workflow,
@@ -76,6 +77,30 @@ describe('Workflow END guards', () => {
       }
     });
   };
+
+  const createJobPayload = (overrides = {}) => ({
+    title: 'Senior NodeJS Developer',
+    description: 'A great job opportunity.',
+    requirements: 'NodeJS, MongoDB',
+    benefits: 'Good salary',
+    location: {
+      province: 'Thành phố Hồ Chí Minh',
+      district: 'Quận 1',
+      commune: 'Phường Tân Định',
+      ward: 'Tân Định',
+      coordinates: { type: 'Point', coordinates: [106.68, 10.79] }
+    },
+    address: '123 Test Street',
+    type: 'FULL_TIME',
+    workType: 'ON_SITE',
+    deadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    experience: 'SENIOR_LEVEL',
+    category: 'IT',
+    recruiterProfileId: recruiterProfile._id,
+    status: 'ACTIVE',
+    moderationStatus: 'APPROVED',
+    ...overrides
+  });
 
   it('rejects activation when workflow has no END node', async () => {
     const workflow = await createWorkflowBase();
@@ -371,6 +396,74 @@ describe('Workflow END guards', () => {
     ).rejects.toMatchObject({
       statusCode: 400,
       message: 'Không thể chỉnh sửa cấu trúc workflow sau khi đã có ứng viên ứng tuyển'
+    });
+  });
+
+  it('archives linked workflow when linked job is expired, even when applications already exist', async () => {
+    const workflow = await createWorkflowBase();
+
+    const [startNode, endNode] = await WorkflowNode.create([
+      {
+        workflowId: workflow._id,
+        type: 'STAGE',
+        name: 'Start',
+        position: { x: 0, y: 0 },
+        config: { statusMapping: 'PENDING' }
+      },
+      {
+        workflowId: workflow._id,
+        type: 'END',
+        name: 'End',
+        position: { x: 240, y: 0 },
+        config: {}
+      }
+    ]);
+
+    await WorkflowConnection.create({
+      workflowId: workflow._id,
+      sourceNodeId: startNode._id,
+      sourcePort: 'default',
+      targetNodeId: endNode._id,
+      targetPort: 'input'
+    });
+
+    await Job.create(createJobPayload({
+      title: 'Job Current',
+      workflowId: workflow._id,
+      hasCustomWorkflow: true,
+      status: 'EXPIRED',
+      deadline: new Date(Date.now() - 24 * 60 * 60 * 1000)
+    }));
+
+    await createApplicationInWorkflow(workflow._id, endNode._id);
+
+    const result = await deleteWorkflow(recruiterUser._id.toString(), workflow._id.toString());
+    expect(result.message).toBe('Lưu trữ workflow thành công');
+
+    const archivedWorkflow = await Workflow.findById(workflow._id).lean();
+    expect(archivedWorkflow.isArchived).toBe(true);
+    expect(archivedWorkflow.status).toBe('INACTIVE');
+
+    expect(await WorkflowNode.countDocuments({ workflowId: workflow._id })).toBe(2);
+    expect(await WorkflowConnection.countDocuments({ workflowId: workflow._id })).toBe(1);
+  });
+
+  it('blocks archive when linked job is not expired yet', async () => {
+    const workflow = await createWorkflowBase();
+
+    await Job.create(createJobPayload({
+      title: 'Job Active',
+      workflowId: workflow._id,
+      hasCustomWorkflow: true,
+      status: 'ACTIVE',
+      deadline: new Date(Date.now() + 24 * 60 * 60 * 1000)
+    }));
+
+    await expect(
+      deleteWorkflow(recruiterUser._id.toString(), workflow._id.toString())
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: 'Chỉ có thể lưu trữ workflow khi tất cả job liên kết đã hết hạn ứng tuyển'
     });
   });
 
