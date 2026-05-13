@@ -8,6 +8,56 @@ import mongoose from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
 import { logActivity } from './application.service.js';
 
+const emptyWaitingFor = {
+  type: null,
+  workflowNodeId: null,
+  interviewRoomId: null,
+  requestedAt: null
+};
+
+const normalizeWorkflowData = (workflowData = {}) => ({
+  lastExecutionAt: workflowData.lastExecutionAt || null,
+  isWorkflowPaused: !!workflowData.isWorkflowPaused,
+  pendingNextNodeId: workflowData.pendingNextNodeId || null,
+  currentNodeId: workflowData.currentNodeId || null,
+  resumeAt: workflowData.resumeAt || null,
+  waitingFor: {
+    ...emptyWaitingFor,
+    ...(workflowData.waitingFor || {})
+  }
+});
+
+const getApplicationInterviewWaitingContext = (application) => {
+  const workflowData = normalizeWorkflowData(application?.workflowData);
+  const waitingFor = workflowData.waitingFor;
+
+  if (waitingFor.type === 'INTERVIEW') {
+    return waitingFor;
+  }
+
+  if (workflowData.isWorkflowPaused && workflowData.currentNodeId) {
+    return {
+      ...emptyWaitingFor,
+      type: 'INTERVIEW',
+      workflowNodeId: workflowData.currentNodeId
+    };
+  }
+
+  return null;
+};
+
+const getNextInterviewSequence = async (applicationId) => {
+  const latestInterview = await InterviewRoom.findOne({ applicationId })
+    .sort({ sequence: -1, createdAt: -1 })
+    .lean();
+
+  if (!latestInterview?.sequence) {
+    return 1;
+  }
+
+  return latestInterview.sequence + 1;
+};
+
 // =================================================================
 // Core Interview Management Functions (Task 2.1)
 // =================================================================
@@ -47,6 +97,17 @@ export const scheduleInterview = async (recruiterId, candidateId, jobId, applica
     throw new NotFoundError('Application not found');
   }
 
+  // Check if there's any completed interview waiting for evaluation
+  const unevaluatedInterview = await InterviewRoom.findOne({
+    applicationId: application._id,
+    status: { $in: ['COMPLETED', 'ENDED'] },
+    result: null
+  }).sort({ sequence: -1, createdAt: -1 });
+
+  if (unevaluatedInterview) {
+    throw new BadRequestError('Vui lòng đánh giá kết quả phỏng vấn vòng trước trước khi lên lịch vòng tiếp theo');
+  }
+
   // Verify job exists
   const job = await Job.findById(jobId).lean();
   if (!job) {
@@ -61,6 +122,13 @@ export const scheduleInterview = async (recruiterId, candidateId, jobId, applica
   // Generate unique room ID
   const roomId = `interview-${uuidv4()}`;
 
+  const workflowData = normalizeWorkflowData(application.workflowData);
+  application.workflowData = workflowData;
+
+  const waitingFor = getApplicationInterviewWaitingContext(application);
+  const workflowNodeId = waitingFor?.workflowNodeId || workflowData.currentNodeId || null;
+  const sequence = await getNextInterviewSequence(application._id);
+
   // Create room name
   const roomName = `Phỏng vấn vị trí ${application.jobSnapshot?.title} - ${new Date(scheduledAt).toLocaleString('vi-VN')} - Ứng viên: ${application.candidateName}`;
 
@@ -70,6 +138,10 @@ export const scheduleInterview = async (recruiterId, candidateId, jobId, applica
     applicationId,
     recruiterId,
     candidateId,
+    workflowId: application.workflowId || null,
+    workflowNodeId,
+    sequence,
+    roundName: workflowNodeId ? `Interview Round ${sequence}` : null,
     scheduledTime: scheduledDate,
     duration,
     roomId,
@@ -81,6 +153,16 @@ export const scheduleInterview = async (recruiterId, candidateId, jobId, applica
       actor: recruiterId
     }]
   });
+
+  if (waitingFor) {
+    application.workflowData.waitingFor = {
+      ...application.workflowData.waitingFor,
+      type: 'INTERVIEW',
+      workflowNodeId,
+      interviewRoomId: interview._id.toString(),
+      requestedAt: application.workflowData.waitingFor.requestedAt || new Date()
+    };
+  }
 
   // Update application activity history
   logActivity(application, 'SCHEDULED_INTERVIEW', `Nhà tuyển dụng đã lên lịch phỏng vấn vào ${scheduledDate.toLocaleString('vi-VN')}`);
@@ -136,6 +218,38 @@ export const getInterviewById = async (interviewId, userId) => {
   }
 
   return interview;
+};
+
+export const getInterviewsByApplication = async (applicationId, userId, role) => {
+  const application = await Application.findById(applicationId)
+    .populate('jobId', 'recruiterProfileId')
+    .populate({
+      path: 'candidateProfileId',
+      select: 'userId'
+    })
+    .lean();
+
+  if (!application) {
+    throw new NotFoundError('Không tìm thấy đơn ứng tuyển');
+  }
+
+  if (role === 'recruiter') {
+    const recruiterProfile = await RecruiterProfile.findOne({ userId }).lean();
+
+    if (!recruiterProfile || application.jobId?.recruiterProfileId?.toString() !== recruiterProfile._id.toString()) {
+      throw new ForbiddenError('Bạn không có quyền xem lịch sử phỏng vấn của đơn ứng tuyển này');
+    }
+  } else if (role === 'candidate') {
+    if (application.candidateProfileId?.userId?.toString() !== userId.toString()) {
+      throw new ForbiddenError('Bạn không có quyền xem lịch sử phỏng vấn của đơn ứng tuyển này');
+    }
+  } else {
+    throw new ForbiddenError('Bạn không có quyền xem lịch sử phỏng vấn của đơn ứng tuyển này');
+  }
+
+  return InterviewRoom.find({ applicationId })
+    .sort({ sequence: 1, createdAt: 1 })
+    .lean();
 };
 
 /**
@@ -1038,6 +1152,14 @@ export const getRecruiterInterviews = async (recruiterId, options = {}) => {
     endTime: interview.endTime,
     status: interview.status,
     isReminderSent: interview.isReminderSent,
+    result: interview.result,
+    evaluatedAt: interview.evaluatedAt,
+    evaluatedBy: interview.evaluatedBy,
+    evaluationNote: interview.evaluationNote,
+    workflowId: interview.workflowId,
+    workflowNodeId: interview.workflowNodeId,
+    sequence: interview.sequence,
+    roundName: interview.roundName,
     createdAt: interview.createdAt,
     updatedAt: interview.updatedAt,
     candidate: {
@@ -1118,6 +1240,14 @@ export const getCandidateInterviews = async (candidateId, options = {}) => {
     status: interview.status,
     changeHistory: interview.changeHistory,
     isReminderSent: interview.isReminderSent,
+    result: interview.result,
+    evaluatedAt: interview.evaluatedAt,
+    evaluatedBy: interview.evaluatedBy,
+    evaluationNote: interview.evaluationNote,
+    workflowId: interview.workflowId,
+    workflowNodeId: interview.workflowNodeId,
+    sequence: interview.sequence,
+    roundName: interview.roundName,
     createdAt: interview.createdAt,
     updatedAt: interview.updatedAt,
     application: interview.applicationId
@@ -1245,6 +1375,14 @@ export const getInterviewDetails = async (interviewId, userId, userRole) => {
     changeHistory: interview.changeHistory,
     chatTranscript: interview.chatTranscript,
     isReminderSent: interview.isReminderSent,
+    result: interview.result,
+    evaluatedAt: interview.evaluatedAt,
+    evaluatedBy: interview.evaluatedBy,
+    evaluationNote: interview.evaluationNote,
+    workflowId: interview.workflowId,
+    workflowNodeId: interview.workflowNodeId,
+    sequence: interview.sequence,
+    roundName: interview.roundName,
     createdAt: interview.createdAt,
     updatedAt: interview.updatedAt,
     candidate: {

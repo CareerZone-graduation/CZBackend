@@ -427,8 +427,12 @@ export const getApplicationById = async (userId, applicationId) => {
     // Thêm recruiterId vào response để frontend có thể sử dụng cho tính năng nhắn tin
     const recruiterId = application.jobId?.recruiterProfileId?.userId;
 
-    // Lấy thông tin phỏng vấn nếu có
-    const interview = await InterviewRoom.findOne({ applicationId: application._id }).lean();
+    // Lấy toàn bộ lịch sử phỏng vấn để hỗ trợ workflow nhiều vòng.
+    const interviews = await InterviewRoom.find({ applicationId: application._id })
+        .sort({ sequence: 1, createdAt: 1 })
+        .lean();
+    const interview = interviews[0] || null;
+    const latestInterview = interviews.length ? interviews[interviews.length - 1] : null;
 
     // Lấy thông tin bài kiểm tra (nếu có)
     const testAssignments = await TestAssignment.find({ applicationId: application._id })
@@ -454,6 +458,31 @@ export const getApplicationById = async (userId, applicationId) => {
             roomName: interview.roomName,
             isEnded: interview.status === 'ENDED' || interview.status === 'COMPLETED'
         } : null,
+        latestInterviewInfo: latestInterview ? {
+            interviewId: latestInterview._id,
+            sequence: latestInterview.sequence,
+            workflowNodeId: latestInterview.workflowNodeId,
+            scheduledTime: latestInterview.scheduledTime,
+            status: latestInterview.status,
+            roomName: latestInterview.roomName,
+            result: latestInterview.result
+        } : null,
+        interviewHistory: interviews.map((item) => ({
+            interviewId: item._id,
+            sequence: item.sequence,
+            workflowNodeId: item.workflowNodeId,
+            roundName: item.roundName,
+            scheduledTime: item.scheduledTime,
+            startTime: item.startTime,
+            endTime: item.endTime,
+            status: item.status,
+            result: item.result,
+            duration: item.duration,
+            createdAt: item.createdAt,
+            evaluatedAt: item.evaluatedAt,
+            evaluationNote: item.evaluationNote,
+            roomName: item.roomName
+        })),
         testAssignments: testAssignments && testAssignments.length > 0 ? testAssignments : null
     };
 };

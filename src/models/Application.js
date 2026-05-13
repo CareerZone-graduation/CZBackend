@@ -153,6 +153,25 @@ const applicationSchema = new mongoose.Schema({
     resumeAt: {
       type: Date,
       default: null
+    },
+    waitingFor: {
+      type: {
+        type: String,
+        enum: ['INTERVIEW', 'TEST', 'DELAY', null],
+        default: null
+      },
+      workflowNodeId: {
+        type: String,
+        default: null
+      },
+      interviewRoomId: {
+        type: String,
+        default: null
+      },
+      requestedAt: {
+        type: Date,
+        default: null
+      }
     }
   },
   lastStatusUpdateAt: {

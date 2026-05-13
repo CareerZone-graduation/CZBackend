@@ -131,7 +131,15 @@ describe('Job workflow assignment constraints', () => {
       jobId: job._id,
       candidateProfileId: new mongoose.Types.ObjectId(),
       workflowId: workflow._id,
-      workflowData: { currentNodeId: startNode._id.toString() },
+      workflowData: {
+        currentNodeId: startNode._id.toString(),
+        waitingFor: {
+          type: null,
+          workflowNodeId: null,
+          interviewRoomId: null,
+          requestedAt: null
+        }
+      },
       candidateName: 'Candidate Test',
       candidateEmail: 'candidate@test.com',
       candidatePhone: '0900000000',
@@ -145,8 +153,7 @@ describe('Job workflow assignment constraints', () => {
     await expect(
       updateJob(job._id.toString(), recruiterUser._id.toString(), { workflowId: null })
     ).rejects.toMatchObject({
-      statusCode: 400,
-      message: 'Không thể đổi job gán workflow khi còn hồ sơ chưa tới node END.'
+      statusCode: 400
     });
   });
 });

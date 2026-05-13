@@ -28,6 +28,13 @@ router.get(
   interviewController.getMyCandidateInterviews
 );
 
+router.get(
+  '/applications/:applicationId/interviews',
+  authMiddleware.candidateOrRecruiter,
+  validationMiddleware.validateParams(interviewSchema.applicationIdParam),
+  interviewController.getApplicationInterviewHistory
+);
+
 // === Core Interview Management Routes (Task 4.1) ===
 
 /**

@@ -15,13 +15,16 @@ import { AppError } from '../utils/AppError.js';
 import CandidateProfile from '../models/CandidateProfile.js';
 import Job from '../models/Job.js';
 import RecruiterProfile from '../models/RecruiterProfile.js';
+import InterviewRoom from '../models/InterviewRoom.js';
 import { EmailTemplate } from '../models/index.js';
+import { applyApplicationStatusChange } from './application.service.js';
 
 const WORKFLOW_EXECUTION_RETRY_MAX = parseInt(process.env.WORKFLOW_EXECUTION_RETRY_MAX || '3', 10);
 const WORKFLOW_EXECUTION_RETRY_DELAY_MS = 5000;
 const LLM_API_KEY = process.env.LLM_API_KEY;
 const LLM_BASE_URL = process.env.LLM_BASE_URL;
 const LLM_MODEL = process.env.LLM_MODEL || 'gemini-3-flash';
+const APPLICATION_STATUS_VALUES = new Set(Application.schema.path('status').enumValues);
 
 const extractTextFromPDF = async (buffer) => {
   const loadingTask = pdfjsLib.getDocument({ data: buffer });
@@ -171,11 +174,6 @@ export const startWorkflowForApplication = async (applicationId) => {
 
   application.workflowId = workflow._id;
   application.currentStageNodeId = firstNode._id;
-
-  // Set application status based on stage config status mapping
-  if (firstNode.config && firstNode.config.statusMapping) {
-    application.status = firstNode.config.statusMapping;
-  }
 
   if (!application.workflowData) {
     application.workflowData = {};
@@ -332,21 +330,45 @@ export const executeWorkflowNode = async ({ applicationId, workflowId, currentNo
 
 const executeStageNode = async (application, node, executionLog) => {
   application.currentStageNodeId = node._id;
-  const previousStatus = application.status;
-  if (node.config && node.config.statusMapping) {
-    application.status = node.config.statusMapping;
+  if (!application.workflowData) application.workflowData = {};
+
+  const alreadyWaitingForThisInterview = application.workflowData.waitingFor?.type === 'INTERVIEW'
+    && application.workflowData.waitingFor?.workflowNodeId === node._id.toString();
+
+  if (node.config?.statusMapping && APPLICATION_STATUS_VALUES.has(node.config.statusMapping)) {
+    applyApplicationStatusChange(application, node.config.statusMapping, {
+      detail: node.config.statusMapping === 'SCHEDULED_INTERVIEW'
+        ? 'Workflow đã chuyển hồ sơ sang vòng phỏng vấn'
+        : `Workflow đã tự động chuyển hồ sơ sang trạng thái ${node.config.statusMapping}`
+    });
+  } else if (node.config?.statusMapping) {
+    logger.warn(`Workflow node ${node._id} has unsupported application statusMapping "${node.config.statusMapping}". Skipping status update.`);
+  }
+
+  if (node.config && node.config.statusMapping !== 'SCHEDULED_INTERVIEW' && application.workflowData.waitingFor?.type === 'INTERVIEW') {
+    application.workflowData.waitingFor = {
+      type: null,
+      workflowNodeId: null,
+      interviewRoomId: null,
+      requestedAt: null
+    };
   }
   
   const connection = await WorkflowConnection.findOne({ sourceNodeId: node._id });
 
   // Nếu là vòng Phỏng vấn, thì dừng lại không chạy tiếp (tương tự như ACTION_TEST chờ làm bài)
   if (node.config && node.config.statusMapping === 'SCHEDULED_INTERVIEW') {
-    if (!application.workflowData) application.workflowData = {};
     application.workflowData.isWorkflowPaused = true;
     application.workflowData.pendingNextNodeId = connection ? connection.targetNodeId.toString() : null;
+    application.workflowData.waitingFor = {
+      type: 'INTERVIEW',
+      workflowNodeId: node._id.toString(),
+      interviewRoomId: null,
+      requestedAt: new Date()
+    };
     await application.save();
 
-    if (previousStatus !== 'SCHEDULED_INTERVIEW') {
+    if (!alreadyWaitingForThisInterview) {
       try {
         const job = await Job.findById(application.jobId);
         if (job && job.recruiterProfileId) {
@@ -381,16 +403,50 @@ const executeStageNode = async (application, node, executionLog) => {
   return null;
 };
 
+const resolveConditionValue = async (application, field) => {
+  if (field === 'test_score') {
+    return application.test_score;
+  }
+
+  if (field === 'interview_result') {
+    const workflowNodeId = application.workflowData?.waitingFor?.workflowNodeId || application.workflowData?.currentNodeId || null;
+
+    const query = workflowNodeId
+      ? {
+        applicationId: application._id,
+        workflowNodeId,
+        result: { $in: ['PASSED', 'FAILED'] }
+      }
+      : {
+        applicationId: application._id,
+        result: { $in: ['PASSED', 'FAILED'] }
+      };
+
+    let interview = await InterviewRoom.findOne(query)
+      .sort({ sequence: -1, createdAt: -1 });
+
+    if (!interview && workflowNodeId) {
+      interview = await InterviewRoom.findOne({
+        applicationId: application._id,
+        result: { $in: ['PASSED', 'FAILED'] }
+      }).sort({ sequence: -1, createdAt: -1 });
+    }
+
+    if (!interview) {
+      throw new Error(`Interview result not found for application ${application._id}`);
+    }
+
+    return interview.result;
+  }
+
+  return application[field];
+};
+
 const executeConditionNode = async (application, node, executionLog) => {
   const { field, operator, value } = node.config;
   let conditionResult = false;
 
-  let actualValue;
-  if (field === 'test_score') {
-    actualValue = application.test_score;
-  } else {
-    actualValue = application[field];
-  }
+  const actualValue = await resolveConditionValue(application, field);
 
   switch (operator) {
     case '>': conditionResult = actualValue > value; break;
@@ -612,7 +668,9 @@ const executeActionDelayNode = async (application, node, executionLog) => {
   return null;
 };
 
-
+export const __private__ = {
+  resolveConditionValue
+};
 
 export const retryFailedExecution = async (userId, executionId) => {
   const execution = await WorkflowExecution.findById(executionId);

@@ -95,6 +95,77 @@ describe('Workflow END guards', () => {
     });
   });
 
+  it('rejects update to ACTIVE when workflow graph is invalid', async () => {
+    const workflow = await createWorkflowBase();
+
+    await WorkflowNode.create({
+      workflowId: workflow._id,
+      type: 'STAGE',
+      name: 'Start',
+      position: { x: 0, y: 0 },
+      config: { statusMapping: 'PENDING' }
+    });
+
+    await expect(
+      updateWorkflow(recruiterUser._id.toString(), workflow._id.toString(), { status: 'ACTIVE' })
+    ).rejects.toMatchObject({
+      statusCode: 422,
+      message: 'Workflow phải có ít nhất một node END'
+    });
+  });
+
+  it('rejects activation when condition node is missing false branch', async () => {
+    const workflow = await createWorkflowBase();
+
+    const [startNode, conditionNode, endNode] = await WorkflowNode.create([
+      {
+        workflowId: workflow._id,
+        type: 'STAGE',
+        name: 'Start',
+        position: { x: 0, y: 0 },
+        config: { statusMapping: 'PENDING' }
+      },
+      {
+        workflowId: workflow._id,
+        type: 'CONDITION',
+        name: 'Score Check',
+        position: { x: 240, y: 0 },
+        config: { field: 'cv_score', operator: '>=', value: 70 }
+      },
+      {
+        workflowId: workflow._id,
+        type: 'END',
+        name: 'End',
+        position: { x: 480, y: 0 },
+        config: {}
+      }
+    ]);
+
+    await WorkflowConnection.create([
+      {
+        workflowId: workflow._id,
+        sourceNodeId: startNode._id,
+        sourcePort: 'default',
+        targetNodeId: conditionNode._id,
+        targetPort: 'input'
+      },
+      {
+        workflowId: workflow._id,
+        sourceNodeId: conditionNode._id,
+        sourcePort: 'true',
+        targetNodeId: endNode._id,
+        targetPort: 'input'
+      }
+    ]);
+
+    await expect(
+      activateWorkflow(recruiterUser._id.toString(), workflow._id.toString())
+    ).rejects.toMatchObject({
+      statusCode: 422,
+      message: 'Node điều kiện phải có đúng một kết nối cho nhánh true và đúng một kết nối cho nhánh false'
+    });
+  });
+
   it('rejects activation when a branch cannot reach END', async () => {
     const workflow = await createWorkflowBase();
 
@@ -144,6 +215,42 @@ describe('Workflow END guards', () => {
     ).rejects.toMatchObject({
       statusCode: 422,
       message: 'Workflow không hợp lệ: mọi nhánh phải dẫn đến node END'
+    });
+  });
+
+  it('rejects activation when stage maps to unsupported application status', async () => {
+    const workflow = await createWorkflowBase();
+
+    const [startNode, endNode] = await WorkflowNode.create([
+      {
+        workflowId: workflow._id,
+        type: 'STAGE',
+        name: 'Start',
+        position: { x: 0, y: 0 },
+        config: { statusMapping: 'REVIEWING' }
+      },
+      {
+        workflowId: workflow._id,
+        type: 'END',
+        name: 'End',
+        position: { x: 240, y: 0 },
+        config: {}
+      }
+    ]);
+
+    await WorkflowConnection.create({
+      workflowId: workflow._id,
+      sourceNodeId: startNode._id,
+      sourcePort: 'default',
+      targetNodeId: endNode._id,
+      targetPort: 'input'
+    });
+
+    await expect(
+      activateWorkflow(recruiterUser._id.toString(), workflow._id.toString())
+    ).rejects.toMatchObject({
+      statusCode: 422,
+      message: 'Trạng thái "REVIEWING" không hợp lệ cho workflow'
     });
   });
 

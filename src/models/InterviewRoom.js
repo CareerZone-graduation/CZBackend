@@ -66,6 +66,49 @@ const interviewRoomSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Application'
   },
+  workflowId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Workflow',
+    default: null
+  },
+  workflowNodeId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'WorkflowNode',
+    default: null
+  },
+  sequence: {
+    type: Number,
+    min: [1, 'Sequence must be at least 1'],
+    default: null
+  },
+  roundName: {
+    type: String,
+    trim: true,
+    default: null
+  },
+  result: {
+    type: String,
+    enum: {
+      values: ['PASSED', 'FAILED', null],
+      message: '{VALUE} is not a valid interview result'
+    },
+    default: null
+  },
+  evaluatedAt: {
+    type: Date,
+    default: null
+  },
+  evaluatedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  evaluationNote: {
+    type: String,
+    trim: true,
+    maxlength: [2000, 'Evaluation note cannot exceed 2000 characters'],
+    default: null
+  },
   roomId: {
     type: String,
     unique: true,
@@ -181,6 +224,10 @@ interviewRoomSchema.index({ recruiterId: 1, scheduledTime: 1 });
 interviewRoomSchema.index({ candidateId: 1, scheduledTime: 1 });
 // Index để tìm phỏng vấn dựa trên đơn ứng tuyển
 interviewRoomSchema.index({ applicationId: 1 });
+interviewRoomSchema.index({ applicationId: 1, sequence: 1 });
+interviewRoomSchema.index({ applicationId: 1, createdAt: 1 });
+interviewRoomSchema.index({ applicationId: 1, workflowNodeId: 1, createdAt: -1 });
+interviewRoomSchema.index({ applicationId: 1, status: 1 });
 // Index để lọc phỏng vấn theo trạng thái
 interviewRoomSchema.index({ status: 1 });
 // Index để sắp xếp các cuộc phỏng vấn theo thời gian

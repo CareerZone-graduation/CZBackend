@@ -54,6 +54,11 @@ export const interviewIdParam = z.object({
     .regex(objectIdRegex, 'Interview ID must be a valid MongoDB ObjectId')
 });
 
+export const applicationIdParam = z.object({
+  applicationId: z.string()
+    .regex(objectIdRegex, 'Application ID must be a valid MongoDB ObjectId')
+});
+
 /**
  * Update interview status request body validation schema
  * Used to change interview status (SCHEDULED, STARTED, COMPLETED, CANCELLED, RESCHEDULED)

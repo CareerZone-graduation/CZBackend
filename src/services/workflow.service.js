@@ -17,6 +17,7 @@ import {
 } from '../utils/AppError.js';
 
 const WORKFLOW_STATUSES = ['INACTIVE', 'ACTIVE'];
+const APPLICATION_STATUS_VALUES = new Set(Application.schema.path('status').enumValues);
 
 const toObjectId = (value, fieldName = 'ID') => {
   if (!mongoose.Types.ObjectId.isValid(value)) {
@@ -70,8 +71,8 @@ const assertNodeTypeRules = (nodes, outgoingByNode) => {
         throw new UnprocessableEntityError('Node điều kiện chỉ được nối qua nhánh true/false');
       }
 
-      if (trueEdges > 1 || falseEdges > 1) {
-        throw new UnprocessableEntityError('Node điều kiện chỉ được có tối đa một kết nối cho mỗi nhánh true/false');
+      if (trueEdges !== 1 || falseEdges !== 1) {
+        throw new UnprocessableEntityError('Node điều kiện phải có đúng một kết nối cho nhánh true và đúng một kết nối cho nhánh false');
       }
     } else {
       const nonDefaultEdges = outgoing.filter((edge) => edge.sourcePort !== 'default').length;
@@ -217,7 +218,17 @@ const validateWorkflowGraph = async (workflowId) => {
   // OFFER_SENT và ACCEPTED yêu cầu recruiter nhập thủ công (offer letter, file đính kèm)
   const DISALLOWED_STATUS_MAPPINGS = ['OFFER_SENT', 'ACCEPTED'];
   for (const node of nodes) {
-    if (node.type === 'STAGE' && DISALLOWED_STATUS_MAPPINGS.includes(node.config?.statusMapping)) {
+    if (node.type !== 'STAGE' || !node.config?.statusMapping) {
+      continue;
+    }
+
+    if (!APPLICATION_STATUS_VALUES.has(node.config.statusMapping)) {
+      throw new UnprocessableEntityError(
+        `Trạng thái "${node.config.statusMapping}" không hợp lệ cho workflow`
+      );
+    }
+
+    if (DISALLOWED_STATUS_MAPPINGS.includes(node.config.statusMapping)) {
       throw new UnprocessableEntityError(
         `Không thể dùng trạng thái "${node.config.statusMapping}" trong workflow. Bước gửi offer cần thực hiện thủ công (có đính kèm thư mời và file offer).`
       );
@@ -535,6 +546,7 @@ export const updateWorkflow = async (userId, workflowId, payload = {}) => {
   await assertWorkflowIsMutable(workflow._id);
 
   const updateData = {};
+  const updateOps = { $set: updateData };
 
   if (typeof payload.name !== 'undefined') {
     const name = payload.name?.trim();
@@ -553,13 +565,20 @@ export const updateWorkflow = async (userId, workflowId, payload = {}) => {
       throw new BadRequestError('Trạng thái workflow không hợp lệ');
     }
     updateData.status = payload.status;
+
+    if (payload.status === 'ACTIVE') {
+      const graphStats = await validateWorkflowGraph(workflow._id);
+      updateData['metadata.totalNodes'] = graphStats.totalNodes;
+      updateData['metadata.totalConnections'] = graphStats.totalConnections;
+      updateOps.$inc = { 'metadata.version': 1 };
+    }
   }
 
   if (!Object.keys(updateData).length) {
     return getWorkflowById(userId, workflow._id.toString());
   }
 
-  await Workflow.findByIdAndUpdate(workflow._id, { $set: updateData });
+  await Workflow.findByIdAndUpdate(workflow._id, updateOps);
 
   return getWorkflowById(userId, workflow._id.toString());
 };

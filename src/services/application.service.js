@@ -9,6 +9,7 @@ import {
   InterviewRoom,
   TalentPool,
   TestAssignment,
+  WorkflowNode,
 } from '../models/index.js';
 import { NotFoundError, UnauthorizedError, BadRequestError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
@@ -54,7 +55,106 @@ export const logActivity = (application, action, detail) => {
   });
 };
 
+const APPLICATION_ACTIVITY_ACTIONS = new Set([
+  'APPLICATION_SUBMITTED',
+  'INTERVIEW_RESCHEDULED',
+  'INTERVIEW_CANCELLED',
+  'INTERVIEW_COMPLETED',
+  'APPLICATION_VIEWED',
+  'SUITABLE',
+  'SCHEDULED_INTERVIEW',
+  'OFFER_SENT',
+  'OFFER_ACCEPTED',
+  'OFFER_DECLINED',
+  'REJECTED',
+  'INTERVIEW_FAILED',
+  'INTERVIEW_PASSED'
+]);
 
+const getStatusActivityDetail = (status, feedback) => {
+  if (status === 'SUITABLE') return 'Nhà tuyển dụng đã đánh giá đơn ứng tuyển này là phù hợp';
+  if (status === 'SCHEDULED_INTERVIEW') return 'Nhà tuyển dụng đã đặt lịch phỏng vấn cho đơn ứng tuyển này';
+  if (status === 'OFFER_SENT') return 'Nhà tuyển dụng đã gửi lời mời cho đơn ứng tuyển này';
+  if (status === 'REJECTED') return 'Nhà tuyển dụng đã đánh giá đơn ứng tuyển này là không phù hợp';
+  if (status === 'INTERVIEW_FAILED') return feedback || 'Nhà tuyển dụng đánh giá phỏng vấn không đạt yêu cầu';
+  return null;
+};
+
+export const applyApplicationStatusChange = (application, status, options = {}) => {
+  application.status = status;
+  application.lastStatusUpdateAt = new Date();
+
+  const detail = options.detail || getStatusActivityDetail(status, options.feedback);
+  if (detail && APPLICATION_ACTIVITY_ACTIONS.has(status)) {
+    logActivity(application, status, detail);
+  }
+};
+
+const getInterviewHistoryByApplication = async (applicationId) => {
+  return InterviewRoom.find({ applicationId })
+    .sort({ sequence: 1, createdAt: 1 })
+    .lean();
+};
+
+const getCurrentWorkflowNodeId = (application) => {
+  const currentNodeId = application?.workflowData?.currentNodeId;
+  return currentNodeId ? currentNodeId.toString() : null;
+};
+
+const getWorkflowEndNodeIds = async (workflowId) => {
+  if (!workflowId) {
+    return new Set();
+  }
+
+  const endNodes = await WorkflowNode.find({ workflowId, type: 'END' })
+    .select('_id')
+    .lean();
+
+  return new Set(endNodes.map((node) => node._id.toString()));
+};
+
+const isWorkflowLockedByEndNode = (application, endNodeIds = new Set()) => {
+  if (!application?.workflowId) {
+    return false;
+  }
+
+  const currentNodeId = getCurrentWorkflowNodeId(application);
+  return !currentNodeId || !endNodeIds.has(currentNodeId);
+};
+
+const resolveWorkflowLockState = async (application) => {
+  if (!application?.workflowId) {
+    return false;
+  }
+
+  const endNodeIds = await getWorkflowEndNodeIds(application.workflowId);
+  return isWorkflowLockedByEndNode(application, endNodeIds);
+};
+
+const appendWorkflowLockState = async (applications = []) => {
+  const endNodeCache = new Map();
+
+  return Promise.all(
+    applications.map(async (application) => {
+      if (!application.workflowId) {
+        return { ...application, isWorkflowLocked: false };
+      }
+
+      const workflowId = application.workflowId.toString();
+      let endNodeIds = endNodeCache.get(workflowId);
+
+      if (!endNodeIds) {
+        endNodeIds = await getWorkflowEndNodeIds(application.workflowId);
+        endNodeCache.set(workflowId, endNodeIds);
+      }
+
+      return {
+        ...application,
+        isWorkflowLocked: isWorkflowLockedByEndNode(application, endNodeIds)
+      };
+    })
+  );
+};
 
 /**
  * Lấy danh sách ứng viên đã ứng tuyển vào một công việc cụ thể
@@ -186,7 +286,8 @@ export const getApplicationsByJob = async (jobId, recruiterId, options = {}) => 
         interview_result: 1,
         test_score: 1,
         cv_score: 1,
-        workflowId: 1
+        workflowId: 1,
+        workflowData: 1
       }
     },
     { $sort: sortOptions },
@@ -212,11 +313,12 @@ export const getApplicationsByJob = async (jobId, recruiterId, options = {}) => 
 
   // Thực hiện truy vấn
   const applications = await Application.aggregate(pipeline);
+  const applicationsWithWorkflowLockState = await appendWorkflowLockState(applications);
   // Đếm tổng số lượng
   const totalApplications = await Application.countDocuments(filter);
 
   return {
-    data: applications,
+    data: applicationsWithWorkflowLockState,
     meta: {
       currentPage: page,
       totalPages: Math.ceil(totalApplications / limit),
@@ -264,8 +366,9 @@ export const getApplicationById = async (applicationId, recruiterId) => {
     throw new UnauthorizedError('Bạn không có quyền xem đơn ứng tuyển này');
   }
 
-  // Lấy thông tin phỏng vấn nếu có
-  const interview = await InterviewRoom.findOne({ applicationId: application._id }).lean();
+  const interviews = await getInterviewHistoryByApplication(application._id);
+  const latestInterview = interviews.length ? interviews[interviews.length - 1] : null;
+  const isWorkflowLocked = await resolveWorkflowLockState(application);
   // Lấy kết quả bài test nếu có
   const testAssignment = await TestAssignment.findOne({ applicationId: application._id })
     .populate({ path: 'testId', select: 'name description duration passingScore totalScore questions' })
@@ -298,19 +401,39 @@ export const getApplicationById = async (applicationId, recruiterId) => {
   // Tạo và trả về đối tượng thông tin (candidateProfileId đã được populate đầy đủ)
   const applicationDetails = {
     ...application.toObject(),
+    isWorkflowLocked,
     candidateUserId: application.candidateProfileId?.userId,
     candidateAvatar: application.candidateProfileId?.avatar,
     isInTalentPool: !!isInTalentPool,
     talentPoolId: isInTalentPool ? isInTalentPool._id : null,
-    hasInterview: !!interview,
-    interviewInfo: interview
+    hasInterview: interviews.length > 0,
+    latestInterviewInfo: latestInterview
       ? {
-        interviewId: interview._id,
-        scheduledTime: interview.scheduledTime,
-        status: interview.status,
-        roomName: interview.roomName,
+        interviewId: latestInterview._id,
+        sequence: latestInterview.sequence,
+        workflowNodeId: latestInterview.workflowNodeId,
+        scheduledTime: latestInterview.scheduledTime,
+        status: latestInterview.status,
+        roomName: latestInterview.roomName,
+        result: latestInterview.result,
       }
       : null,
+    interviewHistory: interviews.map((interview) => ({
+      interviewId: interview._id,
+      sequence: interview.sequence,
+      workflowNodeId: interview.workflowNodeId,
+      roundName: interview.roundName,
+      scheduledTime: interview.scheduledTime,
+      startTime: interview.startTime,
+      endTime: interview.endTime,
+      status: interview.status,
+      result: interview.result,
+      duration: interview.duration,
+      createdAt: interview.createdAt,
+      evaluatedAt: interview.evaluatedAt,
+      evaluationNote: interview.evaluationNote,
+      roomName: interview.roomName,
+    })),
     testAssignment: testAssignment
       ? {
         assignmentId: testAssignment._id,
@@ -423,6 +546,13 @@ export const updateApplicationStatus = async (applicationId, recruiterId, status
     throw new UnauthorizedError('Bạn không có quyền cập nhật trạng thái cho đơn ứng tuyển này');
   }
 
+  const isWorkflowLocked = await resolveWorkflowLockState(application);
+
+  // Ngăn chặn thao tác thủ công khi application đang chạy workflow (chưa tới END)
+  if (isWorkflowLocked) {
+    throw new BadRequestError('Không thể cập nhật trạng thái thủ công cho đơn ứng tuyển đang chạy workflow tự động. Vui lòng sử dụng các chức năng đánh giá phỏng vấn hoặc chờ workflow hoàn tất.');
+  }
+
   // Validations for INTERVIEW_FAILED status
   if (status === 'INTERVIEW_FAILED') {
     // Must allow transitioning from SCHEDULED_INTERVIEW (Requirement 1.1)
@@ -445,26 +575,12 @@ export const updateApplicationStatus = async (applicationId, recruiterId, status
   }
 
   const oldStatus = application.status;
-  application.status = status;
-  application.lastStatusUpdateAt = new Date();
+  applyApplicationStatusChange(application, status, { feedback });
 
   // Save offer details if status is OFFER_SENT
   if (status === 'OFFER_SENT') {
     if (offerLetter) application.offerLetter = offerLetter;
     if (offerFile) application.offerFile = offerFile;
-  }
-
-  // Ghi log activity, cũng hiển thị cho ứng viên
-  if (status === 'SUITABLE') {
-    logActivity(application, 'SUITABLE', `Nhà tuyển dụng đã đánh giá đơn ứng tuyển này là phù hợp`);
-  } else if (status === 'SCHEDULED_INTERVIEW') {
-    logActivity(application, 'SCHEDULED_INTERVIEW', `Nhà tuyển dụng đã đặt lịch phỏng vấn cho đơn ứng tuyển này`);
-  } else if (status === 'OFFER_SENT') {
-    logActivity(application, 'OFFER_SENT', `Nhà tuyển dụng đã gửi lời mời cho đơn ứng tuyển này`);
-  } else if (status === 'REJECTED') {
-    logActivity(application, 'REJECTED', `Nhà tuyển dụng đã đánh giá đơn ứng tuyển này là không phù hợp`);
-  } else if (status === 'INTERVIEW_FAILED') {
-    logActivity(application, 'INTERVIEW_FAILED', feedback || 'Nhà tuyển dụng đánh giá phỏng vấn không đạt yêu cầu');
   }
 
   await application.save();
@@ -515,6 +631,7 @@ export const updateApplicationStatus = async (applicationId, recruiterId, status
   // Tạo và trả về đối tượng thông tin đầy đủ
   const applicationDetails = {
     ...application.toObject(),
+    isWorkflowLocked: await resolveWorkflowLockState(application),
     candidateUserId: application.candidateProfileId?.userId,
     candidateAvatar: application.candidateProfileId?.avatar,
     isInTalentPool: !!isInTalentPool,
@@ -744,6 +861,51 @@ export const gatherComparisonData = async (applicationIds, recruiterId) => {
   };
 };
 
+const emptyWaitingFor = {
+  type: null,
+  workflowNodeId: null,
+  interviewRoomId: null,
+  requestedAt: null
+};
+
+const normalizeWorkflowData = (workflowData = {}) => ({
+  lastExecutionAt: workflowData.lastExecutionAt || null,
+  isWorkflowPaused: !!workflowData.isWorkflowPaused,
+  pendingNextNodeId: workflowData.pendingNextNodeId || null,
+  currentNodeId: workflowData.currentNodeId || null,
+  resumeAt: workflowData.resumeAt || null,
+  waitingFor: {
+    ...emptyWaitingFor,
+    ...(workflowData.waitingFor || {})
+  }
+});
+
+const resolvePendingInterviewRoom = async (application) => {
+  const workflowData = normalizeWorkflowData(application.workflowData);
+  const waitingFor = workflowData.waitingFor;
+
+  if (waitingFor.interviewRoomId) {
+    return InterviewRoom.findById(waitingFor.interviewRoomId);
+  }
+
+  const workflowNodeId = waitingFor.workflowNodeId || workflowData.currentNodeId || null;
+
+  if (workflowNodeId) {
+    return InterviewRoom.findOne({
+      applicationId: application._id,
+      workflowNodeId,
+      status: { $in: ['COMPLETED', 'ENDED'] },
+      result: null
+    }).sort({ sequence: -1, createdAt: -1 });
+  }
+
+  return InterviewRoom.findOne({
+    applicationId: application._id,
+    status: { $in: ['COMPLETED', 'ENDED'] },
+    result: null
+  }).sort({ sequence: -1, createdAt: -1 });
+};
+
 /**
  * Đánh giá kết quả phỏng vấn tự động (Workflow)
  */
@@ -763,11 +925,36 @@ export const evaluateInterviewResult = async (applicationId, recruiterId, result
     throw new UnauthorizedError('Bạn không có quyền đánh giá đơn ứng tuyển này');
   }
 
-  // Cập nhật interview_result
-  application.interview_result = result;
-  if (feedback) {
-    application.notes = (application.notes || '') + `\n\n[Đánh giá Phỏng vấn - ${result}]: ${feedback}`;
+  application.workflowData = normalizeWorkflowData(application.workflowData);
+
+  const interviewRoom = await resolvePendingInterviewRoom(application);
+
+  if (!interviewRoom) {
+    throw new BadRequestError('Không xác định được vòng phỏng vấn đang chờ đánh giá');
   }
+
+  if (!['COMPLETED', 'ENDED'].includes(interviewRoom.status)) {
+    throw new BadRequestError('Chỉ có thể đánh giá cuộc phỏng vấn đã hoàn thành');
+  }
+
+  if (interviewRoom.result) {
+    throw new BadRequestError('Cuộc phỏng vấn này đã được đánh giá trước đó');
+  }
+
+  interviewRoom.result = result;
+  interviewRoom.evaluatedAt = new Date();
+  interviewRoom.evaluatedBy = recruiterId;
+  interviewRoom.evaluationNote = feedback || null;
+  await interviewRoom.save();
+
+  console.log('✅ Saved interview evaluation:', {
+    roomId: interviewRoom._id,
+    result: interviewRoom.result,
+    evaluatedAt: interviewRoom.evaluatedAt,
+    evaluationNote: interviewRoom.evaluationNote
+  });
+
+  application.interview_result = null;
 
   logActivity(application, result === 'PASSED' ? 'INTERVIEW_PASSED' : 'INTERVIEW_FAILED', `Nhà tuyển dụng đánh giá phỏng vấn: ${result === 'PASSED' ? 'ĐẠT' : 'KHÔNG ĐẠT'}`);
 
@@ -794,16 +981,21 @@ export const evaluateInterviewResult = async (applicationId, recruiterId, result
   }
 
   // Đánh thức Workflow nếu đang bị dừng
-  if (application.workflowData && application.workflowData.isWorkflowPaused) {
+  if (application.workflowData?.isWorkflowPaused) {
     application.workflowData.isWorkflowPaused = false;
+    application.workflowData.waitingFor = {
+      ...emptyWaitingFor
+    };
     await application.save();
 
-    await queueService.publishNotificationStrict(rabbitmq.ROUTING_KEYS.WORKFLOW_EXECUTION_CONTINUE, {
-      applicationId: application._id.toString(),
-      workflowId: application.workflowId.toString(),
-      currentNodeId: application.workflowData.pendingNextNodeId,
-      retryCount: 0
-    });
+    if (application.workflowData.pendingNextNodeId) {
+      await queueService.publishNotificationStrict(rabbitmq.ROUTING_KEYS.WORKFLOW_EXECUTION_CONTINUE, {
+        applicationId: application._id.toString(),
+        workflowId: application.workflowId.toString(),
+        currentNodeId: application.workflowData.pendingNextNodeId,
+        retryCount: 0
+      });
+    }
   }
 
   return application;

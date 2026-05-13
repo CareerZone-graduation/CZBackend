@@ -50,6 +50,17 @@ export const getInterviewById = asyncHandler(async (req, res) => {
   });
 });
 
+export const getApplicationInterviewHistory = asyncHandler(async (req, res) => {
+  const { applicationId } = req.params;
+  const interviews = await interviewService.getInterviewsByApplication(applicationId, req.user._id, req.user.role);
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy lịch sử phỏng vấn thành công',
+    data: interviews
+  });
+});
+
 /**
  * @desc    List interviews with filtering
  * @route   GET /api/interviews
