@@ -376,7 +376,7 @@ export const getWorkflowOwnershipContext = async (workflowId, userId) => {
   return { recruiterProfile, workflow };
 };
 
-const assertWorkflowIsMutable = async (workflowId) => {
+const assertWorkflowNotArchived = async (workflowId) => {
   const workflow = await Workflow.findById(workflowId).select('isArchived').lean();
   if (!workflow) {
     throw new NotFoundError('Không tìm thấy workflow');
@@ -385,18 +385,14 @@ const assertWorkflowIsMutable = async (workflowId) => {
   if (workflow.isArchived) {
     throw new BadRequestError('Workflow đã được lưu trữ, vui lòng khôi phục trước khi chỉnh sửa');
   }
+};
 
-  const endNodes = await WorkflowNode.find({ workflowId, type: 'END' }).select('_id').lean();
-  const endNodeIds = endNodes.map((node) => node._id.toString());
+const assertWorkflowStructureIsMutable = async (workflowId) => {
+  await assertWorkflowNotArchived(workflowId);
 
-  const query = { workflowId };
-  if (endNodeIds.length) {
-    query['workflowData.currentNodeId'] = { $nin: endNodeIds };
-  }
-
-  const activeApplications = await Application.countDocuments(query);
-  if (activeApplications > 0) {
-    throw new BadRequestError('Không thể chỉnh sửa hoặc xóa workflow khi còn hồ sơ chưa tới node END');
+  const hasApplications = await Application.exists({ workflowId });
+  if (hasApplications) {
+    throw new BadRequestError('Không thể chỉnh sửa cấu trúc workflow sau khi đã có ứng viên ứng tuyển');
   }
 };
 
@@ -543,7 +539,7 @@ export const createWorkflow = async (userId, payload = {}) => {
 };
 export const updateWorkflow = async (userId, workflowId, payload = {}) => {
   const { workflow } = await getWorkflowOwnershipContext(workflowId, userId);
-  await assertWorkflowIsMutable(workflow._id);
+  await assertWorkflowNotArchived(workflow._id);
 
   const updateData = {};
   const updateOps = { $set: updateData };
@@ -561,6 +557,8 @@ export const updateWorkflow = async (userId, workflowId, payload = {}) => {
   }
 
   if (typeof payload.status !== 'undefined') {
+    await assertWorkflowStructureIsMutable(workflow._id);
+
     if (!WORKFLOW_STATUSES.includes(payload.status)) {
       throw new BadRequestError('Trạng thái workflow không hợp lệ');
     }
@@ -585,7 +583,7 @@ export const updateWorkflow = async (userId, workflowId, payload = {}) => {
 
 export const deleteWorkflow = async (userId, workflowId) => {
   const { workflow } = await getWorkflowOwnershipContext(workflowId, userId);
-  await assertWorkflowIsMutable(workflow._id);
+  await assertWorkflowStructureIsMutable(workflow._id);
 
   const hasLinkedJob = await Job.exists({ workflowId: workflow._id });
 
@@ -716,7 +714,7 @@ export const activateWorkflow = async (userId, workflowId) => {
 
 export const createNode = async (userId, workflowId, payload) => {
   const { workflow } = await getWorkflowOwnershipContext(workflowId, userId);
-  await assertWorkflowIsMutable(workflow._id);
+  await assertWorkflowStructureIsMutable(workflow._id);
 
   const node = await WorkflowNode.create({
     workflowId: workflow._id,
@@ -733,7 +731,7 @@ export const createNode = async (userId, workflowId, payload) => {
 
 export const updateNode = async (userId, workflowId, nodeId, payload = {}) => {
   const { workflow } = await getWorkflowOwnershipContext(workflowId, userId);
-  await assertWorkflowIsMutable(workflow._id);
+  await assertWorkflowStructureIsMutable(workflow._id);
   const nodeObjectId = toObjectId(nodeId, 'Node ID');
 
   const node = await WorkflowNode.findOne({ _id: nodeObjectId, workflowId: workflow._id });
@@ -752,7 +750,7 @@ export const updateNode = async (userId, workflowId, nodeId, payload = {}) => {
 
 export const deleteNode = async (userId, workflowId, nodeId) => {
   const { workflow } = await getWorkflowOwnershipContext(workflowId, userId);
-  await assertWorkflowIsMutable(workflow._id);
+  await assertWorkflowStructureIsMutable(workflow._id);
   const nodeObjectId = toObjectId(nodeId, 'Node ID');
 
   const node = await WorkflowNode.findOne({ _id: nodeObjectId, workflowId: workflow._id });
@@ -775,7 +773,7 @@ export const deleteNode = async (userId, workflowId, nodeId) => {
 
 export const batchSaveNodes = async (userId, workflowId, payload = {}) => {
   const { workflow } = await getWorkflowOwnershipContext(workflowId, userId);
-  await assertWorkflowIsMutable(workflow._id);
+  await assertWorkflowStructureIsMutable(workflow._id);
 
   const incomingNodes = Array.isArray(payload.nodes) ? payload.nodes : [];
   const existingNodes = await WorkflowNode.find({ workflowId: workflow._id }).lean();
@@ -838,7 +836,7 @@ export const batchSaveNodes = async (userId, workflowId, payload = {}) => {
 
 export const createConnection = async (userId, workflowId, payload) => {
   const { workflow } = await getWorkflowOwnershipContext(workflowId, userId);
-  await assertWorkflowIsMutable(workflow._id);
+  await assertWorkflowStructureIsMutable(workflow._id);
 
   const sourceNodeId = toObjectId(payload.sourceNodeId, 'Source node ID');
   const targetNodeId = toObjectId(payload.targetNodeId, 'Target node ID');
@@ -885,7 +883,7 @@ export const createConnection = async (userId, workflowId, payload) => {
 
 export const deleteConnection = async (userId, workflowId, connectionId) => {
   const { workflow } = await getWorkflowOwnershipContext(workflowId, userId);
-  await assertWorkflowIsMutable(workflow._id);
+  await assertWorkflowStructureIsMutable(workflow._id);
   const connectionObjectId = toObjectId(connectionId, 'Connection ID');
 
   const deleted = await WorkflowConnection.findOneAndDelete({
@@ -904,7 +902,7 @@ export const deleteConnection = async (userId, workflowId, connectionId) => {
 
 export const batchSaveConnections = async (userId, workflowId, payload = {}) => {
   const { workflow } = await getWorkflowOwnershipContext(workflowId, userId);
-  await assertWorkflowIsMutable(workflow._id);
+  await assertWorkflowStructureIsMutable(workflow._id);
 
   const connectionsInput = Array.isArray(payload.connections) ? payload.connections : [];
 

@@ -10,6 +10,7 @@ import {
 import {
   activateWorkflow,
   cloneWorkflow,
+  createNode,
   deleteWorkflow,
   updateWorkflow
 } from '../../src/services/workflow.service.js';
@@ -254,7 +255,7 @@ describe('Workflow END guards', () => {
     });
   });
 
-  it('blocks update when applications have not reached END', async () => {
+  it('allows updating workflow metadata even when applications exist', async () => {
     const workflow = await createWorkflowBase();
 
     const [startNode, endNode] = await WorkflowNode.create([
@@ -284,15 +285,15 @@ describe('Workflow END guards', () => {
 
     await createApplicationInWorkflow(workflow._id, startNode._id);
 
-    await expect(
-      updateWorkflow(recruiterUser._id.toString(), workflow._id.toString(), { name: 'WF Updated' })
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: 'Không thể chỉnh sửa hoặc xóa workflow khi còn hồ sơ chưa tới node END'
+    const updated = await updateWorkflow(recruiterUser._id.toString(), workflow._id.toString(), {
+      name: 'WF Updated',
+      description: 'WF Description Updated'
     });
+    expect(updated.name).toBe('WF Updated');
+    expect(updated.description).toBe('WF Description Updated');
   });
 
-  it('allows update when all applications reached END', async () => {
+  it('blocks structural edits when applications already exist, including applications at END node', async () => {
     const workflow = await createWorkflowBase();
 
     const [startNode, endNode] = await WorkflowNode.create([
@@ -322,11 +323,20 @@ describe('Workflow END guards', () => {
 
     await createApplicationInWorkflow(workflow._id, endNode._id);
 
-    const updated = await updateWorkflow(recruiterUser._id.toString(), workflow._id.toString(), { name: 'WF Updated' });
-    expect(updated.name).toBe('WF Updated');
+    await expect(
+      createNode(recruiterUser._id.toString(), workflow._id.toString(), {
+        type: 'ACTION_EMAIL',
+        name: 'Email Node',
+        position: { x: 320, y: 0 },
+        config: {}
+      })
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: 'Không thể chỉnh sửa cấu trúc workflow sau khi đã có ứng viên ứng tuyển'
+    });
   });
 
-  it('blocks delete when applications have not reached END', async () => {
+  it('blocks delete when applications already exist, even when all are at END', async () => {
     const workflow = await createWorkflowBase();
 
     const [startNode, endNode] = await WorkflowNode.create([
@@ -354,13 +364,13 @@ describe('Workflow END guards', () => {
       targetPort: 'input'
     });
 
-    await createApplicationInWorkflow(workflow._id, startNode._id);
+    await createApplicationInWorkflow(workflow._id, endNode._id);
 
     await expect(
       deleteWorkflow(recruiterUser._id.toString(), workflow._id.toString())
     ).rejects.toMatchObject({
       statusCode: 400,
-      message: 'Không thể chỉnh sửa hoặc xóa workflow khi còn hồ sơ chưa tới node END'
+      message: 'Không thể chỉnh sửa cấu trúc workflow sau khi đã có ứng viên ứng tuyển'
     });
   });
 
