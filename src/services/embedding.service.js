@@ -58,6 +58,11 @@ const prepareTextForJob = (job) => {
  */
 export const generateJobEmbeddings = async (jobId) => {
   try {
+    await Job.findByIdAndUpdate(jobId, {
+      embeddingStatus: 'PROCESSING',
+      embeddingError: null
+    });
+
     const job = await Job.findById(jobId);
     if (!job) {
       throw new Error(`Job not found: ${jobId}`);
@@ -68,6 +73,10 @@ export const generateJobEmbeddings = async (jobId) => {
 
     if (!combinedText.trim()) {
       logger.warn('No text content found for job embedding generation', { jobId });
+      await Job.findByIdAndUpdate(jobId, {
+        embeddingStatus: 'FAILED',
+        embeddingError: 'Không có nội dung để tạo embedding'
+      });
       return;
     }
 
@@ -114,13 +123,19 @@ export const generateJobEmbeddings = async (jobId) => {
 
     if (chunks.length === 0) {
       logger.error('No embeddings generated for job', { jobId });
+      await Job.findByIdAndUpdate(jobId, {
+        embeddingStatus: 'FAILED',
+        embeddingError: 'Hệ thống tạo embedding hiện không khả dụng, vui lòng thử lại sau'
+      });
       return;
     }
 
     // Update job with embeddings
     await Job.findByIdAndUpdate(jobId, {
       chunks: chunks,
-      embeddingsUpdatedAt: new Date()
+      embeddingsUpdatedAt: new Date(),
+      embeddingStatus: 'READY',
+      embeddingError: null
     });
 
     logger.info('Successfully updated job with embeddings', {
@@ -130,6 +145,10 @@ export const generateJobEmbeddings = async (jobId) => {
     });
 
   } catch (error) {
+    await Job.findByIdAndUpdate(jobId, {
+      embeddingStatus: 'FAILED',
+      embeddingError: error.message || 'Embedding generation failed'
+    });
     logger.error('Error generating job embeddings', {
       jobId,
       error: error.message

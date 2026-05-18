@@ -104,6 +104,14 @@ router.get(
   recommendationController.getSuggestions
 );
 
+router.post(
+  '/:id/suggestions/retry-embedding',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.recruiterOnly,
+  validationMiddleware.validateParams(commonSchema.idParamSchema),
+  recommendationController.retrySuggestionEmbeddings
+);
+
 // Similar jobs endpoint (public, optional auth for isSaved status)
 router.get(
   '/:id/similar',

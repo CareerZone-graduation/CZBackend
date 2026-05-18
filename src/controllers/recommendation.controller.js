@@ -1,6 +1,7 @@
 import asyncHandler from 'express-async-handler';
 import {
   getCandidateSuggestionsAI,
+  retryJobEmbeddings,
   generateRecommendations as generateRecommendationsService,
   getRecommendations as getRecommendationsService,
   getAIRecommendations as getAIRecommendationsService,
@@ -57,6 +58,36 @@ export const getSuggestions = asyncHandler(async (req, res) => {
     success: true,
     data: results.data,
     message: 'Lấy danh sách ứng viên gợi ý thành công'
+  });
+});
+
+export const retrySuggestionEmbeddings = asyncHandler(async (req, res) => {
+  const { id: jobId } = req.params;
+  const userId = req.user._id;
+
+  const job = await Job.findById(jobId).populate('recruiterProfileId');
+
+  if (!job) {
+    throw new NotFoundError('Không tìm thấy tin tuyển dụng');
+  }
+
+  if (job.recruiterProfileId.userId.toString() !== userId.toString()) {
+    logger.warn('Unauthorized access attempt to retry suggestion embeddings', {
+      jobId,
+      userId,
+      jobOwnerId: job.recruiterProfileId.userId.toString()
+    });
+    throw new ForbiddenError('Bạn không có quyền thao tác với tin tuyển dụng này');
+  }
+
+  const result = await retryJobEmbeddings(jobId);
+
+  res.status(202).json({
+    success: true,
+    message: result.message,
+    data: {
+      status: result.status
+    }
   });
 });
 

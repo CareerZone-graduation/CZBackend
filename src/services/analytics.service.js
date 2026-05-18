@@ -132,7 +132,6 @@ export const getDashboardStats = async () => {
     totalJobs,
     totalApplications,
     totalInterviews,
-    neutralJobs,
 
     // 2. Tính doanh thu tháng hiện tại
     monthlyRevenueResult,
@@ -160,7 +159,6 @@ export const getDashboardStats = async () => {
     Job.countDocuments(),
     Application.countDocuments(),
     InterviewRoom.countDocuments(),
-    Job.countDocuments({ moderationStatus: 'NEUTRAL' }),
 
     // --- Doanh thu tháng hiện tại (từ đầu tháng đến nay) ---
     CoinRecharge.aggregate([
@@ -197,7 +195,6 @@ export const getDashboardStats = async () => {
     totalUsers,
     activeCompanies,
     jobListings: totalJobs,
-    neutralJobs, // Số lượng job lỗi (NEUTRAL)
     currentMonth: vn.month, // Tháng hiện tại theo VN timezone (1-12)
     currentMonthRevenue, // Doanh thu tháng hiện tại
     previousMonthRevenue, // Doanh thu tháng trước (để tính growth)

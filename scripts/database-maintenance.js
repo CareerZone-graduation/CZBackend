@@ -15,12 +15,20 @@ import * as Models from '../src/models/index.js';
 import User from '../src/models/User.js';
 import RecruiterProfile from '../src/models/RecruiterProfile.js';
 
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
-});
+let rl;
 
-const question = (query) => new Promise((resolve) => rl.question(query, resolve));
+const getReadline = () => {
+  if (!rl) {
+    rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+  }
+
+  return rl;
+};
+
+const question = (query) => new Promise((resolve) => getReadline().question(query, resolve));
 
 const connectDB = async () => {
   try {
@@ -302,6 +310,286 @@ const runApplicationOrphanCleanup = async (dryRun = true) => {
   return totalOrphans;
 };
 
+export const getInterviewNotificationReferenceId = (notification) => {
+  const entityId = notification.entity?.type === 'InterviewRoom' ? notification.entity?.id : null;
+  const metadataId = notification.metadata?.interviewId;
+  const referenceId = entityId || metadataId;
+
+  return referenceId ? referenceId.toString() : null;
+};
+
+export const runInterviewNotificationOrphanCleanup = async (dryRun = true) => {
+  console.log('\n' + chalk.cyan('━'.repeat(60)));
+  console.log(chalk.bold.cyan(`DỌN DẸP THÔNG BÁO PHỎNG VẤN MỒ CÔI (${dryRun ? 'CHỈ KIỂM TRA' : 'XÓA THỰC TẾ'})`));
+  console.log(chalk.cyan('━'.repeat(60)) + '\n');
+
+  const { Notification, InterviewRoom } = Models;
+  const interviewNotifications = await Notification.find({
+    type: 'interview',
+    $or: [
+      { 'entity.type': 'InterviewRoom' },
+      { 'metadata.interviewId': { $exists: true, $ne: null } },
+    ],
+  }).lean();
+
+  const orphanedNotifIds = [];
+  let invalidReferenceCount = 0;
+  let missingReferenceCount = 0;
+
+  for (const notification of interviewNotifications) {
+    const interviewId = getInterviewNotificationReferenceId(notification);
+    if (!interviewId) {
+      missingReferenceCount++;
+      continue;
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(interviewId)) {
+      invalidReferenceCount++;
+      orphanedNotifIds.push(notification._id);
+      continue;
+    }
+
+    const interviewExists = await InterviewRoom.exists({ _id: interviewId });
+    if (!interviewExists) orphanedNotifIds.push(notification._id);
+  }
+
+  if (orphanedNotifIds.length > 0) {
+    console.log(`   ⚠️ Tìm thấy ${orphanedNotifIds.length} thông báo phỏng vấn trỏ tới InterviewRoom không tồn tại`);
+    if (invalidReferenceCount > 0) {
+      console.log(`   ⚠️ Trong đó có ${invalidReferenceCount} thông báo có interviewId không hợp lệ`);
+    }
+
+    if (!dryRun) {
+      const result = await Notification.deleteMany({ _id: { $in: orphanedNotifIds } });
+      console.log(`   ${chalk.green('✓')} Đã xóa ${result.deletedCount} thông báo phỏng vấn mồ côi.`);
+      return result.deletedCount;
+    }
+  }
+
+  if (missingReferenceCount > 0) {
+    console.log(`   ℹ️ Bỏ qua ${missingReferenceCount} thông báo phỏng vấn không có interviewId/entity rõ ràng.`);
+  }
+
+  if (orphanedNotifIds.length === 0) {
+    console.log(chalk.green('✨ Không tìm thấy thông báo phỏng vấn mồ côi.'));
+  } else {
+    const suffix = dryRun ? '.' : ' và dọn dẹp.';
+    console.log('\n' + chalk.bold(`=> Tổng cộng: ${orphanedNotifIds.length} thông báo phỏng vấn mồ côi đã được tìm thấy${suffix}`));
+  }
+
+  return orphanedNotifIds.length;
+};
+
+export const getJobApplicantsNotificationReferenceId = (notification) => {
+  const metadataJobId = notification.metadata?.jobId;
+  if (metadataJobId) return metadataJobId.toString();
+
+  const match = notification.aggregationKey?.match(/^job:([a-f\d]{24}):applicants$/i);
+  return match ? match[1] : null;
+};
+
+export const runJobApplicantsNotificationOrphanCleanup = async (dryRun = true) => {
+  console.log('\n' + chalk.cyan('━'.repeat(60)));
+  console.log(chalk.bold.cyan(`DỌN DẸP THÔNG BÁO ỨNG VIÊN MỚI MỒ CÔI (${dryRun ? 'CHỈ KIỂM TRA' : 'XÓA THỰC TẾ'})`));
+  console.log(chalk.cyan('━'.repeat(60)) + '\n');
+
+  const { Notification, Job } = Models;
+  const applicantsNotifications = await Notification.find({
+    type: 'job_applicants_rollup',
+    $or: [
+      { 'metadata.jobId': { $exists: true, $ne: null } },
+      { aggregationKey: /^job:[a-f\d]{24}:applicants$/i },
+    ],
+  }).lean();
+
+  const orphanedNotifIds = [];
+  let invalidReferenceCount = 0;
+  let missingReferenceCount = 0;
+
+  for (const notification of applicantsNotifications) {
+    const jobId = getJobApplicantsNotificationReferenceId(notification);
+    if (!jobId) {
+      missingReferenceCount++;
+      continue;
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(jobId)) {
+      invalidReferenceCount++;
+      orphanedNotifIds.push(notification._id);
+      continue;
+    }
+
+    const jobExists = await Job.exists({ _id: jobId });
+    if (!jobExists) orphanedNotifIds.push(notification._id);
+  }
+
+  if (orphanedNotifIds.length > 0) {
+    console.log(`   ⚠️ Tìm thấy ${orphanedNotifIds.length} thông báo ứng viên mới trỏ tới Job không tồn tại`);
+    if (invalidReferenceCount > 0) {
+      console.log(`   ⚠️ Trong đó có ${invalidReferenceCount} thông báo có jobId không hợp lệ`);
+    }
+
+    if (!dryRun) {
+      const result = await Notification.deleteMany({ _id: { $in: orphanedNotifIds } });
+      console.log(`   ${chalk.green('✓')} Đã xóa ${result.deletedCount} thông báo ứng viên mới mồ côi.`);
+      return result.deletedCount;
+    }
+  }
+
+  if (missingReferenceCount > 0) {
+    console.log(`   ℹ️ Bỏ qua ${missingReferenceCount} thông báo ứng viên mới không có jobId/aggregationKey rõ ràng.`);
+  }
+
+  if (orphanedNotifIds.length === 0) {
+    console.log(chalk.green('✨ Không tìm thấy thông báo ứng viên mới mồ côi.'));
+  } else {
+    const suffix = dryRun ? '.' : ' và dọn dẹp.';
+    console.log('\n' + chalk.bold(`=> Tổng cộng: ${orphanedNotifIds.length} thông báo ứng viên mới mồ côi đã được tìm thấy${suffix}`));
+  }
+
+  return orphanedNotifIds.length;
+};
+
+export const getJobApprovalNotificationReferenceId = (notification) => {
+  const entityId = notification.entity?.type === 'Job' ? notification.entity?.id : null;
+  const metadataJobId = notification.metadata?.jobId;
+  const referenceId = entityId || metadataJobId;
+
+  return referenceId ? referenceId.toString() : null;
+};
+
+export const runJobApprovalNotificationOrphanCleanup = async (dryRun = true) => {
+  console.log('\n' + chalk.cyan('━'.repeat(60)));
+  console.log(chalk.bold.cyan(`DỌN DẸP THÔNG BÁO DUYỆT TIN MỒ CÔI (${dryRun ? 'CHỈ KIỂM TRA' : 'XÓA THỰC TẾ'})`));
+  console.log(chalk.cyan('━'.repeat(60)) + '\n');
+
+  const { Notification, Job } = Models;
+  const approvalNotifications = await Notification.find({
+    type: 'job_approval',
+    $or: [
+      { 'entity.type': 'Job' },
+      { 'metadata.jobId': { $exists: true, $ne: null } },
+    ],
+  }).lean();
+
+  const orphanedNotifIds = [];
+  let invalidReferenceCount = 0;
+  let missingReferenceCount = 0;
+
+  for (const notification of approvalNotifications) {
+    const jobId = getJobApprovalNotificationReferenceId(notification);
+    if (!jobId) {
+      missingReferenceCount++;
+      continue;
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(jobId)) {
+      invalidReferenceCount++;
+      orphanedNotifIds.push(notification._id);
+      continue;
+    }
+
+    const jobExists = await Job.exists({ _id: jobId });
+    if (!jobExists) orphanedNotifIds.push(notification._id);
+  }
+
+  if (orphanedNotifIds.length > 0) {
+    console.log(`   ⚠️ Tìm thấy ${orphanedNotifIds.length} thông báo duyệt tin tuyển dụng trỏ tới Job không tồn tại`);
+    if (invalidReferenceCount > 0) {
+      console.log(`   ⚠️ Trong đó có ${invalidReferenceCount} thông báo có jobId không hợp lệ`);
+    }
+
+    if (!dryRun) {
+      const result = await Notification.deleteMany({ _id: { $in: orphanedNotifIds } });
+      console.log(`   ${chalk.green('✓')} Đã xóa ${result.deletedCount} thông báo duyệt tin mồ côi.`);
+      return result.deletedCount;
+    }
+  }
+
+  if (missingReferenceCount > 0) {
+    console.log(`   ℹ️ Bỏ qua ${missingReferenceCount} thông báo duyệt tin không có jobId/entity rõ ràng.`);
+  }
+
+  if (orphanedNotifIds.length === 0) {
+    console.log(chalk.green('✨ Không tìm thấy thông báo duyệt tin tuyển dụng mồ côi.'));
+  } else {
+    const suffix = dryRun ? '.' : ' và dọn dẹp.';
+    console.log('\n' + chalk.bold(`=> Tổng cộng: ${orphanedNotifIds.length} thông báo duyệt tin mồ côi đã được tìm thấy${suffix}`));
+  }
+
+  return orphanedNotifIds.length;
+};
+
+export const getTalentPoolInvitationNotificationReferenceId = (notification) => {
+  const entityId = notification.entity?.type === 'Job' ? notification.entity?.id : null;
+  const metadataJobId = notification.metadata?.jobId;
+  const referenceId = entityId || metadataJobId;
+
+  return referenceId ? referenceId.toString() : null;
+};
+
+export const runTalentPoolInvitationNotificationOrphanCleanup = async (dryRun = true) => {
+  console.log('\n' + chalk.cyan('━'.repeat(60)));
+  console.log(chalk.bold.cyan(`DỌN DẸP THÔNG BÁO TALENT POOL MỒ CÔI (${dryRun ? 'CHỈ KIỂM TRA' : 'XÓA THỰC TẾ'})`));
+  console.log(chalk.cyan('━'.repeat(60)) + '\n');
+
+  const { Notification, Job } = Models;
+  const talentPoolNotifications = await Notification.find({
+    type: 'talent_pool_invitation',
+    $or: [
+      { 'entity.type': 'Job' },
+      { 'metadata.jobId': { $exists: true, $ne: null } },
+    ],
+  }).lean();
+
+  const orphanedNotifIds = [];
+  let invalidReferenceCount = 0;
+  let missingReferenceCount = 0;
+
+  for (const notification of talentPoolNotifications) {
+    const jobId = getTalentPoolInvitationNotificationReferenceId(notification);
+    if (!jobId) {
+      missingReferenceCount++;
+      continue;
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(jobId)) {
+      invalidReferenceCount++;
+      orphanedNotifIds.push(notification._id);
+      continue;
+    }
+
+    const jobExists = await Job.exists({ _id: jobId });
+    if (!jobExists) orphanedNotifIds.push(notification._id);
+  }
+
+  if (orphanedNotifIds.length > 0) {
+    console.log(`   ⚠️ Tìm thấy ${orphanedNotifIds.length} thông báo Talent Pool trỏ tới Job không tồn tại`);
+    if (invalidReferenceCount > 0) {
+      console.log(`   ⚠️ Trong đó có ${invalidReferenceCount} thông báo có jobId không hợp lệ`);
+    }
+
+    if (!dryRun) {
+      const result = await Notification.deleteMany({ _id: { $in: orphanedNotifIds } });
+      console.log(`   ${chalk.green('✓')} Đã xóa ${result.deletedCount} thông báo Talent Pool mồ côi.`);
+      return result.deletedCount;
+    }
+  }
+
+  if (missingReferenceCount > 0) {
+    console.log(`   ℹ️ Bỏ qua ${missingReferenceCount} thông báo Talent Pool không có jobId/entity rõ ràng.`);
+  }
+
+  if (orphanedNotifIds.length === 0) {
+    console.log(chalk.green('✨ Không tìm thấy thông báo Talent Pool mồ côi.'));
+  } else {
+    const suffix = dryRun ? '.' : ' và dọn dẹp.';
+    console.log('\n' + chalk.bold(`=> Tổng cộng: ${orphanedNotifIds.length} thông báo Talent Pool mồ côi đã được tìm thấy${suffix}`));
+  }
+
+  return orphanedNotifIds.length;
+};
+
 const mainMenu = async () => {
   await connectDB();
   
@@ -313,10 +601,14 @@ const mainMenu = async () => {
     console.log('2. Dọn dẹp dữ liệu đứt gãy (XÓA THỰC TẾ)');
     console.log('3. Xóa các tài khoản Recruiter ảo lỗi (email recruiter_xxx không có tên)');
     console.log('4. Dọn dẹp dữ liệu rác liên quan đến Application đã xóa');
+    console.log('5. Dọn dẹp thông báo phỏng vấn trỏ tới InterviewRoom đã mất');
+    console.log('6. Dọn dẹp thông báo ứng viên mới trỏ tới Job đã mất');
+    console.log('7. Dọn dẹp thông báo duyệt tin tuyển dụng trỏ tới Job đã mất');
+    console.log('8. Dọn dẹp thông báo Talent Pool trỏ tới Job đã mất');
     console.log('0. Thoát');
     console.log('='.repeat(60));
     
-    const choice = await question('Vui lòng chọn chức năng (0-4): ');
+    const choice = await question('Vui lòng chọn chức năng (0-8): ');
 
     if (choice === '0') {
       console.log(chalk.green('👋 Tạm biệt!'));
@@ -356,14 +648,60 @@ const mainMenu = async () => {
           console.log(chalk.yellow('\n❌ Đã hủy thao tác xóa.'));
         }
       }
+    } else if (choice === '5') {
+      const orphanedNotifications = await runInterviewNotificationOrphanCleanup(true);
+      if (orphanedNotifications > 0) {
+        const confirm = await question(chalk.bold.red('\nBạn có chắc chắn muốn XÓA VĨNH VIỄN các thông báo phỏng vấn mồ côi này? (yes/no): '));
+        if (confirm.toLowerCase() === 'yes' || confirm.toLowerCase() === 'y') {
+          await runInterviewNotificationOrphanCleanup(false);
+          console.log(chalk.bold.green('\n✅ Đã xóa thành công!'));
+        } else {
+          console.log(chalk.yellow('\n❌ Đã hủy thao tác xóa.'));
+        }
+      }
+    } else if (choice === '6') {
+      const orphanedNotifications = await runJobApplicantsNotificationOrphanCleanup(true);
+      if (orphanedNotifications > 0) {
+        const confirm = await question(chalk.bold.red('\nBạn có chắc chắn muốn XÓA VĨNH VIỄN các thông báo ứng viên mới mồ côi này? (yes/no): '));
+        if (confirm.toLowerCase() === 'yes' || confirm.toLowerCase() === 'y') {
+          await runJobApplicantsNotificationOrphanCleanup(false);
+          console.log(chalk.bold.green('\n✅ Đã xóa thành công!'));
+        } else {
+          console.log(chalk.yellow('\n❌ Đã hủy thao tác xóa.'));
+        }
+      }
+    } else if (choice === '7') {
+      const orphanedNotifications = await runJobApprovalNotificationOrphanCleanup(true);
+      if (orphanedNotifications > 0) {
+        const confirm = await question(chalk.bold.red('\nBạn có chắc chắn muốn XÓA VĨNH VIỄN các thông báo duyệt tin tuyển dụng mồ côi này? (yes/no): '));
+        if (confirm.toLowerCase() === 'yes' || confirm.toLowerCase() === 'y') {
+          await runJobApprovalNotificationOrphanCleanup(false);
+          console.log(chalk.bold.green('\n✅ Đã xóa thành công!'));
+        } else {
+          console.log(chalk.yellow('\n❌ Đã hủy thao tác xóa.'));
+        }
+      }
+    } else if (choice === '8') {
+      const orphanedNotifications = await runTalentPoolInvitationNotificationOrphanCleanup(true);
+      if (orphanedNotifications > 0) {
+        const confirm = await question(chalk.bold.red('\nBạn có chắc chắn muốn XÓA VĨNH VIỄN các thông báo Talent Pool mồ côi này? (yes/no): '));
+        if (confirm.toLowerCase() === 'yes' || confirm.toLowerCase() === 'y') {
+          await runTalentPoolInvitationNotificationOrphanCleanup(false);
+          console.log(chalk.bold.green('\n✅ Đã xóa thành công!'));
+        } else {
+          console.log(chalk.yellow('\n❌ Đã hủy thao tác xóa.'));
+        }
+      }
     } else {
       console.log(chalk.yellow('⚠️ Lựa chọn không hợp lệ!'));
     }
   }
 
-  rl.close();
+  if (rl) rl.close();
   await mongoose.connection.close();
   process.exit(0);
 };
 
-mainMenu();
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  mainMenu();
+}

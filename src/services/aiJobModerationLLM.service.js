@@ -577,7 +577,7 @@ export const autoModerateJobWithLLM = async (jobId) => {
 
   try {
     // 🛑 THÊM DÒNG NÀY ĐỂ GIẢ LẬP LỖI
-    //throw new Error('Test: Giả lập server AI bị sập để job ra trạng thái NEUTRAL');
+    //throw new Error('Test: Giả lập server AI bị sập để job bị từ chối');
 
     // Gọi LLM để phân tích
     const aiResult = await analyzeJobWithLLM({
@@ -606,7 +606,7 @@ export const autoModerateJobWithLLM = async (jobId) => {
         probabilities: { reject: null, approve: null },
         reasons: [],
         summary: null,
-        method: 'PhoBERT',
+        method: null,
         moderatedAt: null
       };
     }

@@ -4,6 +4,10 @@ import logger from '../utils/logger.js';
 import config from '../config/index.js';
 import ngeohash from 'ngeohash';
 import { RECOMMENDATION_SCORING, CATEGORY_LABELS } from '../constants/jobCategories.js';
+import { generateJobEmbeddings } from './embedding.service.js';
+
+const EMBEDDING_PROCESSING_MESSAGE = 'Tin tuyển dụng đang được xử lý dữ liệu AI. Vui lòng thử lại sau ít phút.';
+const EMBEDDING_RETRY_NOT_ALLOWED_MESSAGE = 'Chỉ có thể thử lại khi tin tuyển dụng chưa có embedding hoặc embedding bị lỗi.';
 
 /**
  * Calculate distance between two coordinates using Haversine formula
@@ -874,6 +878,14 @@ export const getCandidateSuggestions = async (jobId, options = {}) => {
     throw new NotFoundError('Không tìm thấy tin tuyển dụng');
   }
 
+  if (job.embeddingStatus === 'PROCESSING' || job.embeddingStatus === 'PENDING') {
+    throw new BadRequestError(EMBEDDING_PROCESSING_MESSAGE);
+  }
+
+  if (job.embeddingStatus === 'FAILED') {
+    throw new BadRequestError('Sinh embedding thất bại. Vui lòng bấm Retry xử lý embedding.');
+  }
+
   // Build query conditions based on job criteria
   const candidateQuery = {};
   const orConditions = [];
@@ -1128,8 +1140,22 @@ export const getCandidateSuggestionsAI = async (jobId, options = {}) => {
         body: errorBody,
       });
 
-      if (response.status === 503 || response.status === 400 || response.status === 404) {
-        throw new BadRequestError('Hệ thống AI hiện không thể xử lý yêu cầu hoặc tin tuyển dụng chưa đủ dữ liệu (embeddings). Vui lòng thử lại sau.');
+      if (response.status === 400) {
+        const normalizedBody = (errorBody || '').toLowerCase();
+        const isEmbeddingProcessingCase =
+          normalizedBody.includes('chunks missing') ||
+          normalizedBody.includes('no valid embeddings') ||
+          normalizedBody.includes('no embeddings yet') ||
+          normalizedBody.includes('chưa đủ dữ liệu (embeddings)');
+
+        if (isEmbeddingProcessingCase) {
+          throw new BadRequestError(EMBEDDING_PROCESSING_MESSAGE);
+        }
+
+        throw new BadRequestError('Hệ thống AI hiện không khả dụng. Vui lòng thử lại sau.');
+      }
+      if (response.status === 503 || response.status === 404) {
+        throw new BadRequestError('Hệ thống AI hiện không khả dụng. Vui lòng thử lại sau.');
       }
       throw new BadRequestError('Không thể lấy danh sách ứng viên gợi ý từ AI.');
     }
@@ -1216,6 +1242,42 @@ export const getCandidateSuggestionsAI = async (jobId, options = {}) => {
         matchingMethod: 'ai-python-scored'
       }
     }
+  };
+};
+
+export const retryJobEmbeddings = async (jobId) => {
+  const job = await Job.findById(jobId).select('chunks embeddingsUpdatedAt embeddingStatus').lean();
+
+  if (!job) {
+    throw new NotFoundError('Không tìm thấy tin tuyển dụng');
+  }
+
+  const hasChunks = Array.isArray(job.chunks) && job.chunks.length > 0;
+  const hasValidEmbedding = hasChunks && job.chunks.some((chunk) => Array.isArray(chunk.embedding) && chunk.embedding.length > 0);
+
+  if (job.embeddingStatus === 'PROCESSING') {
+    return {
+      status: 'processing',
+      message: EMBEDDING_PROCESSING_MESSAGE
+    };
+  }
+
+  if (hasValidEmbedding && job.embeddingStatus !== 'FAILED') {
+    throw new BadRequestError(EMBEDDING_RETRY_NOT_ALLOWED_MESSAGE);
+  }
+
+  setImmediate(async () => {
+    try {
+      await generateJobEmbeddings(jobId);
+      logger.info('Retry job embeddings completed', { jobId });
+    } catch (error) {
+      logger.error('Retry job embeddings failed', { jobId, error: error.message });
+    }
+  });
+
+  return {
+    status: 'processing',
+    message: EMBEDDING_PROCESSING_MESSAGE
   };
 };
 // ======== END OF AI VECTOR SEARCH IMPLEMENTATION ========

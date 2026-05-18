@@ -4,6 +4,7 @@ import { NotFoundError, BadRequestError, UnauthorizedError } from '../utils/AppE
 import mongoose from 'mongoose';
 import * as queueService from './queue.service.js';
 import { ROUTING_KEYS } from '../queues/rabbitmq.js';
+import { generateJobEmbeddings } from './embedding.service.js';
 import * as emailService from './email.service.js';
 import axios from 'axios';
 import config from '../config/index.js';
@@ -139,7 +140,6 @@ export const getJobStatistics = async () => {
   const [
     active,
     pending,
-    neutral,
     expired,
     inactive,
     rejected,
@@ -150,7 +150,6 @@ export const getJobStatistics = async () => {
     Job.countDocuments({ status: 'ACTIVE', moderationStatus: 'APPROVED' }),
     // PENDING: Chỉ jobs chờ duyệt
     Job.countDocuments({ moderationStatus: 'PENDING' }),
-    Promise.resolve(0),
     Job.countDocuments({ status: 'EXPIRED', moderationStatus: 'APPROVED' }),
     Job.countDocuments({ status: 'INACTIVE', moderationStatus: 'APPROVED' }),
     Job.countDocuments({ moderationStatus: 'REJECTED' }),
@@ -172,7 +171,6 @@ export const getJobStatistics = async () => {
   return {
     active,
     pending,
-    neutral,
     expired,
     inactive,
     rejected,
@@ -258,6 +256,19 @@ export const approveJob = async (jobId) => {
 
   await job.save();
 
+  // Trigger embedding generation in background after approval
+  setImmediate(async () => {
+    try {
+      await generateJobEmbeddings(job._id);
+      logger.info('Job embeddings generated after approval', { jobId: job._id.toString() });
+    } catch (error) {
+      logger.error('Failed to generate job embeddings after approval', {
+        jobId: job._id.toString(),
+        error: error.message
+      });
+    }
+  });
+
   // Publish notification
   if (job.recruiterProfileId?.userId?._id) {
     try {
@@ -301,7 +312,7 @@ export const rejectJob = async (jobId, rejectionReason) => {
   job.aiModerationResult.summary = rejectionReason || 'Không đáp ứng tiêu chuẩn';
   job.aiModerationResult.reasons = rejectionReason ? [rejectionReason] : [];
   job.aiModerationResult.moderatedAt = new Date();
-  job.aiModerationResult.method = 'MANUAL'; // Đánh dấu là duyệt thủ công
+  job.aiModerationResult.method = null;
 
   await job.save();
 
@@ -417,10 +428,8 @@ export const rejectJob = async (jobId, rejectionReason) => {
 //       aiResult
 //     };
 //   } catch (error) {
-//     // Nếu phân tích thất bại, chuyển sang trạng thái NEUTRAL (không xác định)
-
-//     // Chuyển sang NEUTRAL - Job này không thể duyệt bằng AI
-//     job.moderationStatus = 'NEUTRAL';
+//     // Nếu phân tích thất bại, chuyển sang trạng thái REJECTED
+//     job.moderationStatus = 'REJECTED';
 //     // Đảm bảo status là INACTIVE (không được phép ACTIVE khi chưa duyệt)
 //     job.status = 'INACTIVE';
 

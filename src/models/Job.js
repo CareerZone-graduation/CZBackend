@@ -220,9 +220,9 @@ const jobSchema = new mongoose.Schema({
       default: null
     },
     method: {
-      type: String, // 'PhoBERT', 'LLM', hoặc 'MANUAL'
-      enum: ['PhoBERT', 'LLM', 'MANUAL'],
-      default: 'PhoBERT'
+      type: String, // 'LLM'
+      enum: ['LLM'],
+      default: null
     },
     moderatedAt: {
       type: Date,
@@ -242,6 +242,15 @@ const jobSchema = new mongoose.Schema({
   },
   embeddingsUpdatedAt: {
     type: Date
+  },
+  embeddingStatus: {
+    type: String,
+    enum: ['PENDING', 'PROCESSING', 'READY', 'FAILED'],
+    default: 'PENDING'
+  },
+  embeddingError: {
+    type: String,
+    default: null
   }
 }, {
   timestamps: true,
