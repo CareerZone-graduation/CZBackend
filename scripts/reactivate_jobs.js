@@ -29,9 +29,9 @@ const updateJobs = async () => {
 
     const now = new Date();
     // 1/12/2025 -> Dec 1, 2025
-    const startDate = new Date('2025-02-05T00:00:00.000Z');
+    const startDate = new Date('2025-05-15T00:00:00.000Z');
     // 2/2/2026 -> Feb 2, 2026
-    const endDate = new Date('2026-06-02T23:59:59.999Z');
+    const endDate = new Date('2026-12-02T23:59:59.999Z');
 
     try {
         // Find jobs that are either expired OR not active
@@ -47,27 +47,30 @@ const updateJobs = async () => {
             ]
         };
 
-        const jobs = await Job.find(query);
+        const jobs = await Job.find(query).select('_id').lean();
         console.log(`Found ${jobs.length} jobs to update.`);
 
-        let updatedCount = 0;
-        for (const job of jobs) {
-            const newDeadline = getRandomDate(startDate, endDate);
+        if (jobs.length > 0) {
+            const bulkOps = jobs.map(job => {
+                const newDeadline = getRandomDate(startDate, endDate);
+                return {
+                    updateOne: {
+                        filter: { _id: job._id },
+                        update: { 
+                            $set: { 
+                                deadline: newDeadline, 
+                                status: 'ACTIVE' 
+                            } 
+                        }
+                    }
+                };
+            });
 
-            job.deadline = newDeadline;
-            job.status = 'ACTIVE';
-
-            // Also ensure moderationStatus is APPROVED if we want them to show up
-            if (job.moderationStatus !== 'APPROVED') {
-                // job.moderationStatus = 'APPROVED'; // User didn't explicitly ask for this, but "đang tuyển" implies visibility. Unsure.
-                // I will stick to status/deadline as requested.
-            }
-
-            await job.save();
-            updatedCount++;
+            const result = await Job.bulkWrite(bulkOps);
+            console.log(`Successfully updated ${result.modifiedCount} jobs with new deadline between ${startDate.toISOString()} and ${endDate.toISOString()} and status ACTIVE.`);
+        } else {
+            console.log('No jobs to update.');
         }
-
-        console.log(`Successfully updated ${updatedCount} jobs with new deadline between ${startDate.toISOString()} and ${endDate.toISOString()} and status ACTIVE.`);
     } catch (error) {
         console.error('Error updating jobs:', error);
     } finally {

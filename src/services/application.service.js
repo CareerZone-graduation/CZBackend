@@ -11,7 +11,7 @@ import {
   TestAssignment,
   WorkflowNode,
 } from '../models/index.js';
-import { NotFoundError, UnauthorizedError, BadRequestError } from '../utils/AppError.js';
+import { NotFoundError, UnauthorizedError, BadRequestError, ForbiddenError } from '../utils/AppError.js';
 import logger from '../utils/logger.js';
 import * as queueService from './queue.service.js';
 import * as rabbitmq from '../queues/rabbitmq.js';
@@ -928,22 +928,27 @@ export const scoreApplicationCV = async (applicationId, userId) => {
     return application.cvScore;
   }
 
+  const submittedCV = application.submittedCV;
+  if (!submittedCV) {
+    throw new BadRequestError('Đơn ứng tuyển không có CV');
+  }
+
   // 3. Extract CV text
   const { extractCVText } = await import('./cvScoring.service.js');
   let cvText = '';
   
-  if (application.submittedCV.source === 'TEMPLATE' && application.submittedCV.templateSnapshot) {
-    cvText = extractCVText(application.submittedCV.templateSnapshot);
-  } else if (application.submittedCV.source === 'UPLOADED') {
+  if (submittedCV.source === 'TEMPLATE' && submittedCV.templateSnapshot) {
+    cvText = extractCVText(submittedCV.templateSnapshot);
+  } else if (submittedCV.source === 'UPLOADED') {
     // For uploaded CV, use basic info (limited accuracy without PDF text extraction)
-    cvText = `CV: ${application.submittedCV.name}\nPath: ${application.submittedCV.path}\n\nLưu ý: Đây là CV uploaded, chỉ có thông tin cơ bản. Để chấm điểm chính xác hơn, vui lòng sử dụng CV template.`;
+    cvText = `CV: ${submittedCV.name}\nPath: ${submittedCV.path}\n\nLưu ý: Đây là CV uploaded, chỉ có thông tin cơ bản. Để chấm điểm chính xác hơn, vui lòng sử dụng CV template.`;
     logger.warn('Scoring uploaded CV with limited info', { cvTextLength: cvText.length });
   }
 
   logger.info('Extracted CV text', {
     applicationId,
     cvTextLength: cvText.length,
-    source: application.submittedCV.source
+    source: submittedCV.source
   });
 
   if (!cvText || cvText.length < 20) {
@@ -971,10 +976,12 @@ Skills: ${job.skills?.join(', ') || ''}
 
   // 6. Validate CV trước khi score
   const { validateCV, scoreCVWithLLM } = await import('./cvScoring.service.js');
-  const validation = validateCV(submittedCV);
-  
-  if (!validation.isValid) {
-    throw new BadRequestError(`File không hợp lệ: ${validation.reason}. Vui lòng upload CV thật với đầy đủ thông tin cá nhân, kinh nghiệm, kỹ năng.`);
+  if (submittedCV.source === 'TEMPLATE') {
+    const validation = validateCV(submittedCV.templateSnapshot);
+
+    if (!validation.isValid) {
+      throw new BadRequestError(`File không hợp lệ: ${validation.reason}. Vui lòng upload CV thật với đầy đủ thông tin cá nhân, kinh nghiệm, kỹ năng.`);
+    }
   }
 
   // 7. Score CV
@@ -1039,7 +1046,15 @@ export const evaluateInterviewResult = async (applicationId, recruiterId, result
   }
 
   const application = await Application.findById(applicationId).populate('jobId');
+  if (!application) {
+    throw new NotFoundError('Không tìm thấy đơn ứng tuyển');
+  }
+
   const job = application.jobId;
+  if (!job) {
+    throw new NotFoundError('Không tìm thấy công việc liên quan');
+  }
+
   const recruiterProfile = await RecruiterProfile.findOne({ userId: recruiterId });
   if (!recruiterProfile || job.recruiterProfileId.toString() !== recruiterProfile._id.toString()) {
     throw new UnauthorizedError('Bạn không có quyền đánh giá đơn ứng tuyển này');
