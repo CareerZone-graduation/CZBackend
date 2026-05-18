@@ -279,8 +279,9 @@ export const evaluateInterviewResult = asyncHandler(async (req, res) => {
 export const scoreCV = asyncHandler(async (req, res) => {
   const { applicationId } = req.params;
   const userId = req.user._id;
+  const forceRefresh = req.body?.forceRefresh === true;
 
-  const cvScore = await applicationService.scoreApplicationCV(applicationId, userId);
+  const cvScore = await applicationService.scoreApplicationCV(applicationId, userId, { forceRefresh });
 
   res.status(200).json({
     success: true,

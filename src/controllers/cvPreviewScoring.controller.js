@@ -9,11 +9,12 @@ import * as cvPreviewScoringService from '../services/cvPreviewScoring.service.j
 export const previewCVScore = asyncHandler(async (req, res) => {
   const { id: jobId } = req.params; // Route uses :id not :jobId
   const userId = req.user._id;
-  const { cvId, cvTemplateId } = req.body;
+  const { cvId, cvTemplateId, forceRefresh } = req.body;
 
   const scoringResult = await cvPreviewScoringService.previewCVScore(userId, jobId, {
     cvId,
-    cvTemplateId
+    cvTemplateId,
+    forceRefresh: forceRefresh === true
   });
 
   res.status(200).json({

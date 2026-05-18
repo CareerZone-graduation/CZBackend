@@ -1,9 +1,12 @@
 import axios from 'axios';
+import mammoth from 'mammoth';
+import { BadRequestError } from '../utils/AppError.js';
+import { extractTextFromPDF } from '../utils/pdfTextExtractor.js';
 import logger from '../utils/logger.js';
 
 const LLM_API_KEY = process.env.LLM_API_KEY;
 const LLM_BASE_URL = process.env.LLM_BASE_URL;
-const LLM_MODEL = process.env.LLM_MODEL || 'gpt-4o-mini';
+const LLM_MODEL = process.env.LLM_MODEL;
 
 /**
  * Chấm điểm CV dựa trên Job Description
@@ -14,10 +17,14 @@ const LLM_MODEL = process.env.LLM_MODEL || 'gpt-4o-mini';
  * @returns {Promise<Object>} Kết quả chấm điểm
  */
 export const scoreCVWithLLM = async ({ cvText, jdText, jobType = 'technical' }) => {
-  if (!LLM_API_KEY || !LLM_BASE_URL) {
-    logger.warn('LLM not configured, skipping CV scoring');
-    return null;
-  }
+
+  logger.info('Starting CV scoring with LLM', {
+    cvLength: cvText?.length || 0,
+    jdLength: jdText?.length || 0,
+    jobType,
+    hasCV: Boolean(cvText?.trim()),
+    hasJD: Boolean(jdText?.trim())
+  });
 
   try {
     const prompt = `You are an expert ATS (Applicant Tracking System), recruiter, career advisor, and data analyst.
@@ -26,6 +33,8 @@ You MUST return ONLY valid JSON (ALL TEXT IN VIETNAMESE except technical terms).
 
 ------------------------
 JOB DESCRIPTION:
+Job Type: ${jobType}
+
 ${jdText}
 
 ------------------------
@@ -218,7 +227,7 @@ IMPORTANT:
     const response = await axios.post(
       `${LLM_BASE_URL}/chat/completions`,
       {
-        model: LLM_MODEL,
+        model: "gemini-3-flash",
         messages: [
           {
             role: 'system',
@@ -230,14 +239,14 @@ IMPORTANT:
           }
         ],
         temperature: 0.3,
-        max_tokens: 4000
+        max_tokens: 15000
       },
       {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${LLM_API_KEY}`
         },
-        timeout: 45000
+        timeout: 60000
       }
     );
 
@@ -276,6 +285,7 @@ IMPORTANT:
   } catch (error) {
     logger.error('CV scoring error:', {
       message: error.message,
+      code: error.code,
       status: error.response?.status
     });
 
@@ -289,36 +299,67 @@ IMPORTANT:
  * @param {Object} cv - CV object từ database
  * @returns {Object} { isValid: boolean, reason: string }
  */
+const normalizeCVPayload = (cv) => {
+  if (!cv) return null;
+
+  if (cv.cvData && typeof cv.cvData === 'object') {
+    return cv.cvData;
+  }
+
+  if (cv.templateSnapshot && typeof cv.templateSnapshot === 'object') {
+    return cv.templateSnapshot;
+  }
+
+  return cv;
+};
+
+const normalizeList = (value) => (Array.isArray(value) ? value : []);
+
+const normalizeSkillLabel = (skill) => {
+  if (typeof skill === 'string') return skill.trim();
+  if (!skill || typeof skill !== 'object') return '';
+
+  const name = (skill.name || skill.skill || skill.title || '').toString().trim();
+  const level = (skill.level || skill.proficiency || '').toString().trim();
+
+  if (!name) return '';
+  return level ? `${name} (${level})` : name;
+};
+
 export const validateCV = (cv) => {
-  if (!cv) {
+  const cvData = normalizeCVPayload(cv);
+  if (!cvData) {
     return { isValid: false, reason: 'Không có dữ liệu CV' };
   }
 
   const missingFields = [];
 
   // 1. Check thông tin cá nhân (BẮT BUỘC)
-  if (!cv.personalInfo || !cv.personalInfo.fullName) {
+  if (!cvData.personalInfo || !cvData.personalInfo.fullName) {
     missingFields.push('Thông tin cá nhân (họ tên)');
   }
 
   // 2. Check mục tiêu nghề nghiệp (BẮT BUỘC)
-  if (!cv.objective && !cv.summary && !cv.professionalSummary) {
+  if (!cvData.objective && !cvData.summary && !cvData.professionalSummary) {
     missingFields.push('Mục tiêu nghề nghiệp');
   }
 
   // 3. Check kinh nghiệm HOẶC dự án (BẮT BUỘC - ít nhất 1 trong 2)
-  const hasExperience = cv.experience && cv.experience.length > 0;
-  const hasWorkExperience = cv.workExperience && cv.workExperience.length > 0;
-  const hasProjects = cv.projects && cv.projects.length > 0;
+  const hasExperience = normalizeList(cvData.experience).length > 0;
+  const hasWorkExperience = normalizeList(cvData.workExperience).length > 0;
+  const hasProjects = normalizeList(cvData.projects).length > 0;
   
   if (!hasExperience && !hasWorkExperience && !hasProjects) {
     missingFields.push('Kinh nghiệm làm việc hoặc Dự án');
   }
 
   // 4. Check kỹ năng (BẮT BUỘC)
-  const hasSkills = (cv.skills && cv.skills.length > 0) || 
-                    (cv.skillsTechnical && cv.skillsTechnical.length > 0) ||
-                    (cv.skillsSoft && cv.skillsSoft.length > 0);
+  const normalizedSkills = normalizeList(cvData.skills)
+    .map(normalizeSkillLabel)
+    .filter(Boolean);
+  const hasSkills = normalizedSkills.length > 0 || 
+                    normalizeList(cvData.skillsTechnical).length > 0 ||
+                    normalizeList(cvData.skillsSoft).length > 0;
   
   if (!hasSkills) {
     missingFields.push('Kỹ năng');
@@ -333,7 +374,7 @@ export const validateCV = (cv) => {
   }
 
   // Check độ dài text - CV thật thường có ít nhất 200 ký tự
-  const cvText = extractCVText(cv);
+  const cvText = extractCVText(cvData);
   if (cvText.length < 200) {
     return { 
       isValid: false, 
@@ -350,62 +391,143 @@ export const validateCV = (cv) => {
  * @returns {string} CV text
  */
 export const extractCVText = (cv) => {
-  if (!cv) return '';
+  const cvData = normalizeCVPayload(cv);
+  if (!cvData) return '';
 
   const sections = [];
 
   // Personal info (BẮT BUỘC)
-  if (cv.personalInfo) {
-    sections.push(`Name: ${cv.personalInfo.fullName || ''}`);
-    sections.push(`Email: ${cv.personalInfo.email || ''}`);
-    sections.push(`Phone: ${cv.personalInfo.phone || ''}`);
+  if (cvData.personalInfo) {
+    sections.push(`Name: ${cvData.personalInfo.fullName || ''}`);
+    sections.push(`Email: ${cvData.personalInfo.email || ''}`);
+    sections.push(`Phone: ${cvData.personalInfo.phone || ''}`);
   }
 
   // Objective (BẮT BUỘC)
-  if (cv.objective) {
-    sections.push(`\nObjective:\n${cv.objective}`);
-  } else if (cv.summary) {
-    sections.push(`\nObjective/Summary:\n${cv.summary}`);
+  if (cvData.objective) {
+    sections.push(`\nObjective:\n${cvData.objective}`);
+  } else if (cvData.summary) {
+    sections.push(`\nObjective/Summary:\n${cvData.summary}`);
+  } else if (cvData.professionalSummary) {
+    sections.push(`\nObjective/Summary:\n${cvData.professionalSummary}`);
   }
 
-  // Experience (BẮT BUỘC)
-  if (cv.experience && cv.experience.length > 0) {
+  // Work experience (CV model mới)
+  if (normalizeList(cvData.workExperience).length > 0) {
     sections.push('\nExperience:');
-    cv.experience.forEach((exp) => {
-      sections.push(`- ${exp.title} at ${exp.company} (${exp.startDate} - ${exp.endDate || 'Present'})`);
+    cvData.workExperience.forEach((exp) => {
+      const title = exp.position || exp.title || '';
+      const company = exp.company || '';
+      sections.push(`- ${title} at ${company} (${exp.startDate || ''} - ${exp.endDate || (exp.isCurrentJob ? 'Present' : '') || 'Present'})`);
+      if (exp.description) sections.push(`  ${exp.description}`);
+      normalizeList(exp.achievements).forEach((achievement) => {
+        sections.push(`  - ${achievement}`);
+      });
+    });
+  }
+
+  // Experience (BẮT BUỘC - structure cũ)
+  if (normalizeList(cvData.experience).length > 0) {
+    sections.push('\nExperience:');
+    cvData.experience.forEach((exp) => {
+      const title = exp.title || exp.position || '';
+      const company = exp.company || '';
+      sections.push(`- ${title} at ${company} (${exp.startDate || ''} - ${exp.endDate || 'Present'})`);
       if (exp.description) sections.push(`  ${exp.description}`);
     });
   }
 
   // Projects (BẮT BUỘC - nếu không có experience)
-  if (cv.projects && cv.projects.length > 0) {
+  if (normalizeList(cvData.projects).length > 0) {
     sections.push('\nProjects:');
-    cv.projects.forEach((proj) => {
+    cvData.projects.forEach((proj) => {
       sections.push(`- ${proj.name}: ${proj.description || ''}`);
-      if (proj.technologies) sections.push(`  Technologies: ${proj.technologies}`);
+      const technologies = Array.isArray(proj.technologies) ? proj.technologies.join(', ') : proj.technologies;
+      if (technologies) sections.push(`  Technologies: ${technologies}`);
     });
   }
 
   // Education (TÙY CHỌN - chỉ thêm nếu có)
-  if (cv.education && cv.education.length > 0) {
+  if (normalizeList(cvData.education).length > 0) {
     sections.push('\nEducation:');
-    cv.education.forEach((edu) => {
-      sections.push(`- ${edu.degree} at ${edu.school} (${edu.startDate} - ${edu.endDate || 'Present'})`);
+    cvData.education.forEach((edu) => {
+      const school = edu.school || edu.institution || edu.university || '';
+      sections.push(`- ${edu.degree || ''} at ${school} (${edu.startDate || ''} - ${edu.endDate || 'Present'})`);
     });
   }
 
   // Skills (TÙY CHỌN - chỉ thêm nếu có)
-  if (cv.skills && cv.skills.length > 0) {
-    sections.push(`\nSkills: ${cv.skills.join(', ')}`);
+  const parsedSkills = normalizeList(cvData.skills)
+    .map(normalizeSkillLabel)
+    .filter(Boolean);
+  if (parsedSkills.length > 0) {
+    sections.push(`\nSkills: ${parsedSkills.join(', ')}`);
+  }
+
+  if (normalizeList(cvData.skillsTechnical).length > 0) {
+    sections.push(`\nTechnical Skills: ${cvData.skillsTechnical.join(', ')}`);
+  }
+
+  if (normalizeList(cvData.skillsSoft).length > 0) {
+    sections.push(`\nSoft Skills: ${cvData.skillsSoft.join(', ')}`);
   }
 
   // Certifications (TÙY CHỌN - chỉ thêm nếu có)
-  if (cv.certifications && cv.certifications.length > 0) {
+  if (normalizeList(cvData.certifications).length > 0) {
     sections.push('\nCertifications:');
-    cv.certifications.forEach((cert) => {
+    cvData.certifications.forEach((cert) => {
+      const certName = typeof cert === 'string' ? cert : cert.name;
+      const issuer = typeof cert === 'string' ? '' : cert.issuer || cert.organization || '';
+      sections.push(`- ${certName || ''} (${issuer})`);
+    });
+  }
+
+  if (normalizeList(cvData.certificates).length > 0) {
+    sections.push('\nCertifications:');
+    cvData.certificates.forEach((cert) => {
       sections.push(`- ${cert.name} (${cert.issuer || ''})`);
     });
   }
 
   return sections.join('\n');
+};
+
+const getFileExtension = (value = '') => {
+  const cleanValue = value.split('?')[0].split('#')[0];
+  const dotIndex = cleanValue.lastIndexOf('.');
+  return dotIndex >= 0 ? cleanValue.slice(dotIndex).toLowerCase() : '';
+};
+
+export const extractUploadedCVText = async (uploadedCV) => {
+  if (!uploadedCV?.path) {
+    throw new BadRequestError('CV tải lên không có đường dẫn file để chấm điểm');
+  }
+
+  const response = await fetch(uploadedCV.path);
+  if (!response.ok) {
+    throw new BadRequestError('Không thể tải nội dung CV đã upload để chấm điểm');
+  }
+
+  const contentType = response.headers?.get?.('content-type') || '';
+  const fileExtension = getFileExtension(uploadedCV.name || uploadedCV.path);
+  const arrayBuffer = await response.arrayBuffer();
+  const uint8Array = new Uint8Array(arrayBuffer);
+
+  let cvText = '';
+  if (contentType.includes('pdf') || fileExtension === '.pdf') {
+    cvText = await extractTextFromPDF(uint8Array);
+  } else if (contentType.includes('wordprocessingml') || fileExtension === '.docx') {
+    const result = await mammoth.extractRawText({ buffer: Buffer.from(arrayBuffer) });
+    cvText = result.value || '';
+  } else if (contentType.startsWith('text/')) {
+    cvText = Buffer.from(arrayBuffer).toString('utf8');
+  } else {
+    throw new BadRequestError('Chấm điểm CV upload hiện chỉ hỗ trợ file PDF hoặc DOCX');
+  }
+
+  if (!cvText.trim()) {
+    throw new BadRequestError('Không trích xuất được nội dung từ CV đã upload');
+  }
+
+  return cvText.trim();
 };

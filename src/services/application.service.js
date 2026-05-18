@@ -1,5 +1,4 @@
 import mongoose from 'mongoose';
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import {
   Application,
   Job,
@@ -16,27 +15,7 @@ import logger from '../utils/logger.js';
 import * as queueService from './queue.service.js';
 import * as rabbitmq from '../queues/rabbitmq.js';
 import { pushNotification } from './notification.service.js';
-
-// Helper function to extract text from PDF buffer using pdfjs-dist
-async function extractTextFromPDF(buffer) {
-  try {
-    const loadingTask = pdfjsLib.getDocument({ data: buffer });
-    const pdf = await loadingTask.promise;
-    let fullText = '';
-
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items.map(item => item.str).join(' ');
-      fullText += pageText + '\n';
-    }
-
-    return fullText;
-  } catch (error) {
-    logger.error('Error extracting text from PDF with pdfjs-dist', error);
-    throw error;
-  }
-}
+import { extractTextFromPDF } from '../utils/pdfTextExtractor.js';
 
 // ==========================================================
 // === HELPER FUNCTIONS FOR AUTOMATION & LOGGING (NEW) ====
@@ -906,7 +885,7 @@ const resolvePendingInterviewRoom = async (application) => {
 };
 
 
-export const scoreApplicationCV = async (applicationId, userId) => {
+export const scoreApplicationCV = async (applicationId, userId, { forceRefresh = false } = {}) => {
   // 1. Tìm application và verify quyền
   const application = await Application.findById(applicationId)
     .populate('jobId')
@@ -923,9 +902,10 @@ export const scoreApplicationCV = async (applicationId, userId) => {
   }
 
   // 2. Kiểm tra đã chấm điểm chưa
-  if (application.cvScore && application.cvScore.overall_score) {
+  if (!forceRefresh && application.cvScore && Number.isFinite(application.cvScore.overall_score)) {
     // Đã chấm rồi, trả về kết quả cũ
-    return application.cvScore;
+    const { withCacheMetadata } = await import('./cvScoreCache.service.js');
+    return withCacheMetadata(application.cvScore, { isCached: true });
   }
 
   const submittedCV = application.submittedCV;
@@ -934,15 +914,17 @@ export const scoreApplicationCV = async (applicationId, userId) => {
   }
 
   // 3. Extract CV text
-  const { extractCVText } = await import('./cvScoring.service.js');
+  const { extractCVText, extractUploadedCVText } = await import('./cvScoring.service.js');
   let cvText = '';
+  let cvSource = submittedCV.source;
+  let sourceCvId = submittedCV.cvTemplateId || submittedCV.path || submittedCV.name;
+  let cvPayload = submittedCV.source === 'TEMPLATE' ? submittedCV.templateSnapshot : submittedCV;
   
   if (submittedCV.source === 'TEMPLATE' && submittedCV.templateSnapshot) {
     cvText = extractCVText(submittedCV.templateSnapshot);
   } else if (submittedCV.source === 'UPLOADED') {
-    // For uploaded CV, use basic info (limited accuracy without PDF text extraction)
-    cvText = `CV: ${submittedCV.name}\nPath: ${submittedCV.path}\n\nLưu ý: Đây là CV uploaded, chỉ có thông tin cơ bản. Để chấm điểm chính xác hơn, vui lòng sử dụng CV template.`;
-    logger.warn('Scoring uploaded CV with limited info', { cvTextLength: cvText.length });
+    cvText = await extractUploadedCVText(submittedCV);
+    logger.info('Extracted uploaded CV text for scoring', { cvTextLength: cvText.length });
   }
 
   logger.info('Extracted CV text', {
@@ -984,6 +966,40 @@ Skills: ${job.skills?.join(', ') || ''}
     }
   }
 
+  const {
+    buildCVScoreCacheKey,
+    getCachedCVScore,
+    saveCVScoreCache,
+    withCacheMetadata
+  } = await import('./cvScoreCache.service.js');
+
+  const cacheKey = buildCVScoreCacheKey({
+    userId,
+    job,
+    cvSource,
+    cvId: sourceCvId,
+    cvPayload
+  });
+
+  if (!forceRefresh) {
+    const cachedScore = await getCachedCVScore(cacheKey);
+    if (cachedScore) {
+      application.cvScore = {
+        ...cachedScore.scoringResult,
+        scoredAt: cachedScore.scoredAt || new Date()
+      };
+      await application.save();
+      logger.info('Application CV scoring cache hit', {
+        applicationId,
+        cacheId: cachedScore._id
+      });
+      return withCacheMetadata(application.cvScore, {
+        isCached: true,
+        cache: cachedScore
+      });
+    }
+  }
+
   // 7. Score CV
   const cvScore = await scoreCVWithLLM({ cvText, jdText, jobType });
 
@@ -1010,13 +1026,21 @@ Skills: ${job.skills?.join(', ') || ''}
   };
   await application.save();
 
+  const cache = await saveCVScoreCache(cacheKey, application.cvScore, {
+    cvName: submittedCV.name,
+    jobTitle: job.title
+  });
+
   logger.info('CV scored successfully', {
     applicationId: application._id,
     score: cvScore.overall_score,
     hasEnhanced: !!enhancedAnalysis
   });
 
-  return application.cvScore;
+  return withCacheMetadata(application.cvScore, {
+    isCached: false,
+    cache
+  });
 };
 
 

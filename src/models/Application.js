@@ -79,7 +79,7 @@ const applicationSchema = new mongoose.Schema({
   },
   source: {
     type: String,
-    enum: ['DIRECT_APPLY', 'TALENT_POOL_INVITATION', 'JOB_ALERT', 'CV_SCORING_PREVIEW'],
+    enum: ['DIRECT_APPLY', 'TALENT_POOL_INVITATION', 'JOB_ALERT'],
     default: 'DIRECT_APPLY'
   },
   coverLetter: {
@@ -186,10 +186,6 @@ const applicationSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  isScoringPreview: {
-    type: Boolean,
-    default: false
-  },
   previousApplicationId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Application'
@@ -256,6 +252,7 @@ const applicationSchema = new mongoose.Schema({
       max: 100
     },
     breakdown: {
+      personal_info: { type: Number, min: 0, max: 100 },
       skills: { type: Number, min: 0, max: 100 },
       experience: { type: Number, min: 0, max: 100 },
       education: { type: Number, min: 0, max: 100 },
@@ -293,14 +290,13 @@ applicationSchema.index({ appliedAt: -1 });
 applicationSchema.index({ status: 1 }); // Index for status
 
 // Compound indexes for common queries
-// Note: Unique index only applies to real applications (not reapplied, not scoring preview)
+// Note: Unique index only applies to real applications (not reapplied)
 applicationSchema.index({ jobId: 1, candidateProfileId: 1 }, {
   unique: true,
   partialFilterExpression: { 
-    isReapplied: false,
-    isScoringPreview: false
+    isReapplied: false
   }
-}); // Prevent duplicate applications except reapplications and scoring previews
+}); // Prevent duplicate applications except reapplications
 applicationSchema.index({ jobId: 1, status: 1 });
 applicationSchema.index({ candidateProfileId: 1, appliedAt: -1 });
 applicationSchema.index({ status: 1, appliedAt: -1 }); // Compound index for status and appliedAt

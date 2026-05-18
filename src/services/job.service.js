@@ -871,6 +871,10 @@ export const getApplicantCount = async (jobId, userId) => {
 export const applyToJob = async (userId, jobId, applicationData) => {
   const { cvId, cvTemplateId, coverLetter, candidateName, candidateEmail, candidatePhone, source } = applicationData;
 
+  if (source === 'CV_SCORING_PREVIEW') {
+    throw new BadRequestError('Không được tạo đơn ứng tuyển tạm để chấm điểm CV. Vui lòng dùng API preview-cv-score.');
+  }
+
   // 1. Tìm hồ sơ ứng viên
   const candidateProfile = await CandidateProfile.findOne({ userId });
   if (!candidateProfile) {
@@ -883,18 +887,14 @@ export const applyToJob = async (userId, jobId, applicationData) => {
     throw new BadRequestError('Tin tuyển dụng không tồn tại hoặc đã hết hạn.');
   }
 
-  // 3. Kiểm tra ứng viên đã ứng tuyển công việc này chưa (loại trừ CV_SCORING_PREVIEW)
-  // Chỉ check duplicate nếu đây KHÔNG phải là scoring preview
-  if (source !== 'CV_SCORING_PREVIEW') {
-    const existingApplication = await Application.findOne({
-      jobId,
-      candidateProfileId: candidateProfile._id,
-      source: { $ne: 'CV_SCORING_PREVIEW' } // Không tính các application dùng để preview scoring
-    });
+  // 3. Kiểm tra ứng viên đã ứng tuyển công việc này chưa
+  const existingApplication = await Application.findOne({
+    jobId,
+    candidateProfileId: candidateProfile._id
+  });
 
-    if (existingApplication) {
-      throw new BadRequestError('Bạn đã ứng tuyển vào vị trí này rồi.');
-    }
+  if (existingApplication) {
+    throw new BadRequestError('Bạn đã ứng tuyển vào vị trí này rồi.');
   }
 
   let sourceFileInfo;
@@ -985,7 +985,6 @@ export const applyToJob = async (userId, jobId, applicationData) => {
       candidateProfileId: candidateProfile._id,
       coverLetter,
       source: source || 'DIRECT_APPLY',
-      isScoringPreview: source === 'CV_SCORING_PREVIEW', // Đánh dấu nếu là scoring preview
       // Thông tin cá nhân từ form
       candidateName,
       candidateEmail,

@@ -1,6 +1,12 @@
 import { CandidateProfile, Job, CV } from '../models/index.js';
 import { NotFoundError, BadRequestError } from '../utils/AppError.js';
-import { scoreCVWithLLM, extractCVText } from './cvScoring.service.js';
+import { scoreCVWithLLM, extractCVText, extractUploadedCVText } from './cvScoring.service.js';
+import {
+  buildCVScoreCacheKey,
+  getCachedCVScore,
+  saveCVScoreCache,
+  withCacheMetadata
+} from './cvScoreCache.service.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -10,7 +16,7 @@ import logger from '../utils/logger.js';
  * @param {Object} params - { cvId or cvTemplateId }
  * @returns {Promise<Object>} Scoring result
  */
-export const previewCVScore = async (userId, jobId, { cvId, cvTemplateId }) => {
+export const previewCVScore = async (userId, jobId, { cvId, cvTemplateId, forceRefresh = false }) => {
   try {
     // 1. Validate input
     if (!cvId && !cvTemplateId) {
@@ -39,16 +45,22 @@ export const previewCVScore = async (userId, jobId, { cvId, cvTemplateId }) => {
     // 4. Get CV data
     let cvData;
     let cvText;
+    let cvSource;
+    let sourceCvId;
+    let cvPayload;
+    let cvName;
 
     if (cvId) {
-      // Uploaded CV - không thể validate vì chỉ có file path
       const selectedCV = candidateProfile.cvs?.find(cv => cv._id.toString() === cvId);
       if (!selectedCV) {
         throw new BadRequestError('CV không hợp lệ hoặc không tìm thấy');
       }
-      // Skip validation cho uploaded CV vì không có structured data
-      cvText = `CV: ${selectedCV.name}\nPath: ${selectedCV.path}`;
-      cvData = null; // Mark as uploaded file
+
+      cvData = null; // Uploaded CV has no structured data to validate.
+      cvSource = 'UPLOADED';
+      sourceCvId = selectedCV._id;
+      cvPayload = selectedCV;
+      cvName = selectedCV.name;
     } else {
       // Template CV
       const cvTemplate = await CV.findById(cvTemplateId);
@@ -67,8 +79,14 @@ export const previewCVScore = async (userId, jobId, { cvId, cvTemplateId }) => {
         throw new BadRequestError('CV template không thuộc về bạn');
       }
       
-      cvData = cvTemplate;
-      cvText = extractCVText(cvTemplate);
+      cvData = cvTemplate.cvData;
+      if (!cvData) {
+        throw new BadRequestError('CV template không có dữ liệu để chấm điểm');
+      }
+      cvSource = 'TEMPLATE';
+      sourceCvId = cvTemplate._id;
+      cvPayload = cvData;
+      cvName = cvTemplate.title || 'CV Template';
     }
 
     // 5. Build JD text
@@ -82,8 +100,34 @@ Experience: ${job.experience || ''}
 Education: ${job.education || ''}
     `.trim();
 
-    // 6. Validate CV trước khi score (chỉ cho template CV)
-    if (cvData) {
+    // 6. Check cache before expensive file parsing/LLM call
+    logger.info('Preview CV scoring', { userId, jobId, cvId, cvTemplateId });
+
+    const cacheKey = buildCVScoreCacheKey({
+      userId,
+      job,
+      cvSource,
+      cvId: sourceCvId,
+      cvPayload
+    });
+
+    if (!forceRefresh) {
+      const cachedScore = await getCachedCVScore(cacheKey);
+      if (cachedScore) {
+        logger.info('Preview CV scoring cache hit', { userId, jobId, cvSource, cvId: sourceCvId });
+        return withCacheMetadata(cachedScore.scoringResult, {
+          isCached: true,
+          cache: cachedScore
+        });
+      }
+    }
+
+    // 7. Extract and validate CV text only on cache miss or forced refresh
+    if (cvSource === 'UPLOADED') {
+      cvText = await extractUploadedCVText(cvPayload);
+    } else {
+      cvText = extractCVText(cvData);
+
       const { validateCV } = await import('./cvScoring.service.js');
       const validation = validateCV(cvData);
       
@@ -91,9 +135,6 @@ Education: ${job.education || ''}
         throw new BadRequestError(`File không hợp lệ: ${validation.reason}. Vui lòng upload CV thật với đầy đủ thông tin cá nhân, kinh nghiệm, kỹ năng.`);
       }
     }
-
-    // 7. Score CV with LLM
-    logger.info('Preview CV scoring', { userId, jobId, cvId, cvTemplateId });
     
     const scoringResult = await scoreCVWithLLM({
       cvText,
@@ -105,18 +146,26 @@ Education: ${job.education || ''}
       throw new BadRequestError('Không thể chấm điểm CV. Vui lòng thử lại sau.');
     }
 
+    const cache = await saveCVScoreCache(cacheKey, scoringResult, {
+      cvName,
+      jobTitle: job.title
+    });
+
     logger.info('Preview CV scoring completed', {
       userId,
       jobId,
       score: scoringResult.overall_score
     });
 
-    return scoringResult;
+    return withCacheMetadata(scoringResult, {
+      isCached: false,
+      cache
+    });
   } catch (error) {
     logger.error('Preview CV scoring error:', {
       userId,
       jobId,
-      error: error.message
+      error: error
     });
     throw error;
   }

@@ -1,6 +1,5 @@
 import mongoose from 'mongoose';
 import axios from 'axios';
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import Application from '../models/Application.js';
 import Workflow from '../models/Workflow.js';
 import WorkflowNode from '../models/WorkflowNode.js';
@@ -18,6 +17,7 @@ import RecruiterProfile from '../models/RecruiterProfile.js';
 import InterviewRoom from '../models/InterviewRoom.js';
 import { EmailTemplate } from '../models/index.js';
 import { applyApplicationStatusChange } from './application.service.js';
+import { extractTextFromPDF } from '../utils/pdfTextExtractor.js';
 
 const WORKFLOW_EXECUTION_RETRY_MAX = parseInt(process.env.WORKFLOW_EXECUTION_RETRY_MAX || '3', 10);
 const WORKFLOW_EXECUTION_RETRY_DELAY_MS = 5000;
@@ -25,21 +25,6 @@ const LLM_API_KEY = process.env.LLM_API_KEY;
 const LLM_BASE_URL = process.env.LLM_BASE_URL;
 const LLM_MODEL = process.env.LLM_MODEL || 'gemini-3-flash';
 const APPLICATION_STATUS_VALUES = new Set(Application.schema.path('status').enumValues);
-
-const extractTextFromPDF = async (buffer) => {
-  const loadingTask = pdfjsLib.getDocument({ data: buffer });
-  const pdf = await loadingTask.promise;
-  let fullText = '';
-
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const textContent = await page.getTextContent();
-    const pageText = textContent.items.map(item => item.str).join(' ');
-    fullText += `${pageText}\n`;
-  }
-
-  return fullText;
-};
 
 const getApplicationCVText = async (application) => {
   if (!application?.submittedCV) return '';
