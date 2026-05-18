@@ -224,7 +224,7 @@ export const applyToJobSchema = z.object({
   candidateName: z.string({ required_error: "Họ tên là bắt buộc" }).trim().min(2, 'Họ tên phải có ít nhất 2 ký tự').max(100, 'Họ tên không được vượt quá 100 ký tự'),
   candidateEmail: z.string({ required_error: "Email là bắt buộc" }).trim().email('Email không hợp lệ'),
   candidatePhone: z.string({ required_error: "Số điện thoại là bắt buộc" }).trim().regex(/^[\+]?[\d]{1,15}$/, 'Số điện thoại không hợp lệ'),
-  source: z.enum(['DIRECT_APPLY', 'TALENT_POOL_INVITATION', 'JOB_ALERT']).optional()
+  source: z.enum(['DIRECT_APPLY', 'TALENT_POOL_INVITATION', 'JOB_ALERT', 'CV_SCORING_PREVIEW']).optional()
 }).refine(data => {
   // Điều kiện XOR: một trong hai trường phải tồn tại, nhưng không phải cả hai.
   return (data.cvId && !data.cvTemplateId) || (!data.cvId && data.cvTemplateId);
@@ -375,4 +375,27 @@ export const externalJobSearchSchema = z.object({
 // Schema for similar jobs query parameters
 export const similarJobsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1, 'Limit phải lớn hơn 0').max(20, 'Limit không được vượt quá 20').default(6),
+});
+
+// Schema for preview CV scoring (without creating application)
+export const previewCVScoreSchema = z.object({
+  cvId: z.string().trim().optional(),
+  cvTemplateId: z.string().trim().optional()
+}).refine(data => {
+  return (data.cvId && !data.cvTemplateId) || (!data.cvId && data.cvTemplateId);
+}, {
+  message: 'Phải cung cấp cvId hoặc cvTemplateId (chỉ một trong hai)',
+  path: ['cvId']
+});
+
+// Schema for optimizing CV
+export const optimizeCVSchema = z.object({
+  cvId: z.string().trim().optional(),
+  cvTemplateId: z.string().trim().optional(),
+  scoringData: z.any() // Accept any object for scoring data
+}).refine(data => {
+  return (data.cvId && !data.cvTemplateId) || (!data.cvId && data.cvTemplateId);
+}, {
+  message: 'Phải cung cấp cvId hoặc cvTemplateId (chỉ một trong hai)',
+  path: ['cvId']
 });

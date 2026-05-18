@@ -182,7 +182,7 @@ const jobSchema = new mongoose.Schema({
   moderationStatus: {
     type: String,
     enum: {
-      values: ['PENDING', 'APPROVED', 'REJECTED', 'NEUTRAL'],
+      values: ['PENDING', 'APPROVED', 'REJECTED'],
       message: '{VALUE} is not a valid moderation status'
     },
     default: 'PENDING'
@@ -200,7 +200,7 @@ const jobSchema = new mongoose.Schema({
   // AI Moderation Result
   aiModerationResult: {
     prediction: {
-      type: Number, // 0: reject, 1: approve
+      type: Number, // 0: reject, 1: approve, 2: failed/error
       default: null
     },
     confidence: {

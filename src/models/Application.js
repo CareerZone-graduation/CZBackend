@@ -79,7 +79,7 @@ const applicationSchema = new mongoose.Schema({
   },
   source: {
     type: String,
-    enum: ['DIRECT_APPLY', 'TALENT_POOL_INVITATION', 'JOB_ALERT'],
+    enum: ['DIRECT_APPLY', 'TALENT_POOL_INVITATION', 'JOB_ALERT', 'CV_SCORING_PREVIEW'],
     default: 'DIRECT_APPLY'
   },
   coverLetter: {
@@ -186,6 +186,10 @@ const applicationSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  isScoringPreview: {
+    type: Boolean,
+    default: false
+  },
   previousApplicationId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Application'
@@ -243,6 +247,40 @@ const applicationSchema = new mongoose.Schema({
   activityHistory: {
     type: [activityLogSchema],
     default: []
+  },
+  // CHẤM ĐIỂM CV TỰ ĐỘNG
+  cvScore: {
+    overall_score: {
+      type: Number,
+      min: 0,
+      max: 100
+    },
+    breakdown: {
+      skills: { type: Number, min: 0, max: 100 },
+      experience: { type: Number, min: 0, max: 100 },
+      education: { type: Number, min: 0, max: 100 },
+      keywords_ats: { type: Number, min: 0, max: 100 },
+      achievements: { type: Number, min: 0, max: 100 },
+      presentation: { type: Number, min: 0, max: 100 }
+    },
+    summary: String,
+    strengths: [String],
+    weaknesses: [String],
+    critical_gaps: [String],
+    improvements: {
+      content: [String],
+      formatting: [String]
+    },
+    suggested_keywords: [String],
+    rewrite_examples: [{
+      original: String,
+      improved: String
+    }],
+    // ENHANCED ANALYSIS (Radar Chart, Career Path, Projects)
+    enhanced: {
+      type: mongoose.Schema.Types.Mixed
+    },
+    scoredAt: Date
   }
 }, {
   timestamps: true
@@ -255,10 +293,14 @@ applicationSchema.index({ appliedAt: -1 });
 applicationSchema.index({ status: 1 }); // Index for status
 
 // Compound indexes for common queries
+// Note: Unique index only applies to real applications (not reapplied, not scoring preview)
 applicationSchema.index({ jobId: 1, candidateProfileId: 1 }, {
   unique: true,
-  partialFilterExpression: { isReapplied: { $ne: true } }
-}); // Prevent duplicate applications except reapplications
+  partialFilterExpression: { 
+    isReapplied: false,
+    isScoringPreview: false
+  }
+}); // Prevent duplicate applications except reapplications and scoring previews
 applicationSchema.index({ jobId: 1, status: 1 });
 applicationSchema.index({ candidateProfileId: 1, appliedAt: -1 });
 applicationSchema.index({ status: 1, appliedAt: -1 }); // Compound index for status and appliedAt

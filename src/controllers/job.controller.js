@@ -129,11 +129,12 @@ export const applyToJob = asyncHandler(async (req, res) => {
   const { id: jobId } = req.params;
   const applicationData = req.body;
 
-  await jobService.applyToJob(userId, jobId, applicationData);
+  const application = await jobService.applyToJob(userId, jobId, applicationData);
 
   res.status(201).json({
     success: true,
-    message: 'Nộp đơn ứng tuyển thành công.'
+    message: 'Nộp đơn ứng tuyển thành công.',
+    data: application
   });
 });
 

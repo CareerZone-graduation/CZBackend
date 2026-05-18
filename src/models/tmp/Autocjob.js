@@ -200,7 +200,7 @@ const jobSchema = new mongoose.Schema({
   moderationStatus: {
     type: String,
     enum: {
-      values: ['PENDING', 'APPROVED', 'REJECTED', 'NEUTRAL'],
+      values: ['PENDING', 'APPROVED', 'REJECTED'],
       message: '{VALUE} is not a valid moderation status'
     },
     default: 'PENDING'

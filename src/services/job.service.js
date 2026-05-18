@@ -716,8 +716,8 @@ export const updateJob = async (jobId, userId, updateData) => {
     finalUpdateData.aiModerationResult = null;
   }
 
-  // Nếu job đã bị REJECTED hoặc NEUTRAL, khi chỉnh sửa phải reset về PENDING
-  if (job.moderationStatus === 'REJECTED' || job.moderationStatus === 'NEUTRAL') {
+  // Nếu job đã bị REJECTED, khi chỉnh sửa phải reset về PENDING
+  if (job.moderationStatus === 'REJECTED') {
     finalUpdateData.moderationStatus = 'PENDING';
     finalUpdateData.status = 'INACTIVE'; // Chờ duyệt lại
     finalUpdateData.aiModerationResult = null; // Xóa kết quả AI cũ
@@ -883,14 +883,18 @@ export const applyToJob = async (userId, jobId, applicationData) => {
     throw new BadRequestError('Tin tuyển dụng không tồn tại hoặc đã hết hạn.');
   }
 
-  // 3. Kiểm tra ứng viên đã ứng tuyển công việc này chưa
-  const existingApplication = await Application.findOne({
-    jobId,
-    candidateProfileId: candidateProfile._id,
-  });
+  // 3. Kiểm tra ứng viên đã ứng tuyển công việc này chưa (loại trừ CV_SCORING_PREVIEW)
+  // Chỉ check duplicate nếu đây KHÔNG phải là scoring preview
+  if (source !== 'CV_SCORING_PREVIEW') {
+    const existingApplication = await Application.findOne({
+      jobId,
+      candidateProfileId: candidateProfile._id,
+      source: { $ne: 'CV_SCORING_PREVIEW' } // Không tính các application dùng để preview scoring
+    });
 
-  if (existingApplication) {
-    throw new BadRequestError('Bạn đã ứng tuyển vào vị trí này rồi.');
+    if (existingApplication) {
+      throw new BadRequestError('Bạn đã ứng tuyển vào vị trí này rồi.');
+    }
   }
 
   let sourceFileInfo;
@@ -981,6 +985,7 @@ export const applyToJob = async (userId, jobId, applicationData) => {
       candidateProfileId: candidateProfile._id,
       coverLetter,
       source: source || 'DIRECT_APPLY',
+      isScoringPreview: source === 'CV_SCORING_PREVIEW', // Đánh dấu nếu là scoring preview
       // Thông tin cá nhân từ form
       candidateName,
       candidateEmail,
@@ -1031,6 +1036,37 @@ export const applyToJob = async (userId, jobId, applicationData) => {
       // Không re-throw để không làm hỏng response
     }
     // --- KẾT THÚC WORKFLOW EXECUTION ---
+    // --- BẮT ĐẦU AUTO-SCORING CV ---
+    try {
+      // Auto-score cho cả CV template và uploaded
+      logger.info('Auto-scoring CV for application', { 
+        applicationId: application._id,
+        jobId,
+        userId,
+        cvSource: sourceType
+      });
+      
+      // Import và gọi scoring service (async, không chờ kết quả)
+      import('./application.service.js').then(async (appService) => {
+        try {
+          await appService.scoreApplicationCV(application._id.toString(), userId);
+          logger.info('Auto-scoring completed', { applicationId: application._id });
+        } catch (scoringError) {
+          logger.error('Auto-scoring failed', { 
+            applicationId: application._id,
+            error: scoringError.message 
+          });
+          // Không throw error để không ảnh hưởng đến application flow
+        }
+      });
+    } catch (error) {
+      logger.error('Failed to trigger auto-scoring', { 
+        error, 
+        applicationId: application._id 
+      });
+      // Không throw error để không ảnh hưởng đến application flow
+    }
+    // --- KẾT THÚC AUTO-SCORING ---
 
     return application;
 

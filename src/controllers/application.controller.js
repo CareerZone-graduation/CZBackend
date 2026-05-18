@@ -253,11 +253,7 @@ export const compareWithAI = asyncHandler(async (req, res) => {
   }
 });
 
-/**
- * @desc      Evaluate interview result for an application (Workflow)
- * @route     POST /api/applications/:applicationId/interview-result
- * @access    Private - Recruiter Only
- */
+
 export const evaluateInterviewResult = asyncHandler(async (req, res) => {
   const { applicationId } = req.params;
   const { result, feedback } = req.body;
@@ -273,14 +269,40 @@ export const evaluateInterviewResult = asyncHandler(async (req, res) => {
     success: true,
     message: 'Đánh giá kết quả phỏng vấn thành công',
     data: updatedApplication
-  });
+    });
 });
 
 /**
- * @desc      Get failed workflow executions for an application
- * @route     GET /api/applications/:applicationId/failed-executions
- * @access    Private - Recruiter Only
+ * Chấm điểm CV của một application
+ * @route POST /api/applications/:applicationId/score-cv
  */
+export const scoreCV = asyncHandler(async (req, res) => {
+  const { applicationId } = req.params;
+  const userId = req.user._id;
+
+  const cvScore = await applicationService.scoreApplicationCV(applicationId, userId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Chấm điểm CV thành công',
+    data: cvScore
+    });
+  });
+
+
+export const generateCV = asyncHandler(async (req, res) => {
+  const { applicationId } = req.params;
+  const userId = req.user._id;
+
+  const generatedCV = await applicationService.generateImprovedCVForApplication(applicationId, userId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Tạo CV mới thành công',
+    data: generatedCV
+  });
+});
+
 export const getFailedExecutions = asyncHandler(async (req, res) => {
   const { applicationId } = req.params;
   // Kiểm tra quyền sở hữu bằng cách lấy chi tiết ứng viên
@@ -292,4 +314,17 @@ export const getFailedExecutions = asyncHandler(async (req, res) => {
   }).sort({ executedAt: -1 }).lean();
 
   res.status(200).json({ success: true, data: executions });
+});
+
+export const getMyApplicationDetail = asyncHandler(async (req, res) => {
+  const { applicationId } = req.params;
+  const userId = req.user._id;
+
+  const application = await applicationService.getMyApplicationDetail(applicationId, userId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Lấy chi tiết đơn ứng tuyển thành công',
+    data: application
+  });
 });

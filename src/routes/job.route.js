@@ -8,6 +8,8 @@ import * as commonSchema from '../schemas/common.schema.js';
 import * as jobController from '../controllers/job.controller.js';
 import * as recommendationController from '../controllers/recommendation.controller.js';
 import * as jobSuggestionController from '../controllers/jobSuggestion.controller.js';
+import * as cvPreviewScoringController from '../controllers/cvPreviewScoring.controller.js';
+import * as cvOptimizationController from '../controllers/cvOptimization.controller.js';
 
 const router = express.Router();
 
@@ -178,6 +180,26 @@ router.post(
   validationMiddleware.validateParams(commonSchema.idParamSchema),
   validationMiddleware.validateBody(jobSchema.applyToJobSchema),
   jobController.applyToJob
+);
+
+// Preview CV score without creating application
+router.post(
+  '/:id/preview-cv-score',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.candidateOnly,
+  validationMiddleware.validateParams(commonSchema.idParamSchema),
+  validationMiddleware.validateBody(jobSchema.previewCVScoreSchema),
+  cvPreviewScoringController.previewCVScore
+);
+
+// Optimize CV based on scoring suggestions
+router.post(
+  '/:id/optimize-cv',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.candidateOnly,
+  validationMiddleware.validateParams(commonSchema.idParamSchema),
+  validationMiddleware.validateBody(jobSchema.optimizeCVSchema),
+  cvOptimizationController.optimizeCV
 );
 
 router.post(

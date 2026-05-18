@@ -5,7 +5,7 @@ import { ROUTING_KEYS } from '../queues/rabbitmq.js';
 
 const LLM_API_KEY = process.env.LLM_API_KEY;
 const LLM_BASE_URL = process.env.LLM_BASE_URL;
-const LLM_MODEL = "gemini-3-flash";
+const LLM_MODEL = process.env.LLM_MODEL || "gpt-4o-mini";
 
 
 
@@ -483,10 +483,7 @@ Output phải là JSON hợp lệ, không thêm text ngoài.`;
     };
 
   } catch (error) {
-    logger.error('LLM analysis error:', error);
-    logger.warn('LLM failed, falling back to simple validation with spam check');
-    // Fallback về logic đơn giản nếu LLM fail - VẪN PHẢI SPAM CHECK
-    return simpleValidation(jobData, jobContent);
+    throw new Error(`LLM analysis failed`);
   }
 };
 
@@ -572,23 +569,16 @@ export const autoModerateJobWithLLM = async (jobId) => {
     throw new Error('Không tìm thấy job');
   }
 
-  // Nếu job đang ở trạng thái NEUTRAL (thất bại trước đó), reset về PENDING
-  if (job.moderationStatus === 'NEUTRAL') {
-    logger.info(`Resetting job ${jobId} from NEUTRAL to PENDING for retry`);
-    job.moderationStatus = 'PENDING';
-
-    // Đảm bảo status hợp lệ (không phải PENDING)
-    if (!['ACTIVE', 'INACTIVE', 'EXPIRED'].includes(job.status)) {
-      job.status = 'INACTIVE'; // Default to INACTIVE nếu status không hợp lệ
-    }
-
-    // Xóa thông tin lỗi cũ
-    if (job.aiModerationResult) {
-      job.aiModerationResult.failed = false;
-    }
+  // Nếu job đã thất bại trước đó, xoá cờ báo lỗi để thử lại
+  if (job.aiModerationResult?.failed) {
+    logger.info(`Resetting failed job ${jobId} for retry`);
+    job.aiModerationResult.failed = false;
   }
 
   try {
+    // 🛑 THÊM DÒNG NÀY ĐỂ GIẢ LẬP LỖI
+    //throw new Error('Test: Giả lập server AI bị sập để job ra trạng thái NEUTRAL');
+
     // Gọi LLM để phân tích
     const aiResult = await analyzeJobWithLLM({
       title: job.title,
@@ -630,7 +620,9 @@ export const autoModerateJobWithLLM = async (jobId) => {
     job.aiModerationResult.method = 'LLM'; // Đánh dấu là dùng LLM
     job.aiModerationResult.failed = false; // Đánh dấu thành công
 
-    await job.save();
+    
+  await job.save();
+
 
     // Populate sau khi save - cần populate nested userId
     await job.populate({
@@ -671,41 +663,29 @@ export const autoModerateJobWithLLM = async (jobId) => {
       aiResult
     };
   } catch (error) {
-    // Nếu phân tích thất bại, đánh dấu job là NEUTRAL (không xác định)
-    logger.error('Failed to analyze job with LLM:', {
-      jobId,
-      error: error.message
-    });
+    // Nếu phân tích thất bại, giữ job là PENDING
+  
 
-    job.moderationStatus = 'NEUTRAL';
-    // Không thay đổi status (giữ nguyên ACTIVE/INACTIVE/EXPIRED)
-
-    // Lưu thông tin lỗi vào aiModerationResult
-    if (!job.aiModerationResult || job.aiModerationResult === null) {
-      job.aiModerationResult = {
-        prediction: null,
-        confidence: null,
-        probabilities: { reject: null, approve: null },
-        reasons: [],
-        summary: null,
-        method: 'PhoBERT',
-        moderatedAt: null,
-        failed: false
-      };
-    }
-
-    job.aiModerationResult.prediction = null;
-    job.aiModerationResult.confidence = null;
-    job.aiModerationResult.probabilities = null;
-    job.aiModerationResult.reasons = ['Không thể phân tích job do lỗi hệ thống'];
-    job.aiModerationResult.summary = `Lỗi: ${error.message}`;
-    job.aiModerationResult.moderatedAt = new Date();
-    job.aiModerationResult.method = 'LLM';
-    job.aiModerationResult.failed = true; // Đánh dấu là thất bại
-
-    await job.save();
+    await Job.updateOne(
+      { _id: jobId },
+      {
+        $set: {
+          moderationStatus: 'PENDING',
+          aiModerationResult: {
+            prediction: 2,
+            confidence: null,
+            probabilities: null,
+            reasons: ['Không thể phân tích job do lỗi hệ thống'],
+            summary: `Lỗi: hệ thống kiểm duyệt không khả dụng`,
+            moderatedAt: new Date(),
+            method: 'LLM',
+            failed: true
+          }
+        }
+      }
+    );
 
     // Throw error để frontend biết và bỏ qua job này
-    throw new Error(`Không thể phân tích job: ${error.message}`);
+    throw new Error(`AI không khả dụng`);
   }
 };
