@@ -906,13 +906,6 @@ export const scoreApplicationCV = async (applicationId, userId, { forceRefresh =
     throw new UnauthorizedError('Bạn không có quyền chấm điểm đơn ứng tuyển này');
   }
 
-  // 2. Kiểm tra đã chấm điểm chưa
-  if (!forceRefresh && application.cvScore && Number.isFinite(application.cvScore.overall_score)) {
-    // Đã chấm rồi, trả về kết quả cũ
-    const { withCacheMetadata } = await import('./cvScoreCache.service.js');
-    return withCacheMetadata(application.cvScore, { isCached: true });
-  }
-
   const submittedCV = application.submittedCV;
   if (!submittedCV) {
     throw new BadRequestError('Đơn ứng tuyển không có CV');
@@ -989,16 +982,11 @@ Skills: ${job.skills?.join(', ') || ''}
   if (!forceRefresh) {
     const cachedScore = await getCachedCVScore(cacheKey);
     if (cachedScore) {
-      application.cvScore = {
-        ...cachedScore.scoringResult,
-        scoredAt: cachedScore.scoredAt || new Date()
-      };
-      await application.save();
       logger.info('Application CV scoring cache hit', {
         applicationId,
         cacheId: cachedScore._id
       });
-      return withCacheMetadata(application.cvScore, {
+      return withCacheMetadata(cachedScore.scoringResult, {
         isCached: true,
         cache: cachedScore
       });
@@ -1023,15 +1011,13 @@ Skills: ${job.skills?.join(', ') || ''}
     // Don't throw - enhanced analysis is optional
   }
 
-  // 8. Lưu kết quả (bao gồm enhanced analysis nếu có)
-  application.cvScore = {
+  const scoringResult = {
     ...cvScore,
     ...(enhancedAnalysis && { enhanced: enhancedAnalysis }),
     scoredAt: new Date()
   };
-  await application.save();
 
-  const cache = await saveCVScoreCache(cacheKey, application.cvScore, {
+  const cache = await saveCVScoreCache(cacheKey, scoringResult, {
     cvName: submittedCV.name,
     jobTitle: job.title
   });
@@ -1042,15 +1028,14 @@ Skills: ${job.skills?.join(', ') || ''}
     hasEnhanced: !!enhancedAnalysis
   });
 
-  return withCacheMetadata(application.cvScore, {
+  return withCacheMetadata(scoringResult, {
     isCached: false,
     cache
   });
 };
 
-export const startCvScoreAnalysis = async (userId, applicationId) => {
+export const startCvScoreAnalysis = async (userId, applicationId, { forceRefresh = false } = {}) => {
   const application = await Application.findById(applicationId)
-    .populate('jobId')
     .populate('candidateProfileId');
 
   if (!application) {
@@ -1068,49 +1053,74 @@ export const startCvScoreAnalysis = async (userId, applicationId) => {
   });
 
   pushAnalysisEvent(session.analysisId, {
-    type: 'started',
-    status: 'started',
-    analysisProgress: 0,
-    matchScore: 0,
-    phaseLabel: 'Khoi tao phan tich',
-  });
-
-  const cachedScore = Number(application.cvScore?.overall_score);
-  const matchScore = Number.isFinite(cachedScore) ? cachedScore : 0;
-
-  pushAnalysisEvent(session.analysisId, {
     type: 'progress_update',
-    analysisProgress: 50,
-    phaseLabel: 'Dang phan tich CV',
+    analysisProgress: 10,
+    phaseLabel: 'Đang khởi tạo phiên phân tích...',
   });
 
-  pushAnalysisEvent(session.analysisId, {
-    type: 'score_update',
-    matchScore,
-  });
-
-  pushAnalysisEvent(session.analysisId, {
-    type: 'section_update',
-    sections: {
-      overall: {
-        score: matchScore,
-      },
-    },
-  });
-
-  pushAnalysisEvent(session.analysisId, {
-    type: 'progress_update',
-    analysisProgress: 100,
-    phaseLabel: 'Hoan tat phan tich',
-  });
-
-  pushAnalysisEvent(session.analysisId, {
-    type: 'completed',
-    status: 'completed',
+  runApplicationCvScoringAsync(session.analysisId, userId, applicationId, { forceRefresh }).catch((error) => {
+    logger.error('Background application CV scoring error:', error);
   });
 
   return { analysisId: session.analysisId };
 };
+
+const runApplicationCvScoringAsync = async (analysisId, userId, applicationId, { forceRefresh = false } = {}) => {
+  try {
+    pushAnalysisEvent(analysisId, {
+      type: 'progress_update',
+      analysisProgress: 30,
+      phaseLabel: 'Đang thu thập CV và JD...',
+    });
+
+    await delay(700);
+
+    pushAnalysisEvent(analysisId, {
+      type: 'progress_update',
+      analysisProgress: 60,
+      phaseLabel: 'AI đang phân tích độ phù hợp...',
+    });
+
+    const scoringResult = await scoreApplicationCV(applicationId, userId, { forceRefresh });
+
+    pushAnalysisEvent(analysisId, {
+      type: 'progress_update',
+      analysisProgress: 90,
+      phaseLabel: scoringResult.isCached ? 'Đã tìm thấy kết quả đã phân tích trước đó...' : 'Đang tổng hợp kết quả mới...',
+    });
+
+    await delay(700);
+
+    pushAnalysisEvent(analysisId, {
+      type: 'score_update',
+      ...scoringResult,
+      matchScore: scoringResult.overall_score,
+    });
+
+    pushAnalysisEvent(analysisId, {
+      type: 'progress_update',
+      analysisProgress: 100,
+      phaseLabel: 'Hoàn tất phân tích',
+    });
+
+    pushAnalysisEvent(analysisId, {
+      type: 'completed',
+      status: 'completed',
+      finalResult: {
+        ...scoringResult,
+        matchScore: scoringResult.overall_score,
+      },
+    });
+  } catch (error) {
+    pushAnalysisEvent(analysisId, {
+      type: 'analysis_error',
+      status: 'error',
+      message: error.message || 'Lỗi không xác định khi chấm điểm CV',
+    });
+  }
+};
+
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const streamCvScoreAnalysis = async (userId, analysisId) => {
   const state = getLatestAnalysisState(analysisId);

@@ -332,7 +332,8 @@ export const getMyApplicationDetail = asyncHandler(async (req, res) => {
 
 export const startCvScoreAnalysis = asyncHandler(async (req, res) => {
   const { applicationId } = req.params;
-  const result = await applicationService.startCvScoreAnalysis(req.user._id, applicationId);
+  const forceRefresh = req.body?.forceRefresh === true;
+  const result = await applicationService.startCvScoreAnalysis(req.user._id, applicationId, { forceRefresh });
 
   res.status(201).json({
     success: true,
@@ -341,10 +342,19 @@ export const startCvScoreAnalysis = asyncHandler(async (req, res) => {
   });
 });
 
+const writeSseEvent = (res, eventName, data) => {
+  res.write(`event: ${eventName}\n`);
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+  if (typeof res.flush === 'function') {
+    res.flush();
+  }
+};
+
 export const streamCvScoreAnalysis = asyncHandler(async (req, res, next) => {
   let streamStarted = false;
 
   try {
+    req.noCompression = true;
     const { analysisId } = req.params;
     const state = await applicationService.streamCvScoreAnalysis(req.user._id, analysisId);
 
@@ -352,22 +362,81 @@ export const streamCvScoreAnalysis = asyncHandler(async (req, res, next) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
+    if (typeof res.flushHeaders === 'function') {
+      res.flushHeaders();
+    }
     streamStarted = true;
 
+    // Send already-buffered events immediately
+    let lastEventIndex = 0;
     for (const event of state.events || []) {
       const eventName = event.type || 'progress_update';
-      res.write(`event: ${eventName}\n`);
-      res.write(`data: ${JSON.stringify(event)}\n\n`);
+      writeSseEvent(res, eventName, event);
+      lastEventIndex++;
     }
 
-    res.end();
+    // If session is already completed/error, close right away
+    if (state.status === 'completed' || state.status === 'error') {
+      res.end();
+      return;
+    }
+
+    // Keep connection open and poll for new events
+    const POLL_INTERVAL = 500; // ms
+    const MAX_DURATION = 5 * 60 * 1000; // 5 minutes
+    const startTime = Date.now();
+    let closed = false;
+
+    const cleanup = () => {
+      closed = true;
+      clearInterval(pollTimer);
+    };
+
+    req.on('close', cleanup);
+
+    const pollTimer = setInterval(async () => {
+      if (closed) return;
+
+      // Timeout guard
+      if (Date.now() - startTime > MAX_DURATION) {
+        writeSseEvent(res, 'analysis_error', { message: 'Phân tích quá thời gian cho phép' });
+        cleanup();
+        res.end();
+        return;
+      }
+
+      try {
+        const latest = await applicationService.streamCvScoreAnalysis(req.user._id, analysisId);
+        if (!latest) {
+          cleanup();
+          res.end();
+          return;
+        }
+
+        const newEvents = (latest.events || []).slice(lastEventIndex);
+        for (const event of newEvents) {
+          const eventName = event.type || 'progress_update';
+          writeSseEvent(res, eventName, event);
+          lastEventIndex++;
+        }
+
+        if (latest.status === 'completed' || latest.status === 'error') {
+          cleanup();
+          res.end();
+        }
+      } catch (pollError) {
+        cleanup();
+        writeSseEvent(res, 'analysis_error', { message: pollError.message || 'stream_poll_error' });
+        res.end();
+      }
+    }, POLL_INTERVAL);
+
   } catch (error) {
     if (!streamStarted) {
       return next(error);
     }
 
-    res.write('event: error\n');
-    res.write(`data: ${JSON.stringify({ message: error.message || 'stream_error' })}\n\n`);
+    writeSseEvent(res, 'analysis_error', { message: error.message || 'stream_error' });
     res.end();
   }
 });

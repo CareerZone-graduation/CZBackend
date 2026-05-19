@@ -15,6 +15,21 @@ jest.unstable_mockModule('../../src/services/cvScoring.service.js', () => ({
 }));
 
 const { previewCVScore } = await import('../../src/services/cvPreviewScoring.service.js');
+const { getLatestAnalysisState } = await import('../../src/services/cvScoreStream.service.js');
+
+const waitForAnalysisState = async (analysisId) => {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const state = getLatestAnalysisState(analysisId);
+    if (state?.status === 'completed' || state?.status === 'error') {
+      return state;
+    }
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+
+  throw new Error(`Timed out waiting for analysis ${analysisId}`);
+};
+
+const getScoreUpdate = (state) => state.events.find(event => event.type === 'score_update');
 
 describe('cvPreviewScoring.service', () => {
   beforeEach(() => {
@@ -80,6 +95,7 @@ describe('cvPreviewScoring.service', () => {
     const result = await previewCVScore(userId.toString(), job._id.toString(), {
       cvTemplateId: cv._id.toString(),
     });
+    await waitForAnalysisState(result.analysisId);
 
     expect(extractCVTextMock).toHaveBeenCalledWith(expect.objectContaining({
       personalInfo: expect.objectContaining({ fullName: 'Candidate Test' }),
@@ -88,7 +104,6 @@ describe('cvPreviewScoring.service', () => {
       personalInfo: expect.objectContaining({ fullName: 'Candidate Test' }),
     }));
     expect(scoreCVWithLLMMock).toHaveBeenCalled();
-    expect(result.overall_score).toBe(75);
   });
 
   it('caches preview score outside Application and reuses it for the same job and CV', async () => {
@@ -149,11 +164,15 @@ describe('cvPreviewScoring.service', () => {
 
     const params = { cvTemplateId: cv._id.toString() };
     const firstResult = await previewCVScore(userId.toString(), job._id.toString(), params);
+    const firstState = await waitForAnalysisState(firstResult.analysisId);
     const secondResult = await previewCVScore(userId.toString(), job._id.toString(), params);
+    const secondState = await waitForAnalysisState(secondResult.analysisId);
+    const firstScoreUpdate = getScoreUpdate(firstState);
+    const secondScoreUpdate = getScoreUpdate(secondState);
 
-    expect(firstResult.isCached).toBe(false);
-    expect(secondResult.isCached).toBe(true);
-    expect(secondResult.overall_score).toBe(75);
+    expect(firstScoreUpdate.isCached).toBe(false);
+    expect(secondScoreUpdate.isCached).toBe(true);
+    expect(secondScoreUpdate.overall_score).toBe(75);
     expect(scoreCVWithLLMMock).toHaveBeenCalledTimes(1);
     expect(await Application.countDocuments({ source: 'CV_SCORING_PREVIEW' })).toBe(0);
   });
@@ -213,13 +232,16 @@ describe('cvPreviewScoring.service', () => {
     });
 
     const params = { cvTemplateId: cv._id.toString() };
-    await previewCVScore(userId.toString(), job._id.toString(), params);
+    const firstResult = await previewCVScore(userId.toString(), job._id.toString(), params);
+    await waitForAnalysisState(firstResult.analysisId);
     const refreshedResult = await previewCVScore(userId.toString(), job._id.toString(), {
       ...params,
       forceRefresh: true,
     });
+    const refreshedState = await waitForAnalysisState(refreshedResult.analysisId);
+    const refreshedScoreUpdate = getScoreUpdate(refreshedState);
 
-    expect(refreshedResult.isCached).toBe(false);
+    expect(refreshedScoreUpdate.isCached).toBe(false);
     expect(scoreCVWithLLMMock).toHaveBeenCalledTimes(2);
   });
 });

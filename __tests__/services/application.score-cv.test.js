@@ -3,6 +3,7 @@ import { jest } from '@jest/globals';
 import {
   Application,
   CandidateProfile,
+  CVScoreCache,
   Job,
 } from '../../src/models/index.js';
 
@@ -33,7 +34,7 @@ describe('application CV scoring', () => {
     jest.clearAllMocks();
   });
 
-  it('validates the submitted template snapshot and saves the score', async () => {
+  it('validates the submitted template snapshot and saves the candidate score cache', async () => {
     const userId = new mongoose.Types.ObjectId();
     const candidateProfile = await CandidateProfile.create({
       userId,
@@ -109,11 +110,21 @@ describe('application CV scoring', () => {
     }));
     expect(result.overall_score).toBe(82);
 
-    const updated = await Application.findById(application._id).lean();
-    expect(updated.cvScore.overall_score).toBe(82);
+    const cache = await CVScoreCache.findOne({
+      userId,
+      jobId: job._id,
+    }).lean();
+    expect(cache.scoringResult.overall_score).toBe(82);
+
+    scoreCVWithLLMMock.mockClear();
+    const cachedResult = await scoreApplicationCV(application._id.toString(), userId.toString());
+
+    expect(cachedResult.overall_score).toBe(82);
+    expect(cachedResult.isCached).toBe(true);
+    expect(scoreCVWithLLMMock).not.toHaveBeenCalled();
   });
 
-  it('returns cached score even when overall_score is 0', async () => {
+  it('does not treat application.cvScore as the candidate self-scoring cache', async () => {
     const userId = new mongoose.Types.ObjectId();
     const candidateProfile = await CandidateProfile.create({
       userId,
@@ -166,7 +177,7 @@ describe('application CV scoring', () => {
       },
       cvScore: {
         overall_score: 0,
-        summary: 'Not matched',
+        summary: 'Workflow score from recruiter automation',
       },
       jobSnapshot: {
         title: job.title,
@@ -177,10 +188,19 @@ describe('application CV scoring', () => {
 
     const result = await scoreApplicationCV(application._id.toString(), userId.toString());
 
-    expect(result.overall_score).toBe(0);
-    expect(result.isCached).toBe(true);
+    expect(result.overall_score).toBe(82);
+    expect(result.isCached).toBe(false);
     expect(result.canReanalyze).toBe(true);
-    expect(scoreCVWithLLMMock).not.toHaveBeenCalled();
+    expect(scoreCVWithLLMMock).toHaveBeenCalledTimes(1);
+
+    const updated = await Application.findById(application._id).lean();
+    expect(updated.cvScore.overall_score).toBe(0);
+
+    const cache = await CVScoreCache.findOne({
+      userId,
+      jobId: job._id,
+    }).lean();
+    expect(cache.scoringResult.overall_score).toBe(82);
   });
 
   it('extracts uploaded CV text before scoring', async () => {
@@ -321,5 +341,8 @@ describe('application CV scoring', () => {
     expect(scoreCVWithLLMMock).toHaveBeenCalled();
     expect(result.overall_score).toBe(82);
     expect(result.isCached).toBe(false);
+
+    const updated = await Application.findById(application._id).lean();
+    expect(updated.cvScore.overall_score).toBe(50);
   });
 });

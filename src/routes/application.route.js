@@ -80,6 +80,12 @@ router.post(
 
 router.get(
   '/cv-score/stream/:analysisId',
+  (req, res, next) => {
+    if (req.query.token && !req.headers.authorization) {
+      req.headers.authorization = `Bearer ${req.query.token}`;
+    }
+    next();
+  },
   passport.authenticate('jwt', { session: false }),
   authMiddleware.candidateOnly,
   validationMiddleware.validateParams(applicationSchema.analysisIdParam),

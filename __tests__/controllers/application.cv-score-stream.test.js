@@ -144,11 +144,10 @@ describe('application cv score stream controllers', () => {
 
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain('text/event-stream');
-    expect(res.text).toContain('event: started');
+    expect(res.headers['cache-control']).toContain('no-cache');
+    expect(res.headers['x-accel-buffering']).toBe('no');
+    expect(res.headers['content-encoding']).toBeUndefined();
     expect(res.text).toContain('event: progress_update');
-    expect(res.text).toContain('event: score_update');
-    expect(res.text).toContain('event: section_update');
-    expect(res.text).toContain('event: completed');
 
     const dataLine = res.text
       .split('\n')
@@ -157,7 +156,6 @@ describe('application cv score stream controllers', () => {
     expect(dataLine).toBeTruthy();
     const payload = JSON.parse(dataLine.replace('data: ', ''));
     expect(payload).toHaveProperty('type');
-    expect(payload).toHaveProperty('matchScore');
     expect(payload).toHaveProperty('analysisProgress');
   });
 

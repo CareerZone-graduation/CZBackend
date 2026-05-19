@@ -9,40 +9,62 @@ import {
 } from './cvScoreCache.service.js';
 import logger from '../utils/logger.js';
 
+import {
+  createAnalysisSession,
+  pushAnalysisEvent,
+  getLatestAnalysisState
+} from './cvScoreStream.service.js';
+
 /**
- * Preview CV scoring without creating application
+ * Preview CV scoring asynchronously (starts the session and returns analysisId)
  * @param {string} userId - User ID
  * @param {string} jobId - Job ID
  * @param {Object} params - { cvId or cvTemplateId }
- * @returns {Promise<Object>} Scoring result
+ * @returns {Promise<Object>} { analysisId }
  */
 export const previewCVScore = async (userId, jobId, { cvId, cvTemplateId, forceRefresh = false }) => {
+  // 1. Validate input
+  if (!cvId && !cvTemplateId) {
+    throw new BadRequestError('Phải cung cấp cvId hoặc cvTemplateId');
+  }
+
+  if (cvId && cvTemplateId) {
+    throw new BadRequestError('Chỉ được cung cấp một trong hai: cvId hoặc cvTemplateId');
+  }
+
+  // 2. Get candidate profile
+  const candidateProfile = await CandidateProfile.findOne({ userId });
+  if (!candidateProfile) {
+    throw new NotFoundError('Không tìm thấy hồ sơ ứng viên');
+  }
+
+  // 3. Get job (allow scoring even if not ACTIVE for preview purposes)
+  const job = await Job.findById(jobId);
+  if (!job) {
+    throw new NotFoundError('Tin tuyển dụng không tồn tại');
+  }
+
+  const session = createAnalysisSession({
+    applicationId: `preview_${jobId}`,
+    userId: userId.toString(),
+  });
+
+  // Start background process
+  _runPreviewScoringAsync(session.analysisId, userId, job, candidateProfile, { cvId, cvTemplateId, forceRefresh }).catch(error => {
+    logger.error('Background preview scoring error:', error);
+  });
+
+  return { analysisId: session.analysisId };
+};
+
+const _runPreviewScoringAsync = async (analysisId, userId, job, candidateProfile, { cvId, cvTemplateId, forceRefresh }) => {
   try {
-    // 1. Validate input
-    if (!cvId && !cvTemplateId) {
-      throw new BadRequestError('Phải cung cấp cvId hoặc cvTemplateId');
-    }
+    pushAnalysisEvent(analysisId, {
+      type: 'progress_update',
+      analysisProgress: 10,
+      phaseLabel: 'Đang thu thập dữ liệu CV...',
+    });
 
-    if (cvId && cvTemplateId) {
-      throw new BadRequestError('Chỉ được cung cấp một trong hai: cvId hoặc cvTemplateId');
-    }
-
-    // 2. Get candidate profile
-    const candidateProfile = await CandidateProfile.findOne({ userId });
-    if (!candidateProfile) {
-      throw new NotFoundError('Không tìm thấy hồ sơ ứng viên');
-    }
-
-    // 3. Get job (allow scoring even if not ACTIVE for preview purposes)
-    logger.info('Looking for job', { jobId });
-    const job = await Job.findById(jobId);
-    if (!job) {
-      logger.error('Job not found', { jobId });
-      throw new NotFoundError('Tin tuyển dụng không tồn tại');
-    }
-    logger.info('Job found', { jobId, title: job.title, status: job.status });
-
-    // 4. Get CV data
     let cvData;
     let cvText;
     let cvSource;
@@ -56,27 +78,15 @@ export const previewCVScore = async (userId, jobId, { cvId, cvTemplateId, forceR
         throw new BadRequestError('CV không hợp lệ hoặc không tìm thấy');
       }
 
-      cvData = null; // Uploaded CV has no structured data to validate.
+      cvData = null; 
       cvSource = 'UPLOADED';
       sourceCvId = selectedCV._id;
       cvPayload = selectedCV;
       cvName = selectedCV.name;
     } else {
-      // Template CV
       const cvTemplate = await CV.findById(cvTemplateId);
-      logger.info('CV template check', { 
-        cvTemplateId, 
-        found: !!cvTemplate,
-        cvTemplateUserId: cvTemplate?.userId?.toString(),
-        requestUserId: userId.toString()
-      });
-      
-      if (!cvTemplate) {
-        throw new BadRequestError('CV template không tồn tại');
-      }
-      
-      if (cvTemplate.userId.toString() !== userId.toString()) {
-        throw new BadRequestError('CV template không thuộc về bạn');
+      if (!cvTemplate || cvTemplate.userId.toString() !== userId.toString()) {
+        throw new BadRequestError('CV template không tồn tại hoặc không thuộc về bạn');
       }
       
       cvData = cvTemplate.cvData;
@@ -89,7 +99,12 @@ export const previewCVScore = async (userId, jobId, { cvId, cvTemplateId, forceR
       cvName = cvTemplate.title || 'CV Template';
     }
 
-    // 5. Build JD text
+    pushAnalysisEvent(analysisId, {
+      type: 'progress_update',
+      analysisProgress: 30,
+      phaseLabel: 'Đang trích xuất nội dung...',
+    });
+
     const jdText = `
 Job Title: ${job.title}
 Company: ${job.company}
@@ -99,9 +114,6 @@ Skills: ${job.skills?.join(', ') || ''}
 Experience: ${job.experience || ''}
 Education: ${job.education || ''}
     `.trim();
-
-    // 6. Check cache before expensive file parsing/LLM call
-    logger.info('Preview CV scoring', { userId, jobId, cvId, cvTemplateId });
 
     const cacheKey = buildCVScoreCacheKey({
       userId,
@@ -114,27 +126,42 @@ Education: ${job.education || ''}
     if (!forceRefresh) {
       const cachedScore = await getCachedCVScore(cacheKey);
       if (cachedScore) {
-        logger.info('Preview CV scoring cache hit', { userId, jobId, cvSource, cvId: sourceCvId });
-        return withCacheMetadata(cachedScore.scoringResult, {
-          isCached: true,
-          cache: cachedScore
+        pushAnalysisEvent(analysisId, {
+          type: 'progress_update',
+          analysisProgress: 100,
+          phaseLabel: 'Hoàn tất phân tích',
         });
+        
+        pushAnalysisEvent(analysisId, {
+          type: 'score_update',
+          ...cachedScore.scoringResult,
+          isCached: true
+        });
+
+        pushAnalysisEvent(analysisId, {
+          type: 'analysis_complete',
+          status: 'completed',
+        });
+        return;
       }
     }
 
-    // 7. Extract and validate CV text only on cache miss or forced refresh
     if (cvSource === 'UPLOADED') {
       cvText = await extractUploadedCVText(cvPayload);
     } else {
       cvText = extractCVText(cvData);
-
       const { validateCV } = await import('./cvScoring.service.js');
       const validation = validateCV(cvData);
-      
       if (!validation.isValid) {
         throw new BadRequestError(`File không hợp lệ: ${validation.reason}. Vui lòng upload CV thật với đầy đủ thông tin cá nhân, kinh nghiệm, kỹ năng.`);
       }
     }
+
+    pushAnalysisEvent(analysisId, {
+      type: 'progress_update',
+      analysisProgress: 60,
+      phaseLabel: 'AI đang phân tích độ phù hợp...',
+    });
     
     const scoringResult = await scoreCVWithLLM({
       cvText,
@@ -146,27 +173,39 @@ Education: ${job.education || ''}
       throw new BadRequestError('Không thể chấm điểm CV. Vui lòng thử lại sau.');
     }
 
-    const cache = await saveCVScoreCache(cacheKey, scoringResult, {
+    pushAnalysisEvent(analysisId, {
+      type: 'progress_update',
+      analysisProgress: 90,
+      phaseLabel: 'Đang lưu kết quả...',
+    });
+
+    await saveCVScoreCache(cacheKey, scoringResult, {
       cvName,
       jobTitle: job.title
     });
 
-    logger.info('Preview CV scoring completed', {
-      userId,
-      jobId,
-      score: scoringResult.overall_score
+    pushAnalysisEvent(analysisId, {
+      type: 'progress_update',
+      analysisProgress: 100,
+      phaseLabel: 'Hoàn tất phân tích',
     });
 
-    return withCacheMetadata(scoringResult, {
-      isCached: false,
-      cache
+    pushAnalysisEvent(analysisId, {
+      type: 'score_update',
+      ...scoringResult,
+      isCached: false
     });
+
+    pushAnalysisEvent(analysisId, {
+      type: 'analysis_complete',
+      status: 'completed',
+    });
+
   } catch (error) {
-    logger.error('Preview CV scoring error:', {
-      userId,
-      jobId,
-      error: error
+    pushAnalysisEvent(analysisId, {
+      type: 'analysis_error',
+      status: 'error',
+      message: error.message || 'Lỗi không xác định khi chấm điểm CV',
     });
-    throw error;
   }
 };
