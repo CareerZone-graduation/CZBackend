@@ -70,6 +70,22 @@ router.post(
   applicationController.scoreCV
 );
 
+router.post(
+  '/:applicationId/cv-score/analysis',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.candidateOnly,
+  validationMiddleware.validateParams(applicationSchema.applicationIdParam),
+  applicationController.startCvScoreAnalysis
+);
+
+router.get(
+  '/cv-score/stream/:analysisId',
+  passport.authenticate('jwt', { session: false }),
+  authMiddleware.candidateOnly,
+  validationMiddleware.validateParams(applicationSchema.analysisIdParam),
+  applicationController.streamCvScoreAnalysis
+);
+
 // Route tạo CV mới từ AI (Candidate only) - ĐẶT TRƯỚC /:applicationId
 router.post(
   '/:applicationId/generate-cv',

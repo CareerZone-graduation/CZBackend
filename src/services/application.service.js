@@ -16,6 +16,11 @@ import * as queueService from './queue.service.js';
 import * as rabbitmq from '../queues/rabbitmq.js';
 import { pushNotification } from './notification.service.js';
 import { extractTextFromPDF } from '../utils/pdfTextExtractor.js';
+import {
+  createAnalysisSession,
+  pushAnalysisEvent,
+  getLatestAnalysisState,
+} from './cvScoreStream.service.js';
 
 // ==========================================================
 // === HELPER FUNCTIONS FOR AUTOMATION & LOGGING (NEW) ====
@@ -1041,6 +1046,84 @@ Skills: ${job.skills?.join(', ') || ''}
     isCached: false,
     cache
   });
+};
+
+export const startCvScoreAnalysis = async (userId, applicationId) => {
+  const application = await Application.findById(applicationId)
+    .populate('jobId')
+    .populate('candidateProfileId');
+
+  if (!application) {
+    throw new NotFoundError('Không tìm thấy đơn ứng tuyển');
+  }
+
+  const candidateProfile = await CandidateProfile.findOne({ userId });
+  if (!candidateProfile || application.candidateProfileId._id.toString() !== candidateProfile._id.toString()) {
+    throw new UnauthorizedError('Bạn không có quyền chấm điểm đơn ứng tuyển này');
+  }
+
+  const session = createAnalysisSession({
+    applicationId: application._id.toString(),
+    userId: userId.toString(),
+  });
+
+  pushAnalysisEvent(session.analysisId, {
+    type: 'started',
+    status: 'started',
+    analysisProgress: 0,
+    matchScore: 0,
+    phaseLabel: 'Khoi tao phan tich',
+  });
+
+  const cachedScore = Number(application.cvScore?.overall_score);
+  const matchScore = Number.isFinite(cachedScore) ? cachedScore : 0;
+
+  pushAnalysisEvent(session.analysisId, {
+    type: 'progress_update',
+    analysisProgress: 50,
+    phaseLabel: 'Dang phan tich CV',
+  });
+
+  pushAnalysisEvent(session.analysisId, {
+    type: 'score_update',
+    matchScore,
+  });
+
+  pushAnalysisEvent(session.analysisId, {
+    type: 'section_update',
+    sections: {
+      overall: {
+        score: matchScore,
+      },
+    },
+  });
+
+  pushAnalysisEvent(session.analysisId, {
+    type: 'progress_update',
+    analysisProgress: 100,
+    phaseLabel: 'Hoan tat phan tich',
+  });
+
+  pushAnalysisEvent(session.analysisId, {
+    type: 'completed',
+    status: 'completed',
+  });
+
+  return { analysisId: session.analysisId };
+};
+
+export const streamCvScoreAnalysis = async (userId, analysisId) => {
+  const state = getLatestAnalysisState(analysisId);
+
+  if (!state) {
+    throw new NotFoundError('Không tìm thấy phiên phân tích CV');
+  }
+
+  if (state.userId !== userId.toString()) {
+    throw new UnauthorizedError('Bạn không có quyền xem kết quả phân tích này');
+  }
+
+  return state;
 };
 
 

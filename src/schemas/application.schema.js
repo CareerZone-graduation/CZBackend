@@ -10,6 +10,10 @@ export const applicationIdParam = z.object({
   applicationId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Application ID không hợp lệ')
 });
 
+export const analysisIdParam = z.object({
+  analysisId: z.string().uuid('Analysis ID phải là UUID hợp lệ')
+});
+
 // Validation schema cho query parameters lấy danh sách ứng viên
 export const getApplicationsQuery = z.object({
   page: z.string().regex(/^\d+$/, 'Page phải là số').optional().transform(Number),

@@ -329,3 +329,45 @@ export const getMyApplicationDetail = asyncHandler(async (req, res) => {
     data: application
   });
 });
+
+export const startCvScoreAnalysis = asyncHandler(async (req, res) => {
+  const { applicationId } = req.params;
+  const result = await applicationService.startCvScoreAnalysis(req.user._id, applicationId);
+
+  res.status(201).json({
+    success: true,
+    message: 'Khoi tao phan tich CV thanh cong',
+    data: result,
+  });
+});
+
+export const streamCvScoreAnalysis = asyncHandler(async (req, res, next) => {
+  let streamStarted = false;
+
+  try {
+    const { analysisId } = req.params;
+    const state = await applicationService.streamCvScoreAnalysis(req.user._id, analysisId);
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    streamStarted = true;
+
+    for (const event of state.events || []) {
+      const eventName = event.type || 'progress_update';
+      res.write(`event: ${eventName}\n`);
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    }
+
+    res.end();
+  } catch (error) {
+    if (!streamStarted) {
+      return next(error);
+    }
+
+    res.write('event: error\n');
+    res.write(`data: ${JSON.stringify({ message: error.message || 'stream_error' })}\n\n`);
+    res.end();
+  }
+});
