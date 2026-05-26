@@ -17,5 +17,6 @@ router.post('/:testId/questions', passport.authenticate('jwt', { session: false 
 router.put('/:testId/questions/:questionId', passport.authenticate('jwt', { session: false }), authMiddleware.recruiterOnly, validation.validateParams(testSchema.testIdParam.merge(testSchema.questionIdParam)), validation.validateBody(testSchema.updateQuestionBody), testController.updateQuestion);
 router.delete('/:testId/questions/:questionId', passport.authenticate('jwt', { session: false }), authMiddleware.recruiterOnly, validation.validateParams(testSchema.testIdParam.merge(testSchema.questionIdParam)), testController.deleteQuestion);
 router.post('/:testId/questions/reorder', passport.authenticate('jwt', { session: false }), authMiddleware.recruiterOnly, validation.validateParams(testSchema.testIdParam), validation.validateBody(testSchema.reorderQuestionsBody), testController.reorderQuestions);
+router.get('/:testId/assignments', passport.authenticate('jwt', { session: false }), authMiddleware.recruiterOnly, validation.validateParams(testSchema.testIdParam), testController.getTestAssignments);
 
 export default router;

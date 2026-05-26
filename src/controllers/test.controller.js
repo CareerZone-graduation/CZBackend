@@ -50,3 +50,8 @@ export const reorderQuestions = asyncHandler(async (req, res) => {
   const data = await testService.reorderQuestions(req.user._id, req.params.testId, req.body);
   res.status(200).json({ success: true, message: 'Sắp xếp câu hỏi thành công', data });
 });
+
+export const getTestAssignments = asyncHandler(async (req, res) => {
+  const result = await testService.getTestAssignments(req.user._id, req.params.testId, req.query);
+  res.status(200).json({ success: true, message: 'Lấy danh sách ứng viên làm bài test thành công', ...result });
+});

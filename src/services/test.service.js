@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { RecruiterProfile, Test, TestAssignment } from '../models/index.js';
+import { RecruiterProfile, Test, TestAssignment, WorkflowNode } from '../models/index.js';
 import { BadRequestError, NotFoundError, UnauthorizedError } from '../utils/AppError.js';
 
 const toObjectId = (value, fieldName = 'ID') => {
@@ -131,7 +131,11 @@ export const listTests = async (userId, query = {}) => {
 
 export const getTestById = async (userId, testId) => {
   const { test } = await getTestOwnershipContext(testId, userId);
-  return test.toObject();
+  const isAssigned = await TestAssignment.exists({ testId: test._id });
+  return {
+    ...test.toObject(),
+    isAssigned: !!isAssigned
+  };
 };
 
 export const createTest = async (userId, payload = {}) => {
@@ -175,6 +179,9 @@ export const createTest = async (userId, payload = {}) => {
 export const updateTest = async (userId, testId, payload = {}) => {
   const { test } = await getTestOwnershipContext(testId, userId);
 
+  // Kiểm tra xem bài test đã được giao cho ứng viên nào hay chưa
+  const isAssigned = await TestAssignment.exists({ testId: test._id });
+
   if (typeof payload.name !== 'undefined') {
     if (!payload.name?.trim()) {
       throw new BadRequestError('Tên bài test không được để trống');
@@ -187,6 +194,9 @@ export const updateTest = async (userId, testId, payload = {}) => {
   }
 
   if (typeof payload.duration !== 'undefined') {
+    if (isAssigned && payload.duration !== test.duration) {
+      throw new BadRequestError('Không thể thay đổi thời lượng của bài kiểm tra đã được giao cho ứng viên');
+    }
     if (!Number.isFinite(payload.duration) || payload.duration < 1) {
       throw new BadRequestError('Thời lượng bài test phải lớn hơn 0');
     }
@@ -194,6 +204,9 @@ export const updateTest = async (userId, testId, payload = {}) => {
   }
 
   if (typeof payload.questions !== 'undefined') {
+    if (isAssigned) {
+      throw new BadRequestError('Không thể thay đổi danh sách câu hỏi của bài kiểm tra đã được giao cho ứng viên');
+    }
     if (!Array.isArray(payload.questions) || payload.questions.length < 1) {
       throw new BadRequestError('Bài test phải có ít nhất 1 câu hỏi');
     }
@@ -205,6 +218,10 @@ export const updateTest = async (userId, testId, payload = {}) => {
   const totalScore = recalculateTotalScore(test.questions);
   const nextPassingScore = typeof payload.passingScore !== 'undefined' ? payload.passingScore : test.passingScore;
 
+  if (isAssigned && nextPassingScore !== test.passingScore) {
+    throw new BadRequestError('Không thể thay đổi điểm đạt của bài kiểm tra đã được giao cho ứng viên');
+  }
+
   if (!Number.isFinite(nextPassingScore) || nextPassingScore < 0 || nextPassingScore > totalScore) {
     throw new BadRequestError('Điểm đạt không hợp lệ');
   }
@@ -213,19 +230,32 @@ export const updateTest = async (userId, testId, payload = {}) => {
   test.passingScore = nextPassingScore;
 
   await test.save();
-  return test.toObject();
+  return {
+    ...test.toObject(),
+    isAssigned: !!isAssigned
+  };
 };
 
 export const deleteTest = async (userId, testId) => {
   const { test } = await getTestOwnershipContext(testId, userId);
 
-  if (test.usageCount > 0) {
-    throw new BadRequestError('Không thể xóa bài test đang được sử dụng');
-  }
-
+  // 1. Kiểm tra xem bài test đã được giao cho ứng viên nào hay chưa (TestAssignment)
   const assignmentCount = await TestAssignment.countDocuments({ testId: test._id });
   if (assignmentCount > 0) {
-    throw new BadRequestError('Không thể xóa bài test đã được gán cho ứng viên');
+    throw new BadRequestError('Không thể xóa bài test đã được giao cho ứng viên hoặc có kết quả làm bài');
+  }
+
+  // 2. Kiểm tra xem bài test có đang được thiết lập trong bước quy trình (Workflow Node) nào không
+  const referencedInWorkflow = await WorkflowNode.countDocuments({
+    type: 'ACTION_TEST',
+    $or: [
+      { 'config.testId': test._id },
+      { 'config.testId': String(test._id) }
+    ]
+  });
+
+  if (referencedInWorkflow > 0) {
+    throw new BadRequestError('Không thể xóa bài test đang được sử dụng trong các bước Quy trình tuyển dụng (Workflow). Vui lòng loại bỏ bài test này khỏi các bước tuyển dụng trước.');
   }
 
   await Test.deleteOne({ _id: test._id });
@@ -404,4 +434,37 @@ export const decreaseUsageCount = async (testId, amount = 1) => {
   await test.save();
 
   return test.toObject();
+};
+
+export const getTestAssignments = async (userId, testId, query = {}) => {
+  const { test } = await getTestOwnershipContext(testId, userId);
+  const { page = 1, limit = 20 } = query;
+  const skip = (page - 1) * limit;
+
+  const [items, total] = await Promise.all([
+    TestAssignment.find({ testId: test._id })
+      .populate('candidateId', 'name email avatar')
+      .populate({
+        path: 'applicationId',
+        populate: {
+          path: 'candidateProfileId',
+          select: 'fullName phone cvUrl'
+        }
+      })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    TestAssignment.countDocuments({ testId: test._id })
+  ]);
+
+  return {
+    data: items,
+    meta: {
+      currentPage: Number(page),
+      totalPages: Math.ceil(total / limit) || 1,
+      totalItems: total,
+      limit: Number(limit)
+    }
+  };
 };

@@ -70,6 +70,11 @@ const CHECKS = [
   { model: 'JobAlertSubscription', field: 'userId' },
   { model: 'ProfileUnlock', field: 'recruiterProfileId' },
   { model: 'ProfileUnlock', field: 'candidateProfileId' },
+  { model: 'Test', field: 'companyId' },
+  { model: 'Test', field: 'createdBy' },
+  { model: 'TestAssignment', field: 'testId' },
+  { model: 'TestAssignment', field: 'applicationId' },
+  { model: 'TestAssignment', field: 'candidateId' },
 ];
 
 const findOrphans = async (check) => {
@@ -186,7 +191,7 @@ const runApplicationOrphanCleanup = async (dryRun = true) => {
   console.log(chalk.bold.cyan(`DỌN DẸP DỮ LIỆU APPLICATION BỊ XÓA (${dryRun ? 'CHỈ KIỂM TRA' : 'XÓA THỰC TẾ'})`));
   console.log(chalk.cyan('━'.repeat(60)) + '\n');
 
-  const { Application, Notification, Conversation, ChatMessage, TalentPool, InterviewRoom } = Models;
+  const { Application, Notification, Conversation, ChatMessage, TalentPool, InterviewRoom, TestAssignment } = Models;
   
   let stats = {
       notificationsDeleted: 0,
@@ -194,6 +199,7 @@ const runApplicationOrphanCleanup = async (dryRun = true) => {
       messagesDeleted: 0,
       talentPoolDeleted: 0,
       interviewRoomsDeleted: 0,
+      testAssignmentsDeleted: 0,
   };
   let totalOrphans = 0;
 
@@ -290,6 +296,24 @@ const runApplicationOrphanCleanup = async (dryRun = true) => {
           }
       }
 
+      // 5. Cleanup TestAssignment
+      const testAssignments = await TestAssignment.find({ applicationId: { $exists: true, $ne: null } }).lean();
+      const orphanedAssignmentIds = [];
+      for (const entry of testAssignments) {
+          const appExists = await Application.exists({ _id: entry.applicationId });
+          if (!appExists) orphanedAssignmentIds.push(entry._id);
+      }
+
+      if (orphanedAssignmentIds.length > 0) {
+          console.log(`   ⚠️ Tìm thấy ${orphanedAssignmentIds.length} lượt giao/làm bài test (TestAssignment) rác`);
+          if (!dryRun) {
+              const result = await TestAssignment.deleteMany({ _id: { $in: orphanedAssignmentIds } });
+              stats.testAssignmentsDeleted = result.deletedCount;
+          } else {
+              stats.testAssignmentsDeleted = orphanedAssignmentIds.length;
+          }
+      }
+
       totalOrphans = Object.values(stats).reduce((a, b) => a + b, 0);
 
       if (totalOrphans === 0) {
@@ -301,6 +325,7 @@ const runApplicationOrphanCleanup = async (dryRun = true) => {
           console.log(`   - Tin nhắn: ${stats.messagesDeleted}`);
           console.log(`   - Danh sách tiềm năng: ${stats.talentPoolDeleted}`);
           console.log(`   - Phòng phỏng vấn: ${stats.interviewRoomsDeleted}`);
+          console.log(`   - Lượt giao/làm bài test: ${stats.testAssignmentsDeleted}`);
       }
 
   } catch (error) {
