@@ -269,7 +269,7 @@ export const getApplicationsByJob = async (jobId, recruiterId, options = {}) => 
         latestExecution: 1,
         interview_result: 1,
         test_score: 1,
-        cv_score: 1,
+        ai_result: 1,
         workflowId: 1,
         workflowData: 1
       }

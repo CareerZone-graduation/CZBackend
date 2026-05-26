@@ -7,6 +7,9 @@ import { uploadFile } from './upload.service.js';
 
 export const uploadDocument = async (recruiterId, file, body) => {
   if (!file) throw new BadRequestError('Vui lòng chọn file');
+  if (!file.buffer || file.size === 0) {
+    throw new BadRequestError('File tải lên không hợp lệ hoặc có dung lượng bằng 0.');
+  }
 
   const count = await RecruiterKnowledgeDocument.countDocuments({ recruiterId, isActive: true });
   if (count >= 10) throw new BadRequestError('Bạn đã đạt giới hạn 10 tài liệu');

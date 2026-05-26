@@ -10,14 +10,14 @@ const MONGODB_URI = process.env.DB_URI || 'mongodb://localhost:27017/careerzone'
 export const SYSTEM_TEMPLATES = [
   {
     name: 'Basic Recruitment',
-    description: 'Quy trình cơ bản: Mới ứng tuyển → AI sàng lọc CV → Đạt điều kiện phỏng vấn / Loại → Kết thúc',
+    description: 'Quy trình cơ bản: Mới ứng tuyển → Quyết định bởi AI → Đạt điều kiện phỏng vấn / Loại → Kết thúc',
     category: 'BASIC',
     isSystemTemplate: true,
     workflowDefinition: {
       nodes: [
         { _id: 'n1', type: 'STAGE', name: 'Mới ứng tuyển', position: { x: 280, y: 60 }, config: { statusMapping: 'PENDING', color: '#F59E0B', description: 'Ứng viên vừa nộp đơn' } },
-        { _id: 'n2', type: 'ACTION_AI', name: 'Chấm điểm CV', position: { x: 280, y: 200 }, config: { aiActionType: 'CV_SCREENING' } },
-        { _id: 'n3', type: 'CONDITION', name: 'CV score >= 70', position: { x: 280, y: 340 }, config: { field: 'cv_score', operator: '>=', value: 70, dataType: 'number' } },
+        { _id: 'n2', type: 'ACTION_AI', name: 'Quyết định bởi AI', position: { x: 280, y: 200 }, config: { criteria: 'Ứng viên có kỹ năng phù hợp với công việc.' } },
+        { _id: 'n3', type: 'CONDITION', name: 'Kết quả AI đạt', position: { x: 280, y: 340 }, config: { field: 'ai_result', operator: '==', value: 'PASSED' } },
         { _id: 'n4', type: 'STAGE', name: 'Phỏng vấn', position: { x: 110, y: 500 }, config: { statusMapping: 'SCHEDULED_INTERVIEW', color: '#06B6D4', description: 'Mời ứng viên đạt yêu cầu vào vòng phỏng vấn' } },
         { _id: 'n5', type: 'STAGE', name: 'Loại', position: { x: 450, y: 500 }, config: { statusMapping: 'REJECTED', color: '#EF4444', description: 'Không đạt yêu cầu sàng lọc CV' } },
         { _id: 'n6', type: 'END', name: 'Kết thúc', position: { x: 280, y: 660 }, config: {} }

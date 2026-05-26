@@ -156,7 +156,7 @@ describe('Workflow END guards', () => {
         type: 'CONDITION',
         name: 'Score Check',
         position: { x: 240, y: 0 },
-        config: { field: 'cv_score', operator: '>=', value: 70 }
+        config: { field: 'ai_result', operator: '==', value: 'PASSED' }
       },
       {
         workflowId: workflow._id,

@@ -323,8 +323,8 @@ const executeStageNode = async (application, node, executionLog) => {
   if (node.config?.statusMapping && APPLICATION_STATUS_VALUES.has(node.config.statusMapping)) {
     applyApplicationStatusChange(application, node.config.statusMapping, {
       detail: node.config.statusMapping === 'SCHEDULED_INTERVIEW'
-        ? 'Workflow đã chuyển hồ sơ sang vòng phỏng vấn'
-        : `Workflow đã tự động chuyển hồ sơ sang trạng thái ${node.config.statusMapping}`
+        ? 'Nhà tuyển dụng đã chuyển hồ sơ sang vòng phỏng vấn'
+        : `Nhà tuyển dụng đã chuyển hồ sơ sang trạng thái ${node.config.statusMapping}`
     });
   } else if (node.config?.statusMapping) {
     logger.warn(`Workflow node ${node._id} has unsupported application statusMapping "${node.config.statusMapping}". Skipping status update.`);
@@ -338,7 +338,7 @@ const executeStageNode = async (application, node, executionLog) => {
       requestedAt: null
     };
   }
-  
+
   const connection = await WorkflowConnection.findOne({ sourceNodeId: node._id });
 
   // Nếu là vòng Phỏng vấn, thì dừng lại không chạy tiếp (tương tự như ACTION_TEST chờ làm bài)
@@ -391,6 +391,10 @@ const executeStageNode = async (application, node, executionLog) => {
 const resolveConditionValue = async (application, field) => {
   if (field === 'test_score') {
     return application.test_score;
+  }
+
+  if (field === 'ai_result') {
+    return application.ai_result;
   }
 
   if (field === 'interview_result') {
@@ -480,7 +484,7 @@ const executeActionEmailNode = async (application, node, executionLog) => {
     const candidateName = application.candidateName || '';
     const jobTitle = application.jobSnapshot?.title || '';
     const companyName = application.jobSnapshot?.company || '';
-    
+
     newText = newText.replace(/{{candidateName}}/g, candidateName);
     newText = newText.replace(/{{jobTitle}}/g, jobTitle);
     newText = newText.replace(/{{companyName}}/g, companyName);
@@ -516,26 +520,121 @@ const executeActionEmailNode = async (application, node, executionLog) => {
   return null;
 };
 
-const executeActionAINode = async (application, node, executionLog) => {
-  const { aiActionType } = node.config || {};
-
-  if (aiActionType === 'CV_SCREENING') {
-    const [candidateProfile, job] = await Promise.all([
-      CandidateProfile.findById(application.candidateProfileId).lean(),
-      Job.findById(application.jobId).lean()
-    ]);
-
-    const cvScore = await scoreCVWithLLM({ application, candidateProfile, job });
-
-    application.cv_score = cvScore;
-    await application.save();
-
-    logger.info(`AI CV_SCREENING completed for application ${application._id}: ${cvScore} points`);
-    executionLog.result.metadata = { aiActionType, score: cvScore };
-  } else {
-    logger.warn(`Unknown AI Action Type: ${aiActionType}`);
-    executionLog.result.metadata = { aiActionType, warning: 'Unknown type' };
+const evaluateCriteriaWithLLM = async ({ application, candidateProfile, job, criteria }) => {
+  if (!LLM_API_KEY || !LLM_BASE_URL) {
+    throw new AppError('Hệ thống AI chưa được cấu hình', 500);
   }
+
+  const cvText = await getApplicationCVText(application);
+  const prompt = `Bạn là chuyên gia tuyển dụng cao cấp. Nhiệm vụ của bạn là đánh giá xem CV của ứng viên có đáp ứng ĐẦY ĐỦ các tiêu chí tuyển dụng cụ thể dưới đây hay không.
+
+Tiêu chí cần đánh giá (do nhà tuyển dụng yêu cầu):
+${criteria || 'Phù hợp với mô tả công việc (JD)'}
+
+BẮT BUỘC:
+- Chỉ trả về JSON hợp lệ.
+- Không thêm markdown, không thêm giải thích ngoài JSON.
+- Format JSON:
+{
+  "pass": boolean,
+  "reason": "Giải thích chi tiết ngắn gọn bằng tiếng Việt lý do tại sao đạt hoặc không đạt từng tiêu chí"
+}
+
+Thông tin công việc (JD):
+- Tiêu đề: ${job?.title || 'N/A'}
+- Mô tả: ${job?.description || 'N/A'}
+- Yêu cầu: ${job?.requirements || 'N/A'}
+
+Thông tin ứng viên:
+- Họ tên: ${candidateProfile?.fullname || application?.candidateName || 'N/A'}
+- Bio: ${candidateProfile?.bio || 'N/A'}
+- Skills: ${(candidateProfile?.skills || []).map((s) => `${s?.name || ''} (${s?.level || ''})`).filter(Boolean).join(', ') || 'N/A'}
+- Kinh nghiệm: ${(candidateProfile?.experiences || []).map((e) => `${e?.position || ''} tại ${e?.company || ''}: ${e?.description || ''}`).join(' | ') || 'N/A'}
+- Học vấn: ${(candidateProfile?.educations || []).map((e) => `${e?.degree || ''} ${e?.major || ''} ${e?.school || ''}`).join(' | ') || 'N/A'}
+- Nội dung CV: ${cvText || 'N/A'}
+`;
+
+  const response = await axios.post(
+    `${LLM_BASE_URL}/chat/completions`,
+    {
+      model: LLM_MODEL,
+      messages: [
+        {
+          role: 'system',
+          content: 'Bạn là chuyên gia sàng lọc CV và ra quyết định tuyển dụng dựa trên tiêu chí. Luôn trả về JSON hợp lệ.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.2,
+      max_tokens: 300
+    },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${LLM_API_KEY}`
+      },
+      timeout: 30000
+    }
+  );
+
+  const content = response?.data?.choices?.[0]?.message?.content || '';
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error('LLM không trả về JSON hợp lệ cho quyết định AI');
+  }
+
+  const parsed = JSON.parse(jsonMatch[0]);
+  logger.info(`LLM parsed response for AI Decision: ${JSON.stringify(parsed)}`);
+
+  return {
+    pass: !!parsed.pass,
+    reason: parsed.reason || ''
+  };
+};
+
+const executeActionAINode = async (application, node, executionLog) => {
+  const { criteria } = node.config || {};
+
+  const [candidateProfile, job] = await Promise.all([
+    CandidateProfile.findById(application.candidateProfileId).lean(),
+    Job.findById(application.jobId).lean()
+  ]);
+
+  const evaluation = await evaluateCriteriaWithLLM({
+    application,
+    candidateProfile,
+    job,
+    criteria
+  });
+
+  application.ai_result = evaluation.pass ? 'PASSED' : 'FAILED';
+
+  if (!application.workflowData) {
+    application.workflowData = {};
+  }
+  if (!application.workflowData.aiDecisions) {
+    application.workflowData.aiDecisions = [];
+  }
+  application.workflowData.aiDecisions.push({
+    nodeId: node._id.toString(),
+    nodeName: node.name,
+    pass: evaluation.pass,
+    reason: evaluation.reason,
+    evaluatedAt: new Date()
+  });
+
+  await application.save();
+
+  logger.info(`AI Decision Node completed for application ${application._id}: ${evaluation.pass ? 'PASSED' : 'FAILED'}. Reason: ${evaluation.reason}`);
+
+  executionLog.result.metadata = {
+    criteria,
+    pass: evaluation.pass,
+    reason: evaluation.reason
+  };
 
   const connection = await WorkflowConnection.findOne({ sourceNodeId: node._id });
   if (connection) {
@@ -580,18 +679,6 @@ const executeActionTestNode = async (application, node, executionLog) => {
       };
       await queueService.publishNotificationStrict(ROUTING_KEYS.STATUS_UPDATE, payload);
     }
-    
-    // await emailService.sendEmail({
-    //   to: application.candidateEmail,
-    //   subject: 'Yêu cầu làm bài kiểm tra tuyển dụng',
-    //   template: 'basicNotification',
-    //   context: {
-    //     candidateName: application.candidateName,
-    //     jobTitle: application.jobSnapshot?.title,
-    //     companyName: application.jobSnapshot?.company,
-    //     content: `Nhà tuyển dụng đã yêu cầu bạn làm một bài kiểm tra năng lực. Bạn có 3 ngày để hoàn thành bài test này tính từ lúc nhận email. Vui lòng đăng nhập vào hệ thống để làm bài.`
-    //   }
-    // });
   } catch (err) {
     logger.error('Failed to notify candidate about new test assignment', err);
   }
@@ -615,7 +702,7 @@ const executeActionTestNode = async (application, node, executionLog) => {
 
 const executeActionDelayNode = async (application, node, executionLog) => {
   const { delayValue, delayUnit } = node.config || {};
-  
+
   if (!delayValue || isNaN(delayValue)) {
     logger.warn(`Action Delay Node ${node._id} has invalid delay config. Skipping delay.`);
     const connection = await WorkflowConnection.findOne({ sourceNodeId: node._id });
@@ -646,10 +733,10 @@ const executeActionDelayNode = async (application, node, executionLog) => {
 
     logger.info(`Workflow for application ${application._id} paused at Delay Node ${node._id}. Resuming at ${application.workflowData.resumeAt}`);
     executionLog.result.metadata = { paused: true, resumeAt: application.workflowData.resumeAt };
-    
+
     return null;
   }
-  
+
   return null;
 };
 
@@ -659,7 +746,7 @@ export const __private__ = {
 
 export const retryFailedExecution = async (userId, executionId) => {
   const execution = await WorkflowExecution.findById(executionId);
-  
+
   if (!execution) {
     throw new AppError('Không tìm thấy lịch sử thực thi này', 404);
   }

@@ -46,6 +46,13 @@ const _uploadToCloudinary = (fileBuffer, folder, resourceType = 'auto', original
                 });
             }
         );
+
+        // Bắt lỗi stream phát sinh (ví dụ: ghi file rỗng hoặc lỗi kết nối mạng)
+        uploadStream.on('error', (err) => {
+            console.error('Cloudinary Stream Write Error:', err);
+            reject(new BadRequestError('Lỗi luồng dữ liệu khi truyền file lên Cloudinary.'));
+        });
+
         uploadStream.end(fileBuffer);
     });
 };
