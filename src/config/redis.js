@@ -56,18 +56,6 @@ const connectRedis = async () => {
 // Connect on application startup
 connectRedis();
 
-// Helper function to safely execute Redis commands
-export const safeRedisCommand = async (command, fallback = null) => {
-  try {
-    if (!redisClient.isOpen || !redisClient.isReady) {
-      logger.warn('Redis not available, using fallback');
-      return fallback;
-    }
-    return await command();
-  } catch (error) {
-    logger.error('Redis command failed:', error);
-    return fallback;
-  }
-};
+
 
 export default redisClient;

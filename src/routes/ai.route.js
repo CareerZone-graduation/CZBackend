@@ -17,16 +17,4 @@ router.post(
   aiController.enhanceJobContent
 );
 
-/**
- * @route POST /api/ai/smart-suggestions
- * @desc Generate smart suggestions based on job title
- * @access Private (Recruiter only)
- */
-router.post(
-  '/smart-suggestions',
-  passport.authenticate('jwt', { session: false }),
-  recruiterOnly,
-  aiController.generateSmartSuggestions
-);
-
 export default router;

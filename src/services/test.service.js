@@ -402,39 +402,7 @@ export const reorderQuestions = async (userId, testId, payload = {}) => {
   return test.toObject();
 };
 
-export const increaseUsageCount = async (testId, amount = 1) => {
-  if (!Number.isFinite(amount) || amount < 1) {
-    throw new BadRequestError('Số lượng tăng không hợp lệ');
-  }
 
-  const updated = await Test.findByIdAndUpdate(
-    toObjectId(testId, 'Test ID'),
-    { $inc: { usageCount: amount } },
-    { new: true }
-  ).lean();
-
-  if (!updated) {
-    throw new NotFoundError('Không tìm thấy bài test');
-  }
-
-  return updated;
-};
-
-export const decreaseUsageCount = async (testId, amount = 1) => {
-  if (!Number.isFinite(amount) || amount < 1) {
-    throw new BadRequestError('Số lượng giảm không hợp lệ');
-  }
-
-  const test = await Test.findById(toObjectId(testId, 'Test ID'));
-  if (!test) {
-    throw new NotFoundError('Không tìm thấy bài test');
-  }
-
-  test.usageCount = Math.max(0, (test.usageCount || 0) - amount);
-  await test.save();
-
-  return test.toObject();
-};
 
 export const getTestAssignments = async (userId, testId, query = {}) => {
   const { test } = await getTestOwnershipContext(testId, userId);

@@ -52,16 +52,7 @@ export const connectKnowledgeDB = async () => {
     }
 };
 
-/**
- * Get KnowledgeChunk model from knowledge database.
- * @returns {Promise<mongoose.Model>}
- */
-export const getKnowledgeChunkModel = async () => {
-    if (!KnowledgeChunkModel) {
-        await connectKnowledgeDB();
-    }
-    return KnowledgeChunkModel;
-};
+
 
 /**
  * Get KnowledgeBase model from knowledge database.

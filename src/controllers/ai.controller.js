@@ -78,33 +78,3 @@ export const enhanceJobContent = async (req, res) => {
 };
 
 
-/**
- * Generate smart suggestions based on job title
- * @route POST /api/ai/smart-suggestions
- */
-export const generateSmartSuggestions = async (req, res) => {
-  try {
-    const { jobTitle } = req.body;
-
-    if (!jobTitle || jobTitle.trim().length < 3) {
-      return res.status(400).json({
-        success: false,
-        message: 'Job title is required (minimum 3 characters)'
-      });
-    }
-
-    const suggestions = await aiService.generateSmartSuggestions(jobTitle);
-
-    res.status(200).json({
-      success: true,
-      message: 'Smart suggestions generated successfully',
-      data: suggestions
-    });
-  } catch (error) {
-    logger.error('Error in generateSmartSuggestions controller:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to generate suggestions'
-    });
-  }
-};

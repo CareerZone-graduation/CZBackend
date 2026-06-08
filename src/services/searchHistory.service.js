@@ -230,28 +230,7 @@ export const clearAllSearchHistory = async (userId) => {
   }
 };
 
-/**
- * Delete expired search history entries (older than 180 days)
- * Called by cron job
- * @returns {Promise<number>} - Number of deleted entries
- */
-export const deleteExpiredEntries = async () => {
-  try {
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - EXPIRATION_DAYS);
 
-    const result = await SearchHistory.deleteMany({
-      lastSearchedAt: { $lt: cutoffDate }
-    });
-
-    logger.info(`Deleted ${result.deletedCount} expired search history entries (older than ${EXPIRATION_DAYS} days)`);
-
-    return result.deletedCount;
-  } catch (error) {
-    logger.error('Error deleting expired search history entries:', error);
-    throw error;
-  }
-};
 
 /**
  * Invalidate Redis cache for a user

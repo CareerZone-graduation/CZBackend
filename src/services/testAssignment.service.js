@@ -394,44 +394,4 @@ export const getAssignmentResult = async (userId, assignmentId) => {
   return sanitizeAssignment(assignment, { includeAnswers: true, includeResult: true });
 };
 
-export const ensureCandidateOwnsAssignment = async (userId, assignmentId) => {
-  const { assignment } = await getAssignmentOwnershipContext(assignmentId, userId);
-  return assignment;
-};
 
-export const createAssignment = async ({ testId, applicationId, candidateId, expiresAt }) => {
-  const [test, application] = await Promise.all([
-    Test.findById(toObjectId(testId, 'Test ID')).lean(),
-    Application.findById(toObjectId(applicationId, 'Application ID')).lean()
-  ]);
-
-  if (!test) {
-    throw new NotFoundError('Không tìm thấy bài test');
-  }
-
-  if (!application) {
-    throw new NotFoundError('Không tìm thấy đơn ứng tuyển');
-  }
-
-  const expiresAtDate = new Date(expiresAt);
-  if (Number.isNaN(expiresAtDate.getTime())) {
-    throw new BadRequestError('Thời gian hết hạn không hợp lệ');
-  }
-
-  if (expiresAtDate.getTime() <= Date.now()) {
-    throw new BadRequestError('Thời gian hết hạn phải lớn hơn thời điểm hiện tại');
-  }
-
-  const assignment = await TestAssignment.create({
-    testId: test._id,
-    applicationId: application._id,
-    candidateId: toObjectId(candidateId, 'Candidate ID'),
-    expiresAt: expiresAtDate,
-    totalScore: test.totalScore || 0,
-    status: 'PENDING'
-  });
-
-  await Test.findByIdAndUpdate(test._id, { $inc: { usageCount: 1 } });
-
-  return assignment.toObject();
-};

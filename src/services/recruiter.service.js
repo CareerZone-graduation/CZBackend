@@ -261,12 +261,6 @@ const getDateRange = (timeRange) => {
   return { startDate, endDate };
 };
 
-const getPreviousDateRange = (startDate, endDate) => {
-  const duration = endDate.getTime() - startDate.getTime();
-  const previousEndDate = new Date(startDate.getTime());
-  const previousStartDate = new Date(previousEndDate.getTime() - duration);
-  return { startDate: previousStartDate, endDate: previousEndDate };
-};
 
 /**
  * Get dashboard statistics

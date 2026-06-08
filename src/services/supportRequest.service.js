@@ -67,26 +67,7 @@ export const uploadAttachments = async (files) => {
   return await Promise.all(uploadPromises);
 };
 
-/**
- * Delete attachments from Cloudinary
- * @param {Array<string>} publicIds - Array of Cloudinary public IDs
- * @returns {Promise<void>}
- */
-export const deleteAttachments = async (publicIds) => {
-  if (!publicIds || publicIds.length === 0) {
-    return;
-  }
 
-  try {
-    await Promise.all(
-      publicIds.map(publicId => cloudinary.uploader.destroy(publicId))
-    );
-    logger.info(`Deleted ${publicIds.length} attachments from Cloudinary`);
-  } catch (error) {
-    logger.error('Error deleting attachments from Cloudinary:', error);
-    // Don't throw error - this is cleanup, shouldn't block main operation
-  }
-};
 
 /**
  * Sanitize input to prevent XSS attacks

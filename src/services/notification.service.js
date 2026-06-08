@@ -576,46 +576,7 @@ export const createProfileViewNotification = async (payload) => {
   return notification;
 };
 
-/**
- * Tạo thông báo gợi ý việc làm.
- * @param {object} payload - Dữ liệu từ worker
- * @returns {Promise<Notification>} - Thông báo đã tạo
- */
-export const createJobRecommendationNotification = async (payload) => {
-  const { recipientId, data } = payload;
-  const { reason, source, jobIds } = data;
 
-  if (!recipientId || !jobIds || jobIds.length === 0) {
-    logger.warn('JOB_RECOMMENDATION payload is missing required fields.', payload);
-    throw new BadRequestError('Thiếu thông tin bắt buộc để tạo thông báo.');
-  }
-
-  const title = '🎯 Gợi ý việc làm phù hợp';
-  const message = `Chúng tôi đã tìm thấy ${jobIds.length} công việc phù hợp với bạn. ${reason || ''}`;
-
-  const notification = await Notification.create({
-    userId: new mongoose.Types.ObjectId(recipientId),
-    title,
-    message,
-    type: 'recommendation',
-    metadata: {
-      reason: reason || 'Dựa trên hồ sơ và sở thích của bạn',
-      source: source || 'AI_MATCHING',
-      jobIds: jobIds.map(id => id.toString())
-    },
-  });
-
-  // Gửi push notification
-  await pushNotification(recipientId, {
-    title,
-    body: message,
-    data: {
-      url: '/jobs/recommendations'
-    }
-  });
-
-  return notification;
-};
 
 
 // =================================================================

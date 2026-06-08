@@ -269,38 +269,7 @@ export const batchGenerateJobEmbeddings = async (jobIds, batchSize = 50) => {
   return results;
 };
 
-/**
- * Regenerate embeddings for jobs that don't have them or are outdated
- * @param {number} daysOld - Regenerate embeddings older than this many days (default: 7)
- * @returns {Promise<{success: number, failed: number, errors: Array}>}
- */
-export const regenerateOutdatedEmbeddings = async (daysOld = 7) => {
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - daysOld);
 
-  // Find jobs that need embedding updates
-  const jobsNeedingUpdate = await Job.find({
-    status: 'ACTIVE',
-    $or: [
-      { embeddingsUpdatedAt: { $exists: false } },
-      { embeddingsUpdatedAt: { $lt: cutoffDate } },
-      { chunks: { $size: 0 } }
-    ]
-  }).select('_id').lean();
-
-  const jobIds = jobsNeedingUpdate.map(job => job._id.toString());
-
-  logger.info('Found jobs needing embedding updates', {
-    count: jobIds.length,
-    cutoffDate
-  });
-
-  if (jobIds.length === 0) {
-    return { success: 0, failed: 0, errors: [] };
-  }
-
-  return await batchGenerateJobEmbeddings(jobIds);
-};
 
 /**
  * Extract text content from candidate profile
