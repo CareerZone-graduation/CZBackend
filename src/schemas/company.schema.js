@@ -66,6 +66,7 @@ const baseCompanySchema = z.object({
   // address: addressSchema, 
 
   contactInfo: contactInfoSchema,
+  enableChatbot: z.boolean().optional(),
 }).refine(data => {
   const provinceData = locationMap.get(data.location.province);
   if (!provinceData) return false;
@@ -116,6 +117,7 @@ export const updateCompanySchema = z.object({
   address: z.string().trim().min(1, 'Địa chỉ chi tiết là bắt buộc').max(200).optional(),
 
   contactInfo: contactInfoSchema,
+  enableChatbot: z.boolean().optional(),
 }).refine(data => {
   if (!data.location) return true;
   const provinceData = locationMap.get(data.location.province);

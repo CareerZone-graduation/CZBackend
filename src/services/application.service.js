@@ -1000,20 +1000,10 @@ Skills: ${job.skills?.join(', ') || ''}
     throw new BadRequestError('Không thể chấm điểm CV. Vui lòng thử lại sau.');
   }
 
-  // 8. Get enhanced analysis (radar chart, career path, projects)
-  let enhancedAnalysis = null;
-  try {
-    const { getEnhancedAnalysis } = await import('./cvEnhancedAnalysis.service.js');
-    enhancedAnalysis = await getEnhancedAnalysis({ cvText, jdText, cvScore });
-    logger.info('Enhanced analysis completed', { hasData: !!enhancedAnalysis });
-  } catch (error) {
-    logger.error('Enhanced analysis failed, continuing without it', { error: error.message });
-    // Don't throw - enhanced analysis is optional
-  }
-
+  // 8. scoreCVWithLLM đã trả career paths, projects, skill gaps và dữ liệu biểu đồ.
+  // Không gọi LLM lần 2 ở đây để tránh vượt timeout của frontend/proxy.
   const scoringResult = {
     ...cvScore,
-    ...(enhancedAnalysis && { enhanced: enhancedAnalysis }),
     scoredAt: new Date()
   };
 
@@ -1025,7 +1015,9 @@ Skills: ${job.skills?.join(', ') || ''}
   logger.info('CV scored successfully', {
     applicationId: application._id,
     score: cvScore.overall_score,
-    hasEnhanced: !!enhancedAnalysis
+    hasCareerPaths: Array.isArray(cvScore.career_paths),
+    hasRecommendedProjects: Array.isArray(cvScore.recommended_projects),
+    hasSkillGaps: Array.isArray(cvScore.skill_gaps)
   });
 
   return withCacheMetadata(scoringResult, {

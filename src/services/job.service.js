@@ -502,7 +502,7 @@ export const getJobDetailsForRecruiter = async (jobId, userId) => {
 export const getJobById = async (jobId, userId = null) => {
   const jobDoc = await Job.findById(jobId).populate({
     path: 'recruiterProfileId',
-    select: 'company.name company.logo company._id company.industry userId'
+    select: 'company.name company.logo company._id company.industry company.enableChatbot userId'
   });
 
   if (!jobDoc) {
@@ -577,7 +577,8 @@ export const getJobById = async (jobId, userId = null) => {
       name: job.recruiterProfileId.company.name,
       logo: job.recruiterProfileId.company.logo,
       industry: job.recruiterProfileId.company.industry,
-      _id: job.recruiterProfileId.company._id
+      _id: job.recruiterProfileId.company._id,
+      enableChatbot: job.recruiterProfileId.company.enableChatbot ?? false
     },
     isSaved,
     isApplied,

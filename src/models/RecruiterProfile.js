@@ -132,6 +132,10 @@ const companyInfoSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  enableChatbot: {
+    type: Boolean,
+    default: false
+  },
   status: {
     type: String,
     enum: ['pending', 'approved', 'rejected'],

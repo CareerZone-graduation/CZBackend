@@ -150,9 +150,10 @@ RULES:
             role: 'user',
             content: prompt
           }
-        ],
-        temperature: 0.5,
-        max_tokens: 6000
+        ]
+        // ,
+        // temperature: 0.5,
+        // max_tokens: 16000
       },
       {
         headers: {

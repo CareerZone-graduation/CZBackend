@@ -1,19 +1,28 @@
 import asyncHandler from 'express-async-handler';
 import * as chatService from '../services/knowledgeChat.service.js';
 import { Job, RecruiterProfile } from '../models/index.js';
-import { NotFoundError } from '../utils/AppError.js';
+import { NotFoundError, ForbiddenError } from '../utils/AppError.js';
+
+// Helper preflight check
+const assertChatbotEnabledByRecruiterProfile = (profile) => {
+  if (profile.company?.enableChatbot !== true) {
+    throw new ForbiddenError('Nhà tuyển dụng đã tắt chức năng AI chatbot.');
+  }
+};
 
 export const chatJob = asyncHandler(async (req, res) => {
   const { jobId } = req.params;
   const { message, conversationHistory, stream } = req.body;
 
+  const job = await Job.findById(jobId).lean();
+  if (!job) throw new NotFoundError('Công việc không tồn tại');
+
+  const recruiterProfile = await RecruiterProfile.findById(job.recruiterProfileId).lean();
+  if (!recruiterProfile) throw new NotFoundError('Nhà tuyển dụng không tồn tại');
+
+  assertChatbotEnabledByRecruiterProfile(recruiterProfile);
+
   if (stream) {
-    const job = await Job.findById(jobId).lean();
-    if (!job) throw new NotFoundError('Công việc không tồn tại');
-
-    const recruiterProfile = await RecruiterProfile.findById(job.recruiterProfileId).lean();
-    if (!recruiterProfile) throw new NotFoundError('Nhà tuyển dụng không tồn tại');
-
     res.writeHead(200, {
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
@@ -57,6 +66,11 @@ export const chatJob = asyncHandler(async (req, res) => {
 export const chatCompany = asyncHandler(async (req, res) => {
   const { recruiterId } = req.params;
   const { message, conversationHistory, stream } = req.body;
+
+  const recruiterProfile = await RecruiterProfile.findOne({ userId: recruiterId }).lean();
+  if (!recruiterProfile) throw new NotFoundError('Nhà tuyển dụng không tồn tại');
+
+  assertChatbotEnabledByRecruiterProfile(recruiterProfile);
 
   if (stream) {
     res.writeHead(200, {

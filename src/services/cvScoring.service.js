@@ -61,17 +61,17 @@ Your tasks:
 
 5. Identify gaps (critical, moderate, minor) in Vietnamese.
 
-6. Build a relationship graph: JD requirements → CV evidence mapping.
+6. Build a relationship graph: JD requirements → CV evidence mapping (maximum 5 items).
 
-7. Provide actionable suggestions in Vietnamese with DETAILED, SPECIFIC advice for each CV section.
+7. Provide actionable suggestions in Vietnamese with concise, specific advice for each CV section.
 
-8. **CAREER PATH ANALYSIS**: Based on current CV and target job, suggest 3-5 career progression steps with:
+8. **CAREER PATH ANALYSIS**: Based on current CV and target job, suggest exactly 3 career progression steps with:
    - Role title (Vietnamese)
    - Timeline (e.g., "6-12 tháng", "1-2 năm")
    - Key skills to develop
    - Milestones to achieve
 
-9. **PROJECT RECOMMENDATIONS**: Suggest 5-8 specific projects the candidate should build to match the JD:
+9. **PROJECT RECOMMENDATIONS**: Suggest 3-5 specific projects the candidate should build to match the JD:
    - Project title (Vietnamese)
    - Description (what to build, why it matters)
    - Technologies to use
@@ -80,7 +80,7 @@ Your tasks:
    - Difficulty level (Dễ/Trung bình/Khó)
    - Impact on CV score
 
-10. **SKILL GAP ROADMAP**: For each missing skill, provide:
+10. **SKILL GAP ROADMAP**: For the top 5 missing skills, provide:
     - Skill name
     - Current level vs Required level
     - Learning resources (courses, books, tutorials)
@@ -91,7 +91,6 @@ Your tasks:
 Return ONLY JSON in this format:
 
 {
-  "overall_score": number,
   "category_scores": [
     {
       "name": "Kỹ năng chuyên môn",
@@ -221,13 +220,19 @@ IMPORTANT:
 - ALL descriptive text must be in VIETNAMESE
 - Technical terms (React, Node.js, etc.) can be in English
 - Be strict and realistic like a real ATS system
+- Keep arrays bounded: graph <= 5 items, career_paths = 3 items, recommended_projects = 3-5 items, skill_gaps <= 5 items, suggestions <= 5 items, rewrite_examples <= 3 items
+- Keep each explanation/description concise (1-2 sentences)
 - Provide SPECIFIC, ACTIONABLE project ideas that directly address skill gaps
 - Career paths should be realistic and achievable`;
-
+// log độ dài của prompt và response
+    logger.info('LLM API ', {
+      promptLength: prompt.length
+    });
+    const startedAt = Date.now();
     const response = await axios.post(
       `${LLM_BASE_URL}/chat/completions`,
       {
-        model: "gemini-3-flash",
+        model: LLM_MODEL,
         messages: [
           {
             role: 'system',
@@ -239,7 +244,7 @@ IMPORTANT:
           }
         ],
         temperature: 0.3,
-        max_tokens: 15000
+        max_tokens: 6000
       },
       {
         headers: {
@@ -249,8 +254,13 @@ IMPORTANT:
         timeout: 60000
       }
     );
-
+    
     const content = response.data.choices[0].message.content;
+    logger.info('LLM CV scoring response received', {
+      durationMs: Date.now() - startedAt,
+      promptLength: prompt.length,
+      contentLength: content?.length || 0
+    });
 
     // Parse JSON từ response
     const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -283,11 +293,8 @@ IMPORTANT:
 
     return result;
   } catch (error) {
-    logger.error('CV scoring error:', {
-      message: error.message,
-      code: error.code,
-      status: error.response?.status
-    });
+
+    console.log('CV scoring error:', error.message);
 
     // Return null nếu lỗi, không block ứng tuyển
     return null;
