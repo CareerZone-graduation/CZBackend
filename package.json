@@ -73,7 +73,7 @@
     "multer-storage-cloudinary": "^4.0.0",
     "ngeohash": "^0.6.3",
     "node-cron": "^3.0.3",
-    "nodemailer": "^6.9.7",
+    "nodemailer": "^8.0.9",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "passport-local": "^1.0.0",
