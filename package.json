@@ -91,7 +91,7 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
-    "@babel/core": "^7.28.0",
+    "@babel/core": "^7.29.6",
     "@babel/preset-env": "^7.28.0",
     "babel-jest": "^30.0.5",
     "cross-env": "^10.0.0",
