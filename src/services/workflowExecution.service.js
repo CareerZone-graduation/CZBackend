@@ -526,10 +526,15 @@ const evaluateCriteriaWithLLM = async ({ application, candidateProfile, job, cri
   }
 
   const cvText = await getApplicationCVText(application);
-  const prompt = `Bạn là chuyên gia tuyển dụng cao cấp. Nhiệm vụ của bạn là đánh giá xem CV của ứng viên có đáp ứng ĐẦY ĐỦ các tiêu chí tuyển dụng cụ thể dưới đây hay không.
+  const prompt = `Bạn là chuyên gia tuyển dụng cao cấp. Nhiệm vụ của bạn là đánh giá xem CV của ứng viên có đáp ứng tiêu chí tuyển dụng dưới đây hay không.
 
 Tiêu chí cần đánh giá (do nhà tuyển dụng yêu cầu):
 ${criteria || 'Phù hợp với mô tả công việc (JD)'}
+
+QUY TẮC ƯU TIÊN QUAN TRỌNG:
+1. Nếu nhà tuyển dụng đưa ra tiêu chí cụ thể (khác với "Phù hợp với mô tả công việc (JD)"), bạn phải TUYỆT ĐỐI ƯU TIÊN và bám sát tiêu chí này làm điều kiện quyết định.
+2. Nếu tiêu chí yêu cầu một điều kiện đặc biệt để vượt qua mà không cần xét các yếu tố khác (ví dụ: "chỉ cần gpa>1 là pass, k cần xét gì thêm" hoặc tương tự), bạn phải TUYỆT ĐỐI tuân theo yêu cầu đó. Trong trường hợp này, bạn KHÔNG ĐƯỢC đánh trượt ứng viên dựa trên các yêu cầu chung khác của JD (như số năm kinh nghiệm, kỹ năng phụ, học vấn khác...) nếu điều kiện ưu tiên đã được thỏa mãn.
+3. Chỉ khi tiêu chí là "Phù hợp với mô tả công việc (JD)" hoặc để trống, bạn mới tiến hành đánh giá toàn diện dựa trên tất cả các thông tin trong JD dưới đây.
 
 BẮT BUỘC:
 - Chỉ trả về JSON hợp lệ.
@@ -537,7 +542,7 @@ BẮT BUỘC:
 - Format JSON:
 {
   "pass": boolean,
-  "reason": "Giải thích chi tiết ngắn gọn bằng tiếng Việt lý do tại sao đạt hoặc không đạt từng tiêu chí"
+  "reason": "Giải thích chi tiết ngắn gọn bằng tiếng Việt lý do tại sao đạt hoặc không đạt theo tiêu chí ưu tiên ở trên"
 }
 
 Thông tin công việc (JD):
@@ -561,7 +566,7 @@ Thông tin ứng viên:
       messages: [
         {
           role: 'system',
-          content: 'Bạn là chuyên gia sàng lọc CV và ra quyết định tuyển dụng dựa trên tiêu chí. Luôn trả về JSON hợp lệ.'
+          content: 'Bạn là chuyên gia sàng lọc CV và ra quyết định tuyển dụng dựa trên tiêu chí được cung cấp. Ưu tiên tuyệt đối các tiêu chí cụ thể được thiết lập bởi nhà tuyển dụng thay vì mô tả công việc (JD) chung. Luôn trả về JSON hợp lệ.'
         },
         {
           role: 'user',

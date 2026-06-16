@@ -1301,7 +1301,7 @@ export const getAIRecommendations = async (userId, options = {}) => {
   logger.info('Fetching AI recommendations from FastAPI', { userId });
 
   // 1. Gọi FastAPI
-  const aiUrl = `${config.PYTHON_SERVICE_URL}/api/v1/recommendations/${userId}`;
+  const aiUrl = `${config.PYTHON_SERVICE_URL}/api/v1/recommendations/${userId}?top_n=20`;
 
   let aiResponse;
   try {

@@ -171,7 +171,16 @@ const applicationSchema = new mongoose.Schema({
         type: Date,
         default: null
       }
-    }
+    },
+    aiDecisions: [
+      {
+        nodeId: { type: String, required: true },
+        nodeName: { type: String, required: true },
+        pass: { type: Boolean, required: true },
+        reason: { type: String, default: '' },
+        evaluatedAt: { type: Date, default: Date.now }
+      }
+    ]
   },
   lastStatusUpdateAt: {
     type: Date,
