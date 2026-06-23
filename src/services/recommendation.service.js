@@ -1313,7 +1313,7 @@ export const getAIRecommendations = async (userId, options = {}) => {
       },
       signal: AbortSignal.timeout(10000), // 10s timeout
     });
-
+    console.log('FastAPI response status:', response);
     if (!response.ok) {
       const errorBody = await response.text();
       logger.error('FastAPI recommendation error', {
