@@ -22,8 +22,11 @@ USER pptruser
 COPY --chown=pptruser:pptruser package.json pnpm-lock.yaml ./
 
 # Cài đặt dependencies với store nằm trong home của pptruser để tránh lỗi quyền trên một số môi trường BuildKit.
+# RUN pnpm config set store-dir /home/pptruser/.pnpm-store && \
+#     pnpm install --frozen-lockfile
+# Cài đặt dependencies và cho phép chạy build script của các package cần thiết
 RUN pnpm config set store-dir /home/pptruser/.pnpm-store && \
-    pnpm install --frozen-lockfile
+    pnpm install --frozen-lockfile --only-built-dependencies
 
 # Download the exact Chrome version required by the installed Puppeteer package.
 RUN pnpm exec puppeteer browsers install chrome
