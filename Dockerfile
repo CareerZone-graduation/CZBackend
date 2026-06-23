@@ -30,7 +30,7 @@ RUN pnpm config set store-dir /home/pptruser/.pnpm-store && \
     pnpm install --frozen-lockfile --ignore-scripts=false
 
 # Download the exact Chrome version required by the installed Puppeteer package.
-RUN pnpm exec puppeteer browsers install chrome
+# RUN pnpm exec puppeteer browsers install chrome
 
 # Copy toàn bộ code còn lại với quyền pptruser
 COPY --chown=pptruser:pptruser . .
