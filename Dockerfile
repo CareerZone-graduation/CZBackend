@@ -3,7 +3,7 @@ FROM ghcr.io/puppeteer/puppeteer:latest
 
 # Puppeteer image mặc định dùng user 'pptruser'. Ta đổi sang root một chút để cài pnpm
 USER root
-RUN npm install -g pnpm@latest
+RUN npm install -g pnpm@9
 
 # Đặt thư mục làm việc và cấp quyền ngay từ đầu (lúc còn là root)
 WORKDIR /app
