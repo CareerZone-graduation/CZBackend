@@ -1348,7 +1348,7 @@ export const getJobsByCompany = async (companyId, options = {}) => {
  */
 const generateQueryEmbedding = async (query) => {
   try {
-    const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
+    const aiServiceUrl = process.env.PYTHON_SERVICE_URL || 'http://127.0.0.1:8000';
     const aiServiceSecret = process.env.AI_INTERNAL_SECRET || 'careerzone_internal_secret_key';
     const response = await axios.post(
       `${aiServiceUrl}/api/v1/embeddings/query-embedding`,
@@ -3065,7 +3065,7 @@ export const getSimilarJobs = async (jobId, options = {}, userId = null) => {
   const { limit = 6 } = options;
 
   // 1. Call FastAPI AI service — it handles embedding + vector search internally
-  const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
+  const aiServiceUrl = process.env.PYTHON_SERVICE_URL || 'http://127.0.0.1:8000';
   const aiServiceSecret = process.env.AI_INTERNAL_SECRET || 'careerzone_internal_secret_key';
 
   let similarJobIds;
@@ -3161,7 +3161,7 @@ export const getAlsoLikedJobs = async (jobId, options = {}, userId = null) => {
   const { limit = 6 } = options;
 
   // 1. Call FastAPI AI service — it handles LightFM item-item CF internally
-  const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
+  const aiServiceUrl = process.env.PYTHON_SERVICE_URL || 'http://127.0.0.1:8000';
   const aiServiceSecret = process.env.AI_INTERNAL_SECRET || 'careerzone_internal_secret_key';
 
   let similarJobIds;
