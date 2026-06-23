@@ -602,7 +602,7 @@ export const deleteWorkflow = async (userId, workflowId) => {
 
   const now = new Date();
   const hasUnexpiredLinkedJob = linkedJobs.some((job) => {
-    const hasExpiredByStatus = job.status === 'EXPIRED';
+    const hasExpiredByStatus = job.status === 'EXPIRED' || job.status === 'INACTIVE';
     const hasExpiredByDeadline = job.deadline instanceof Date && job.deadline.getTime() < now.getTime();
     return !hasExpiredByStatus && !hasExpiredByDeadline;
   });

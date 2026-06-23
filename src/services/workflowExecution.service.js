@@ -528,7 +528,7 @@ const evaluateCriteriaWithLLM = async ({ application, candidateProfile, job, cri
   const cvText = await getApplicationCVText(application);
   const prompt = `Bạn là chuyên gia tuyển dụng cao cấp. Nhiệm vụ của bạn là đánh giá xem CV của ứng viên có đáp ứng tiêu chí tuyển dụng dưới đây hay không.
 
-Tiêu chí cần đánh giá (do nhà tuyển dụng yêu cầu):
+Tiêu chí cần đánh giá (do nhà tuyển dụng trực tiếp yêu cầu):
 ${criteria || 'Phù hợp với mô tả công việc (JD)'}
 
 QUY TẮC ƯU TIÊN QUAN TRỌNG:
