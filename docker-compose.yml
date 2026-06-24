@@ -69,3 +69,29 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  # 6. Worker Knowledge Embedding
+  worker-knowledge-embedding:
+    image: ${DOCKER_IMAGE:-careerzone-api:latest}
+    container_name: cz_worker_knowledge_embedding
+    restart: always
+    env_file: .env.production
+    command: npm run worker:knowledge-embedding
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # 7. Worker Workflow Execution
+  worker-workflow:
+    image: ${DOCKER_IMAGE:-careerzone-api:latest}
+    container_name: cz_worker_workflow
+    restart: always
+    env_file: .env.production
+    command: npm run worker:workflow
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
