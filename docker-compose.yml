@@ -95,3 +95,5 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    volumes:  
+      - /home/ec2-user/serviceAccountKey.json:/app/serviceAccountKey.json:ro 
