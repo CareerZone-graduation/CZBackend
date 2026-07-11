@@ -552,10 +552,6 @@ Thông tin công việc (JD):
 
 Thông tin ứng viên:
 - Họ tên: ${candidateProfile?.fullname || application?.candidateName || 'N/A'}
-- Bio: ${candidateProfile?.bio || 'N/A'}
-- Skills: ${(candidateProfile?.skills || []).map((s) => `${s?.name || ''} (${s?.level || ''})`).filter(Boolean).join(', ') || 'N/A'}
-- Kinh nghiệm: ${(candidateProfile?.experiences || []).map((e) => `${e?.position || ''} tại ${e?.company || ''}: ${e?.description || ''}`).join(' | ') || 'N/A'}
-- Học vấn: ${(candidateProfile?.educations || []).map((e) => `${e?.degree || ''} ${e?.major || ''} ${e?.school || ''}`).join(' | ') || 'N/A'}
 - Nội dung CV: ${cvText || 'N/A'}
 `;
 

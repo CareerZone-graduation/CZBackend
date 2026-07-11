@@ -4,6 +4,7 @@ import { NotFoundError } from '../utils/AppError.js';
 import { generateEmbeddingWithRetry } from '../utils/embedding.js';
 import mongoose from 'mongoose';
 import axios from 'axios';
+import { StringDecoder } from 'node:string_decoder';
 
 async function callLLM(messages) {
   try {
@@ -21,8 +22,9 @@ async function callLLM(messages) {
 }
 
 async function* callLLMStream(messages) {
+  let response;
   try {
-    const response = await axios.post(`${process.env.LLM_BASE_URL}/chat/completions`, {
+    response = await axios.post(`${process.env.LLM_BASE_URL}/chat/completions`, {
       model: process.env.LLM_MODEL,
       messages,
       stream: true
@@ -30,22 +32,62 @@ async function* callLLMStream(messages) {
       headers: { 'Authorization': `Bearer ${process.env.LLM_API_KEY}` },
       responseType: 'stream'
     });
+  } catch (error) {
+    console.error('LLM Stream Error:', error);
+    throw new Error('Hệ thống AI tạm thời không khả dụng');
+  }
 
+  // SSE event có thể bị cắt ngang bởi network chunk, và byte UTF-8 multi-byte
+  // (chữ tiếng Việt có dấu) có thể bị cắt giữa chừng. Cần:
+  //  1. StringDecoder để giữ lại byte chưa hoàn chỉnh của ký tự UTF-8
+  //  2. buffer + tách theo "\n\n" (ranh giới SSE) thay vì theo từng chunk
+  const decoder = new StringDecoder('utf8');
+  let buffer = '';
+
+  const handleEvent = function* (rawEvent) {
+    const lines = rawEvent.split('\n');
+    for (const line of lines) {
+      if (!line.startsWith('data:')) continue;
+      const data = line.slice(line.indexOf(':') + 1).trim();
+      if (data === '[DONE]') return true; // signal stop
+      if (!data) continue;
+      try {
+        const parsed = JSON.parse(data);
+        const content = parsed.choices?.[0]?.delta?.content;
+        if (content) yield content;
+      } catch (e) {
+        // Chỉ log, không throw — tránh làm gián đoạn stream
+        console.warn('Skipping malformed SSE chunk:', data.slice(0, 80));
+      }
+    }
+    return false;
+  };
+
+  try {
     for await (const chunk of response.data) {
-      const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6);
-          if (data === '[DONE]') return;
-          try {
-            const parsed = JSON.parse(data);
-            const content = parsed.choices[0]?.delta?.content;
-            if (content) yield content;
-          } catch (e) {
-            // Skip invalid JSON
-          }
+      // decode an toàn multi-byte UTF-8; byte dư thừa được giữ lại cho chunk kế tiếp
+      buffer += decoder.write(chunk);
+
+      let sepIndex;
+      // Mỗi SSE event kết thúc bằng \n\n; chỉ xử lý event hoàn chỉnh
+      while ((sepIndex = buffer.indexOf('\n\n')) !== -1) {
+        const rawEvent = buffer.slice(0, sepIndex);
+        buffer = buffer.slice(sepIndex + 2);
+
+        const stop = yield* handleEvent(rawEvent);
+        if (stop) {
+          // Flush byte UTF-8 còn sót rồi dừng
+          buffer += decoder.end();
+          return;
         }
       }
+    }
+
+    // Xử lý event cuối còn sót trong buffer (nếu server không kết thúc bằng \n\n)
+    const tail = buffer + decoder.end();
+    if (tail.trim()) {
+      const stop = yield* handleEvent(tail);
+      if (stop) return;
     }
   } catch (error) {
     console.error('LLM Stream Error:', error);
